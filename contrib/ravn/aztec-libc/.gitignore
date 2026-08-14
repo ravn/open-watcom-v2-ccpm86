@@ -1,0 +1,24 @@
+# Proprietary Aztec C sources and anything derived from them must NOT be
+# committed (Manx/Suckow copyright, Fair-Use redistribution only via
+# aztecmuseum.ca). Everything here is fetched/generated locally.
+src/
+work/
+*.zip
+*.arc
+*.ARC
+*.lib
+*.LIB
+*.obj
+*.OBJ
+*.o
+*.cmd
+*.CMD
+*.exe
+*.com
+*.COM
+# generated enumerations / baselines that embed Aztec source detail
+enum/
+baseline/
+# build output (recompiled Aztec objects + linked CMDs)
+build/
+*.err
