@@ -441,7 +441,6 @@ system begin cpm86
     libpath '%WATCOM%/lib286/cpm86'
     libfile cstartcpm.obj
     option dosseg
-    option nodefaultlibs
     format cpm86
 :endsegment
 end
