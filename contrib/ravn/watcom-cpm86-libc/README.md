@@ -123,6 +123,40 @@ to each std `FILE`) — is called once at startup; a fuller crt0 would run it of
 the `XI` init table via `__InitRtns` (see
 `tasks/memory/reference_watcom_cpm86_startup_initfini.md`).
 
+## What the stdcbench proof adds (`build-stdcbench.sh`)
+
+The three proofs above each exercise one library subsystem with a toy driver.
+**stdcbench 0.8** is the opposite: a substantial, multi-module benchmark that
+leans on the *whole* library at once — `printf`/`sprintf`, the `string` and
+`ctype` families, `malloc`/`free`/`realloc`, `qsort`, and the 32-bit long
+helpers. `build-stdcbench.sh` compiles the **byte-identical upstream stdcbench
+sources** (the same tree `owc-drc/stdcbench` built on the DR C runtime) and
+links them against Open Watcom's **own, unchanged clib** plus our thin CP/M-86
+seams — no Digital Research C runtime, no `clears.l86`. Only `test/scbport.c`
+(the stdcbench glue: a BDOS `T_GET` clock, `__InitFiles`, `main`) is ours.
+
+**Two run-verified results:**
+
+- **Functional (emu2):** the whole benchmark runs end to end — every module
+  executes and both scores compute correctly through the retargeted clib. emu2's
+  clock is the host wall clock, so *that* score reflects the Mac's speed, not the
+  RC759; the emu2 run proves execution, not performance.
+- **Comparable (MAME rc759):** the SAME `SCB.CMD`, built with `-DMAME_DONE`
+  (`run-stdcbench-mame.sh`), on the cycle-accurate MAME rc759 (Concurrent
+  CP/M-86 3.1, PICCOLINE XIOS 2.3) scores **c90base 12 · c90lib 8 · final 20**
+  (Watcom full optimisation `-otexan`), versus the Digital Research C reference
+  **8 · 5 · 13** on the identical machine — the retargeted Watcom clib is
+  ~1.5× faster than the ~1984 DR C runtime on both the integer and the
+  library-heavy modules, an independent correctness + performance cross-check.
+
+The clock differs from the DR C port on purpose: DR C read BDOS `T_SECONDS`
+(fn 155), which emu2 does not implement (so it would spin forever there); we read
+`T_GET` (fn 105), which both emu2 (host clock) and the RC759 XIOS maintain, so
+the same binary times on both. stdcbench's `c90base`/`c90lib` are integer +
+standard-library work only (the `c90float`/`c90double` modules are upstream
+stubs in 0.8), so this proof exercises **no floating point** — it neither uses
+nor retires the `double` ABI seam.
+
 ## Files
 
 | Path | Role |
@@ -130,6 +164,8 @@ the `XI` init table via `__InitRtns` (see
 | `build.sh` | printf proof: reproducible build + purity gate + emu2 oracle gate |
 | `build-heap.sh` | heap proof: Watcom malloc/free/calloc/realloc + qsort on CP/M-86 |
 | `build-stdio.sh` | stdio proof: Watcom genuine FILE\* printf/fprintf/puts/fputs on CP/M-86 |
+| `build-stdcbench.sh` | stdcbench proof: full stdcbench 0.8 (c90base+c90lib) on Watcom clib + shim; purity gate + emu2 functional run |
+| `run-stdcbench-mame.sh` | stdcbench cross-check: builds `-DMAME_DONE` + runs SCB.CMD on cycle-accurate MAME rc759 (score 20 vs DR C 13) |
 | `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback (direct console printf) |
 | `port/stdioshim.c` | Layer-2 seam: `__qwrite` (BDOS console write) + `isatty` for the FILE\* path |
 | `port/lowlevel.c` | Layer-2 seam: arena `__brk`/`sbrk` + `_curbrk` (near-heap bottom) |
@@ -138,6 +174,8 @@ the `XI` init table via `__InitRtns` (see
 | `test/main.c` | printf demo driver / oracle |
 | `test/heaptest.c` | heap demo driver / oracle |
 | `test/stdiotest.c` | stdio FILE\* demo driver / oracle |
+| `test/scbport.c` | stdcbench glue: BDOS `T_GET` clock, `__InitFiles`, `main`, `mame_done` |
+| `test/portme.h` | stdcbench 0.8 port config (integer c90base+c90lib set) |
 
 ## Toolchain
 
@@ -162,9 +200,25 @@ Tracked in ravn/rc7xx-work#6:
    (`open`/`close`/`read`/`lseek`), which must honour the CP/M record model —
    files are 128-byte sectors with no exact byte length; text files use a
    Ctrl-Z (0x1A) terminator, binary files have none.
-3. **stdcbench relink** — rebuild the existing `owc-drc/stdcbench` port against
+3. ~~**stdcbench relink** — rebuild the existing `owc-drc/stdcbench` port against
    Watcom clib + this shim instead of the DR C runtime; gate on the
    c90base + c90lib score, cross-checked against the DR C reference (final
-   score 13) as an independent correctness oracle. This also retires the DR C
-   float-ABI seam. Build the score binary with Watcom full optimisation
-   (`/otexan`) for a fair comparison.
+   score 13) as an independent correctness oracle.~~ **DONE**
+   (`build-stdcbench.sh` + `run-stdcbench-mame.sh`, run-verified): the
+   byte-identical upstream stdcbench 0.8 integer suite links against Watcom's
+   own unchanged clib + our seams and runs end to end. On cycle-accurate MAME
+   rc759, built with Watcom full optimisation (`-otexan`), it scores **c90base
+   12 · c90lib 8 · final 20**, versus DR C's **8 · 5 · 13** on the identical
+   machine — ~1.5× faster than the DR C runtime. Note: `c90base`/`c90lib`
+   exercise **no floating point** (the `c90float`/`c90double` modules are
+   upstream stubs), so this does **not** retire the `double` ABI seam — that
+   remains for a float-exercising target.
+
+## Next milestones (not yet done)
+
+Still open (tracked in ravn/rc7xx-work#6):
+
+- **disk FILE\* path** (`open`/`close`/`read`/`lseek`) honouring the CP/M
+  record model — 128-byte sectors, no exact byte length; text files use a
+  Ctrl-Z (0x1A) terminator, binary files have none.
+- a **float-exercising** run-target to drive and retire the `double` ABI seam.

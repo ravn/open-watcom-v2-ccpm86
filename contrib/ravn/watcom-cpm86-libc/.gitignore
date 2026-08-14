@@ -1,3 +1,5 @@
 build/
 build-heap/
 build-stdio/
+build-stdcbench/
+SCB-WC.CMD
