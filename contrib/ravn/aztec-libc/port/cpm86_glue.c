@@ -10,6 +10,20 @@
  * BDOS gateway: CP/M-86 enters BDOS via INT 0E0h, function in CL, argument in
  * DX, result in AL (same convention as cpm86-clib/cpmsys.h in the #10 work).
  */
+/* Provenance stamp -- makes every linked .CMD self-identify its origin so that
+ * herkomst can be proven with `strings foo.cmd | grep @PROV` instead of a
+ * falsification test.  The two vendors differ here and both are recorded:
+ *   - source vendor  = Aztec/Manx  (this libc is recompiled Aztec stdlib source)
+ *   - compiler vendor = Open Watcom (__WATCOMC__ stringized at build time; the
+ *     value is 1300 for OW 2.0, proving wcc -- not Aztec's own cc -- built it).
+ * cpm86_glue.obj is always in the load image (it supplies putchar), and wcc
+ * emits this const into the CONST segment of DGROUP, so the bytes land in the
+ * .CMD data group and survive without any dead-strip guard.  Example: an OW-2.0
+ * build yields the literal "@PROV:aztec-src+wcc1300" in the binary. */
+#define PROV_STR2(x) #x
+#define PROV_STR(x)  PROV_STR2(x)
+const char provenance_stamp[] = "@PROV:aztec-src+wcc" PROV_STR(__WATCOMC__);
+
 extern unsigned char _bdos( unsigned char func, unsigned param );
 #pragma aux _bdos =             \
     "int 0E0h"                  \
