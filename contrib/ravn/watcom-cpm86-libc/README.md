@@ -1,5 +1,7 @@
 # watcom-cpm86-libc — retargeting Open Watcom's own C library to CP/M-86
 
+Tracking issue: **ravn/rc7xx-work#6**.
+
 **Status:** foundation **proven end-to-end** (run-verified under emu2). This
 directory demonstrates that Open Watcom's *own* clib can be retargeted to
 CP/M-86 (Intel 8086/80186, e.g. RC759) by supplying only a **thin BDOS
@@ -84,6 +86,8 @@ Uses the pre-built cross tools + clib source from the scratch OW tree
 fix (`f21f6a9f`).
 
 ## Next milestones (not yet done)
+
+Tracked in ravn/rc7xx-work#6:
 
 1. **Low-level BDOS shim** — CP/M-86 `read`/`write`/`open`/`close`/`lseek`/
    `sbrk`/`exit` overriding the DOS primitives, so the *full* `stdio` FILE\*
