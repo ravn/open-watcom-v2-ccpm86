@@ -96,18 +96,48 @@ no OS call, because a CP/M-86 `.CMD` already owns its whole TPA. Every heap
 manager above `__brk` (`nmalloc`/`nfree`/`calloc`/`nrealloc`/`grownear`/`mem`…)
 is Watcom's unmodified clib.
 
+## What the stdio proof adds (`build-stdio.sh`)
+
+`test/stdiotest.c` drives Watcom's **genuine `stdio` FILE\* write-path** —
+`printf`, `fprintf`, `puts`, `fputs` — end to end on CP/M-86. This is the real
+buffered `FILE` machinery, not the direct-`__prtf` console shortcut: each call
+runs `__fprtf`/`fputc` into a `malloc`'d `FILE` buffer, then `__flush` →
+`__qwrite`. A byte-exact match to the oracle (`printf 42 ok` / `puts line` /
+`fputs line` / `fprintf 97406784`) with **zero INT 21h** proves the whole
+`stdio` upper layer is OS-agnostic.
+
+Only two thin seams make it run, both in `port/stdioshim.c`:
+
+- **`__qwrite`** — the single low-level write `__flush` calls (DOS bottoms it
+  out in `TinyWrite` → `INT 21h AH=40h`). Ours writes console handles 1/2 via
+  BDOS `C_WRITE` (`INT E0h`, `CL=2`), bytes verbatim — Watcom's text-mode
+  `fputc` has already turned `\n` into `\r\n` in the buffer.
+- **`isatty`** — `__ioalloc`→`__chktty` calls it to pick a buffering mode (DOS
+  bottoms out in `INT 21h AH=44h` IOCTL). Ours reports the three standard
+  handles as a tty, which also line-buffers `stdout`.
+
+The `FILE` buffer itself comes from the near-heap proof above (each `FILE`'s
+`__stream_link` and buffer are `malloc`'d). `__InitFiles` — Watcom's own, and
+genuinely DOS-free (it only calls the arena `malloc` to attach a `__stream_link`
+to each std `FILE`) — is called once at startup; a fuller crt0 would run it off
+the `XI` init table via `__InitRtns` (see
+`tasks/memory/reference_watcom_cpm86_startup_initfini.md`).
+
 ## Files
 
 | Path | Role |
 |------|------|
 | `build.sh` | printf proof: reproducible build + purity gate + emu2 oracle gate |
 | `build-heap.sh` | heap proof: Watcom malloc/free/calloc/realloc + qsort on CP/M-86 |
-| `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback |
+| `build-stdio.sh` | stdio proof: Watcom genuine FILE\* printf/fprintf/puts/fputs on CP/M-86 |
+| `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback (direct console printf) |
+| `port/stdioshim.c` | Layer-2 seam: `__qwrite` (BDOS console write) + `isatty` for the FILE\* path |
 | `port/lowlevel.c` | Layer-2 seam: arena `__brk`/`sbrk` + `_curbrk` (near-heap bottom) |
 | `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, BDOS exit, `__STK` stub) |
-| `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`) |
+| `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`, `errno`, read-path `__lseek`/`fsync`) |
 | `test/main.c` | printf demo driver / oracle |
 | `test/heaptest.c` | heap demo driver / oracle |
+| `test/stdiotest.c` | stdio FILE\* demo driver / oracle |
 
 ## Toolchain
 
@@ -122,12 +152,16 @@ Tracked in ravn/rc7xx-work#6:
 
 1. ~~**Near-heap bottom** — arena `__brk`/`sbrk` so Watcom `malloc`/`free`/
    `calloc`/`realloc` link and run.~~ **DONE** (`build-heap.sh`, run-verified).
-2. **stdio FILE\* write path** — CP/M-86 `write`/`open`/`close`/`lseek`/`exit`
-   overriding the DOS primitives (`io086.asm`), so the *full* `stdio` FILE\*
-   layer links unmodified (beyond this direct-`__prtf` console `printf`). Note
-   the CP/M record model: files are 128-byte sectors with no exact byte length;
-   text files use a Ctrl-Z (0x1A) terminator, binary files have none — the
-   `write`/`read`/`lseek` shim must honour this.
+2. ~~**stdio FILE\* write path** — override the DOS low-level primitives so the
+   *full* buffered `stdio` FILE\* layer (`printf`/`fprintf`/`puts`/`fputs` →
+   `__fprtf`/`fputc` → `__flush` → `__qwrite`) links and runs, beyond the
+   direct-`__prtf` console `printf`.~~ **DONE for the console write-path**
+   (`build-stdio.sh`, run-verified): `port/stdioshim.c` supplies `__qwrite`
+   (BDOS `C_WRITE`) + `isatty`; Watcom's own DOS-free `__InitFiles` attaches the
+   `FILE` buffers from the near-heap. Still open: the **disk** FILE\* path
+   (`open`/`close`/`read`/`lseek`), which must honour the CP/M record model —
+   files are 128-byte sectors with no exact byte length; text files use a
+   Ctrl-Z (0x1A) terminator, binary files have none.
 3. **stdcbench relink** — rebuild the existing `owc-drc/stdcbench` port against
    Watcom clib + this shim instead of the DR C runtime; gate on the
    c90base + c90lib score, cross-checked against the DR C reference (final
