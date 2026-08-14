@@ -1,5 +1,6 @@
         name    crt0sm
         extrn   main_ : near
+        extrn   wc_heap_init_ : near
         public  _cstart_
         public  _small_code_
 _small_code_    equ     0
@@ -15,6 +16,7 @@ _cstart_:
         mov     ax, ds
         mov     ss, ax
         mov     sp, offset DGROUP:stktop
+        call    wc_heap_init_
         call    main_
         xor     dx, dx
         mov     cl, 0

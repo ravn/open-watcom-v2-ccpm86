@@ -16,6 +16,15 @@ purity: INT21h(DOS)=0  INTE0h(BDOS)=3
 PASS: matches independent oracle (123456*789=97406784 via __I4M)
 ```
 
+Then run `./build-heap.sh` to prove Watcom's **genuine near-heap** (`malloc`/
+`free`/`calloc`/`realloc`) + `qsort` on CP/M-86, resolved only by the arena
+`__brk`/`sbrk` seam. Expected tail:
+
+```
+purity: INT21h(DOS)=0  INTE0h(BDOS)=3
+PASS: Watcom near-heap (malloc/free/calloc/realloc) + qsort on CP/M-86
+```
+
 ## Why this exists (the pivot)
 
 Earlier work tried two other routes to a CP/M-86 libc: (a) bridge to the
@@ -68,15 +77,37 @@ with `%lu`/`%ld` (or cast), never `%u`/`%d`. That is standard C vararg width
 matching, not a library bug — the formatter itself was verified correct for
 `%x`/`%u` in isolation.
 
+## What the heap proof adds (`build-heap.sh`)
+
+`test/heaptest.c` exercises Watcom's **genuine near-heap** — `malloc`, `free`,
+`calloc`, `realloc` (plus `qsort`) — resolved *only* by the thin `lowlevel.c`
+seam. It sorts a fixed permutation to `0 1 2 3 4 5 6 7 8 9`, checks `calloc`
+zeroes, grows a block with `realloc` preserving its prefix, and re-`malloc`s
+after `free`. A byte-exact match to the hand-computed oracle (in the script),
+with **zero INT 21h** in the image, proves the retarget's central claim:
+Watcom's whole near-heap manager runs on CP/M-86 with only its bottom
+primitive swapped.
+
+The swap is one function. Watcom's DOS heap grows DGROUP via `sbrk.c`'s `__brk`,
+whose *only* OS act is `INT 21h AH=4Ah` (`TinySetBlock`, resize the program's
+block). `lowlevel.c` replaces `__brk`/`sbrk` with a pure in-DGROUP bump over a
+static `_BSS` arena and defines the `_curbrk` RT-data word `grownear.c` reads —
+no OS call, because a CP/M-86 `.CMD` already owns its whole TPA. Every heap
+manager above `__brk` (`nmalloc`/`nfree`/`calloc`/`nrealloc`/`grownear`/`mem`…)
+is Watcom's unmodified clib.
+
 ## Files
 
 | Path | Role |
 |------|------|
-| `build.sh` | reproducible build + purity gate + emu2 oracle gate |
+| `build.sh` | printf proof: reproducible build + purity gate + emu2 oracle gate |
+| `build-heap.sh` | heap proof: Watcom malloc/free/calloc/realloc + qsort on CP/M-86 |
 | `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback |
-| `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, BDOS exit, `__STK` stub) |
+| `port/lowlevel.c` | Layer-2 seam: arena `__brk`/`sbrk` + `_curbrk` (near-heap bottom) |
+| `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, BDOS exit, `__STK` stub) |
 | `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`) |
-| `test/main.c` | demo driver / oracle |
+| `test/main.c` | printf demo driver / oracle |
+| `test/heaptest.c` | heap demo driver / oracle |
 
 ## Toolchain
 
@@ -89,9 +120,17 @@ fix (`f21f6a9f`).
 
 Tracked in ravn/rc7xx-work#6:
 
-1. **Low-level BDOS shim** — CP/M-86 `read`/`write`/`open`/`close`/`lseek`/
-   `sbrk`/`exit` overriding the DOS primitives, so the *full* `stdio` FILE\*
-   layer links unmodified (beyond this direct-`__prtf` console `printf`).
-2. **stdcbench relink** — rebuild the existing `owc-drc/stdcbench` port against
+1. ~~**Near-heap bottom** — arena `__brk`/`sbrk` so Watcom `malloc`/`free`/
+   `calloc`/`realloc` link and run.~~ **DONE** (`build-heap.sh`, run-verified).
+2. **stdio FILE\* write path** — CP/M-86 `write`/`open`/`close`/`lseek`/`exit`
+   overriding the DOS primitives (`io086.asm`), so the *full* `stdio` FILE\*
+   layer links unmodified (beyond this direct-`__prtf` console `printf`). Note
+   the CP/M record model: files are 128-byte sectors with no exact byte length;
+   text files use a Ctrl-Z (0x1A) terminator, binary files have none — the
+   `write`/`read`/`lseek` shim must honour this.
+3. **stdcbench relink** — rebuild the existing `owc-drc/stdcbench` port against
    Watcom clib + this shim instead of the DR C runtime; gate on the
-   c90base + c90lib score. This also retires the DR C float-ABI seam.
+   c90base + c90lib score, cross-checked against the DR C reference (final
+   score 13) as an independent correctness oracle. This also retires the DR C
+   float-ABI seam. Build the score binary with Watcom full optimisation
+   (`/otexan`) for a fair comparison.

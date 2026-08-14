@@ -40,12 +40,13 @@ USER="-bt=dos -0 -ms -zl"                     # compile our plain port + demo
 # --- our thin CP/M-86 port (Layer 2 seam) + demo ---
 "$WASM" -ms -0 "$SRC/port/crt0sm.asm" -fo=crt0.obj   # CP/M-86 startup + BDOS exit
 "$WCC" $CLIB $INC "$SRC/port/cprintf.c" -fo=cprintf.obj  # __prtf + BDOS C_WRITE callback
+"$WCC" $USER $INC "$SRC/port/lowlevel.c" -fo=lowlevel.obj  # arena __brk/sbrk + wc_heap_init (crt0 seam)
 "$WCC" $USER "$SRC/port/stubs.c"        -fo=stubs.obj    # never-reached closure stubs
 "$WCC" $USER "$SRC/test/main.c"         -fo=main.obj
 
 # --- link a CP/M-86 .CMD ---
 "$WLINK" format cpm86 op dosseg op quiet name demo.cmd \
-  file crt0.obj file main.obj file cprintf.obj file prtf.obj file noefgfmt.obj \
+  file crt0.obj file main.obj file cprintf.obj file lowlevel.obj file prtf.obj file noefgfmt.obj \
   file strupr.obj file itoa.obj file ltoa.obj file lltoa.obj file alphabet.obj \
   file strlen.obj file wctomb.obj file stubs.obj file i4m.obj file i4d.obj
 
