@@ -33,7 +33,13 @@
 *       dw base   (load paragraph; 0 => relocated by the loader)
 *       dw min    (paragraphs to allocate, incl. BSS)
 *       dw max    (maximum paragraphs to allocate)
-*   Each group image is padded out to a 128-byte record.  Phase 1 emits
+*   Group images are packed at PARAGRAPH (16-byte) granularity: each group's
+*   stored image is padded to a paragraph so its byte length matches the
+*   paragraph "length" field in its descriptor, and the loader finds the next
+*   group at base + length*16.  (Genuine DRI .CMD files pack this way; padding
+*   an image to a 128-byte record while declaring only its paragraph length
+*   left every following group's data at an offset the loader never read.)
+*   Phase 1 emits
 *   base=0 relocatable images with no fixup table (header 0x7F bit 7 clear),
 *   which covers the small (CODE+DATA) and 8080 (single group) models.
 *
@@ -51,6 +57,7 @@
 
 #define CMD_HDR_SIZE    128
 #define CMD_REC_SIZE    128
+#define CMD_PARA_SIZE   16
 #define CMD_MAX_GROUPS  8
 
 #define CMD_TYPE_CODE   1
@@ -94,7 +101,14 @@ void FiniCPM86LoadFile( void )
             continue;
         CurrSect = group->section;
         img_len = WriteGroupLoad( group, false );   /* stored image bytes */
-        pad = (size_t)( -(long)img_len & ( CMD_REC_SIZE - 1 ) );
+        /* Pad the stored image to a PARAGRAPH (16-byte) boundary so its byte
+         * length equals the paragraph "length" written into the descriptor
+         * below.  The loader locates each following group at base + length*16,
+         * so padding to a 128-byte record here while declaring only the
+         * paragraph length would leave the next group's image 0..112 bytes
+         * past where the loader reads it -- making all of its data come back
+         * zero.  Genuine DRI .CMD files pack groups at paragraph granularity. */
+        pad = (size_t)( -(long)img_len & ( CMD_PARA_SIZE - 1 ) );
         if( pad != 0 )
             PadLoad( pad );
         *desc++ = ( group->leaders->class->flags & CLASS_CODE ) ?
