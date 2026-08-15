@@ -135,6 +135,16 @@ files**. It write-creates `TEST.TXT`, reads it back line-by-line, seeks by an
 file, checks byte-exact `SEEK_END` on a non-record-aligned binary write, and
 `remove`s it — 511 self-checking `VERIFY`s, `DISKIO: PASS`, **zero INT 21h**.
 
+**MAME-verified (2026-08-15).** The same `disktest.cmd` runs on the **real
+RC759 under MAME**, which boots **Concurrent CP/M-86 3.1** — the authoritative
+oracle (emu2 is only a smoke test, and is explicitly not authoritative for the
+CP/M-3 exact-length semantics). All **511 checks pass on the metal**: the guest
+streams its result record (tag `0xD15C`, full 16-bit test count, failures, end
+sentinel) on the undecoded I/O port `0x2FE` via `mame_out()`, and
+`mame-tests/disk_done.lua` reads it back (`DISK-DONE tests=511 failures=0`) and
+snapshots the on-screen `DISKIO: PASS (511 tests, 0 failures)` line. Harness:
+`mame-tests/disk-mame.sh`.
+
 One seam, `port/diskio.c`, supersedes `stdioshim.c` in this build (it owns the
 same console `__qwrite`/`isatty`) and adds the five low-level primitives `fopen`
 bottoms out into — `_sopen` / `__qread` / `__qwrite` / `__lseek` / `__close` —

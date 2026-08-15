@@ -20,6 +20,9 @@ under emu2 but not yet confirmed on the authoritative MAME/RC759 oracle).
   every CP/M: the true length is tracked locally in `fp->len` and extended by
   every write. Verified: `test/disktest.c` writes 200 bytes (200 % 128 = 72,
   not a record multiple) and confirms `SEEK_END` reports 200, not 256.
+  **Hardware-verified 2026-08-15 on the RC759 under MAME (Concurrent CP/M-86
+  3.1): `DISKIO: PASS (511 tests, 0 failures)` on the real machine** — see
+  README milestone + `mame-tests/disk-mame.sh`.
 - **After close + reopen of a binary file**, the length can only come from the
   directory, which on a **CP/M 2.2 filesystem (plain CP/M-86)** knows length
   only to the nearest 128-byte record. A 200-byte file reopens as 256. This is
@@ -27,14 +30,17 @@ under emu2 but not yet confirmed on the authoritative MAME/RC759 oracle).
   the sub-record byte count.
 - **CCP/M-86 / CP/M 3+** *does* carry an exact length via the **Last Record
   Byte Count (LRBC)**. `diskio.c` reads it (runtime-gated on BDOS fn 12 version
-  >= 0x30) and would reopen byte-exact — **but** our own write path does not yet
-  transmit an LRBC on close, so a binary file *we* wrote still reopens
-  record-rounded even on CCP/M-86. Only files a prior tool stored with an LRBC
-  come back exact. See issue #2 below.
-- **UNVERIFIED:** the LRBC read/decode path is smoke-tested under emu2 (which
-  reports CP/M 3.1) only. **emu2 is not authoritative for LRBC semantics — the
-  RC759 running real Concurrent CP/M-86 under MAME is.** No MAME confirmation
-  yet.
+  >= 0x30 — the RC759 reports 3.1, so this path IS live on the real target) and
+  would reopen byte-exact — **but** our own write path does not yet transmit an
+  LRBC on close, so a binary file *we* wrote still reopens record-rounded even
+  on CCP/M-86. Only files a prior tool stored with an LRBC come back exact. See
+  issue #2 below.
+- **Still UNVERIFIED:** the LRBC *decode-to-exact-length* value on a file a
+  third-party tool stored with an LRBC. The version gate and code path run on
+  the real RC759 (the 511-check suite passed there), but no test yet reopens a
+  foreign LRBC-tagged binary file and asserts the decoded length, so the decode
+  arithmetic itself is confirmed only under emu2. Closing this needs a fixture
+  file carrying a known partial last record.
 - Text files are unaffected: `text_eof()` recovers the byte-exact end by
   scanning the last record back past its Ctrl-Z (0x1A) padding, on any CP/M.
 
@@ -99,5 +105,8 @@ The RC759 has no 8087, so `-fpc` soft-float is the production path.
 emu2-cpm86 is fast and convenient for round-trip and purity checks, but it is
 **not** cycle-accurate and does **not** faithfully model either a no-8087
 machine or CP/M 3 LRBC directory semantics. The authoritative oracle is the
-**RC759 (i80186 @ 6 MHz) under MAME**. Whetstone + Mandelbrot are already
-MAME-verified (see README milestone notes); the disk LRBC path is not.
+**RC759 (i80186 @ 6 MHz) under MAME**. Whetstone + Mandelbrot were already
+MAME-verified; the disk FILE\* seam is now **MAME-verified too** — the full
+511-check `disktest.c` suite passes on the real RC759 running **Concurrent
+CP/M-86 3.1** (`mame-tests/disk-mame.sh`, snapshot shows `DISKIO: PASS`). The
+one disk item still emu2-only is the foreign-LRBC decode value (issue #1).

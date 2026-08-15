@@ -23,6 +23,7 @@ SRC=".."
 INC="-i=$B/lib_misc/h -i=$B/clib/streamio/h -i=$B/clib/h -i=$B/clib/heap/h -i=$B/clib/intel/h -i=$B/comp_cfg/h -i=$B/watcom/h -i=$B/hdr/dos/h"
 CLIB="-bt=dos -0 -ms -zastd=c99 -zl -x"       # compile Watcom clib source
 USER="-bt=dos -0 -ms -zl -zastd=c99"          # compile our port + test
+EXTRA="${DISKIO_EXTRA:-}"                      # e.g. -DMAME_DONE -i=<mame-tests>
 
 cw() { "$WCC" $CLIB $INC "$B/clib/$1" -fo="$2"; }   # compile a Watcom clib source
 
@@ -101,7 +102,7 @@ cw memory/c/memmove.c memmove.obj
 "$WCC" $USER $INC "$SRC/port/lowlevel.c" -fo=lowlevel.obj
 "$WCC" $USER $INC "$SRC/port/errnoptr.c" -fo=errnoptr.obj    # __get_errno_ptr -> &errno
 "$WCC" $USER $INC -DDISKIO_LSEEK "$SRC/port/stubs.c" -fo=stubs.obj  # exclude stub __lseek
-"$WCC" $USER $INC "$SRC/test/disktest.c" -fo=disktest.obj
+"$WCC" $USER $INC $EXTRA "$SRC/test/disktest.c" -fo=disktest.obj
 
 # --- link a CP/M-86 .CMD ---
 "$WLINK" format cpm86 op dosseg op quiet name disktest.cmd \
@@ -132,6 +133,10 @@ assert bdos>0, "FAIL: no BDOS call in image!"
 PY
 
 # --- run under emu2 + self-checking oracle gate ---
+if [ "${DISKIO_NORUN:-0}" = "1" ]; then
+  echo "DISKIO_NORUN=1: built $OUTDIR/disktest.cmd, skipping emu2 run (MAME harness)"
+  exit 0
+fi
 rm -f TEST.TXT
 OUT="$("$EMU2" disktest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "DISKIO: PASS"; then

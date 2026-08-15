@@ -11,6 +11,9 @@
  */
 #include <stdio.h>
 #include <string.h>
+#ifdef MAME_DONE
+#include "mamedone.h"                    /* mame_done(): OUT 0x2FE stop-signal */
+#endif
 
 extern int os_reports_lrbc( void );     /* exact binary length only on CP/M 3+ */
 
@@ -179,5 +182,15 @@ int main( void )
 
     printf( "DISKIO: %s (%d tests, %d failures)\n",
             failures == 0 ? "PASS" : "FAIL", tests, failures );
+#ifdef MAME_DONE
+    /* Stream the result record to the MAME host as a word sequence (tag, full
+       16-bit test count, failures, end sentinel). disk_done.lua collects them,
+       snapshots the screen (the printed DISKIO line above is the human oracle),
+       and stops the emulator. Must be last -- output is already flushed. */
+    mame_out( 0xD15C );                 /* tag: "disk" result record */
+    mame_out( (unsigned)tests );        /* full count -- 511 does not fit a byte */
+    mame_out( (unsigned)failures );     /* 0 == PASS */
+    mame_out( 0xE0F0 );                 /* end sentinel */
+#endif
     return( failures == 0 ? 0 : 1 );
 }
