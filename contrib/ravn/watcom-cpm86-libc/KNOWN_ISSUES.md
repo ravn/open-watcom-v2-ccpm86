@@ -191,3 +191,49 @@ MAME-verified; the disk FILE\* seam is now **MAME-verified too** — the full
 650-check `disktest.c` suite passes on the real RC759 running **Concurrent
 CP/M-86 3.1** (`mame-tests/disk-mame.sh`, snapshot shows `DISKIO: PASS`). The
 one disk item still emu2-only is the foreign-LRBC decode value (issue #1).
+
+---
+
+## Known non-blocking open items (2026-08-15)
+
+The following are **known, non-blocking** gaps/enhancements. The core RC759
+production libc surface is implemented and MAME-verified; none of these block it.
+Recorded here so they are not lost; no action taken now.
+
+### 8. Enhancements / deferred (not blocking)
+
+- **stat timestamps via F_TIMEDATE (fn 102)** — `stat()` leaves
+  st_atime/mtime/ctime = 0. The RC759 medium IS CP/M 3 (label `PIC 2-3.1-31`,
+  create+update datestamps enabled; real SFCBs decode to 1985-03-26 12:54) so
+  the data exists; reading it needs fn 102, runtime-gated off on emu2 (no fn
+  102, max BDOS case 105). The version discriminator (real RC759 fn 12 return
+  vs emu2 0x0031) is UNVERIFIED — must be MAME-probed empirically, not guessed.
+  Independent assertion oracle = raw SFCB byte-decode.
+- **fscanf float decouple** — Watcom's `scnf.c` compiles `scan_float()`
+  unconditionally, so integer-only `fscanf` still drags the soft-float stack.
+  Make float scanning link only when a floating conversion (%e/%f/%g) is used.
+  Non-blocker (user-confirmed).
+- **cpmtools diskdef os 2.2 vs os 3** — `scratch/rc759-cmd-toolchain/diskdefs`
+  (`rc759-drc`) declares `os 2.2`, which under-describes the CP/M-3 medium.
+  Kept deliberately: os-2.2 is datestamp-blind, so `cpmcp` preserves the
+  authentic 1985 SFCB stamps instead of rewriting them; and `os 3` did NOT
+  surface stamps in `cpmls -D` anyway. "Check later", not a bug.
+- **8087 software-emulator link path** (`-fpi`) — compile+link the
+  fpuemu/i86 emu8087 engine into the cpm86 image, plus a CP/M-86 vector-init
+  seam that pokes INT 0x34–0x3D emulator vectors directly in the IVT (no DOS
+  INT 21h `xchg_vects`). Deferred to a contributor with 8087 hardware; RC759
+  has no 8087, so `-fpc` soft-float is the production path
+  (see #6 / `docs/8087_HARDWARE_SUPPORT_DEFERRED.md`).
+
+### 9. ibm5150 CP/M-86 1.0 fallback verification — PARKED (memory-capped)
+
+Tracked: **ravn/open-watcom-v2#17**. Goal was to verify the
+`os_has_lrbc()==false` fallback branch (record-rounded reopen / SEEK_END → 200
+not 256) on a real, pre-CP/M-3 target — IBM PC CP/M-86 1.0 under the ibm5150
+MAME driver — as a second-platform cross-check of the LRBC version gate. PARKED
+2026-08-15: **CP/M-86 1.0 self-caps the TPA at 128 KB**, so `disktest.cmd`
+reports `MEMORY NOT AVAILABLE` and cannot run. Sub-items (writable 160K IBM
+diskdef, harness port + mame_out/Lua done-reader, keystroke autorun, result
+capture) are all blocked on this. Not blocking RC759 production — the LRBC path
+itself is MAME-verified on the real RC759; only the *false*-branch cross-check on
+a second OS is outstanding.
