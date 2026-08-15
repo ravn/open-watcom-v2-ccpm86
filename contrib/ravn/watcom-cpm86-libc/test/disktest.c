@@ -175,6 +175,34 @@ int main( void )
         VERIFY( fclose( fp ) == 0 );
     }
     VERIFY( remove( "ODD.DAT" ) == 0 );
+
+    /* --- binary NON-sector-aligned CROSS-REOPEN exactness (write-side LRBC).
+       Write 100 bytes (100 % 128 == 100, a partial final record), CLOSE, then
+       reopen COLD and demand the fresh handle reports 100 -- proving __close
+       persisted the exact byte count via the CP/M 3 F_ATTRIB/F6' byte-count
+       protocol so a *new* program sees the true size, not the 128-rounded
+       record count. This is only guaranteed where the OS actually supports the
+       LRBC (CP/M 3+ / Concurrent CP/M-86), so it is gated on os_reports_lrbc():
+       on the RC759 (CCP/M-86 3.1) it runs and must pass; on plain CP/M-86 2.2 it
+       is skipped (no LRBC). Authoritative oracle: RC759 under MAME. --- */
+    if( os_reports_lrbc() ) {
+        fp = fopen( "EXACT.DAT", "wb" );
+        VERIFY( fp != NULL );
+        if( fp != NULL ) {
+            int i;
+            for( i = 0; i < 100; i++ )
+                VERIFY( fputc( 'A' + ( i % 26 ), fp ) == ( 'A' + ( i % 26 ) ) );
+            VERIFY( fclose( fp ) == 0 );
+        }
+        fp = fopen( "EXACT.DAT", "rb" );             /* COLD reopen */
+        VERIFY( fp != NULL );
+        if( fp != NULL ) {
+            VERIFY( fseek( fp, 0L, SEEK_END ) == 0 );
+            VERIFY( ftell( fp ) == 100L );           /* exact, not 128 */
+            VERIFY( fclose( fp ) == 0 );
+        }
+        VERIFY( remove( "EXACT.DAT" ) == 0 );
+    }
     (void)os_reports_lrbc;      /* runtime OS-capability probe (see KNOWN_ISSUES) */
 
     /* --- low-level POSIX I/O seam (open/creat/read/write/close/lseek/tell/

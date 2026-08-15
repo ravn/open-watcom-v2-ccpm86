@@ -66,6 +66,7 @@ extern void _bdos_conout( int c );      /* BDOS C_WRITE (fn 2, char in DL) */
 #define BD_CLOSE    16
 #define BD_DELETE   19
 #define BD_RENAME   23          /* F_RENAME: old FCB in 0..15, new name in 16..31 */
+#define BD_ATTRIB   30          /* F_ATTRIB: set attrs; F6' writes last-rec byte count */
 #define BD_MAKE     22
 #define BD_SETDMA   26
 #define BD_READRAND 33
@@ -682,6 +683,28 @@ int _WCNEAR __close( int handle )
         return( 0 );
     }
     _bdos( BD_CLOSE, (unsigned)(size_t)&fp->fcb[0] );
+    /* Write-side exact length (LRBC) -- KNOWN_ISSUES #2. On CP/M 3+ / Concurrent
+       CP/M-86 (the RC759's OS) a program records a file's exact byte length by
+       re-issuing F_ATTRIB (BDOS fn 30) AFTER close with the F6' request flag set
+       (bit 7 of FCB byte 6) and the Last Record Byte Count in FCB+32; the OS then
+       stores that count in the directory so a fresh open reports the exact size
+       instead of the 128-rounded record count. We do it only for a BINARY file
+       we actually WROTE: text files terminate with Ctrl-Z (text_eof() scans for
+       it) and must not be truncated. len & 0x7F is the used bytes of the final
+       record; 0 means len is an exact multiple of 128 (already record-exact, so
+       nothing to record). Note this is the documented F_ATTRIB protocol, NOT
+       setting FCB+32 at F_CLOSE -- the close path treats FCB+32 as the sequential
+       current-record byte and will not honour it for a handle that has written.
+       Gated on os_has_lrbc() so plain CP/M-86 2.2 is untouched. */
+    if( fp->wrote && !fp->text && os_has_lrbc() ) {
+        unsigned char lrbc = (unsigned char)(fp->len & 0x7F);
+        if( lrbc != 0 ) {
+            fp->fcb[6]        |= 0x80;              /* F6' = "set byte count"      */
+            fp->fcb[FCB_LRBC]  = lrbc;             /* FCB+32 = used bytes, last rec */
+            _bdos( BD_ATTRIB, (unsigned)(size_t)&fp->fcb[0] );
+            fp->fcb[6]        &= 0x7F;              /* clear F6' again (tidy up)    */
+        }
+    }
     if( cache_fp == fp )
         cache_fp = NULL;
     fp->used = 0;
