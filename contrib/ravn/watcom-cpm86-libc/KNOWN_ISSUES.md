@@ -67,7 +67,7 @@ Watcom ships its own self-checking regression tests
 `float01–04` — is the independent gold-standard disk oracle. Blocked on missing
 seam primitives:
 
-- `streamio`: `fscanf` read path, `fopen("CON")` (console as a named file).
+- `streamio`: `fopen("CON")` (console as a named file).
 - `handleio`: `chsize` (sparse zero-fill), `dup`/`dup2` (shared file position),
   `umask`/`chmod` R/O-attribute enforcement, `_hdopen`/`_os_handle`.
 - `file`: `access`, `chmod`, `stat`, `utime`.
@@ -79,11 +79,19 @@ Implemented + emu2-verified (via `test/disktest.c`, purity gate INT21h=0):
 - `rename` (BDOS fn 23).
 - `tmpnam` / `tmpfile` — `"TMPnnnnn.$$$"` names, uniqueness by open()-probe,
   auto-removal on `fclose` via Watcom's own `_TMPFIL` / `__RmTmpFileFn` hook.
+- `fscanf` — Watcom's UNCHANGED `streamio/c/scnf.c` scan engine, proven by the
+  dedicated `build-fscanf.sh` harness (`test/disktest.c -DFSCANF_TEST`, PASS 554
+  self-checks, INT21h=0). `scnf.c` compiles `scan_float()` unconditionally, so
+  fscanf drags the soft-float + ctype + mbyte stack (FIDRQQ/FIERQQ/FIWRQQ,
+  `__Bits`/`isdigit`/`isspace`, `mbtowc`, strtod); those are resolved 8087-free
+  by reusing `build-whetstone.sh`'s `-fpc` `__FDxemu` objects + LIB-searched
+  `msdos.086` clib + `msdos.286` mathlib. Kept OUT of `build-diskio.sh` so the
+  disk-I/O purity oracle stays float-free.
 
 Until the remaining primitives above exist, Watcom's own `clibtest` suite still
 cannot run unchanged; the disk path is proven by our `test/disktest.c`
-round-trip oracle (534 self-checks, PASS) plus the tractable POSIX subset now
-landed.
+round-trip oracle (543 self-checks base / 554 with the fscanf block, PASS) plus
+the POSIX + fscanf subset now landed.
 
 ### 4. Currently implemented seam surface — for reference
 
@@ -91,7 +99,8 @@ Working (verified under emu2, purity gate INT21h=0): `fopen`/`fclose`,
 `fread`/`fwrite`, `fgetc`/`fputc`/`fgets`/`fputs`/`fprintf`, `fseek`/`ftell`
 (byte-granular), `remove`/`unlink`/`rename`, low-level POSIX
 `open`/`creat`/`read`/`write`/`close`/`lseek`/`tell`/`filelength`/`eof`,
-`tmpnam`/`tmpfile` (auto-removed on `fclose`), text
+`tmpnam`/`tmpfile` (auto-removed on `fclose`), `fscanf` (Watcom's unchanged
+scan engine, via the float-coupled `build-fscanf.sh` harness), text
 (Ctrl-Z) and binary modes, `O_APPEND`, `O_TRUNC`, `O_CREAT`. Backed by CP/M
 random-record BDOS calls (fn 33/34) with per-record DMA (fn 26/51).
 

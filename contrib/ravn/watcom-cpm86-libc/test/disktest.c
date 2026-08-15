@@ -246,6 +246,38 @@ int main( void )
         }
     }
 
+#ifdef FSCANF_TEST
+    /* --- fscanf read path (Watcom's UNCHANGED scnf.c engine): write known
+       text, parse it back. Integer + string conversions only; scan_float is
+       linked (unconditional in scnf.c) but not exercised here. Gated behind
+       FSCANF_TEST because it drags the soft-float/ctype/mbyte stack -- only the
+       dedicated build-fscanf.sh harness defines it; build-diskio stays lean. --- */
+    {
+        FILE *sf;
+        int   a = 0, b = 0, n;
+        char  word[16];
+
+        sf = fopen( "SCAN.DAT", "w" );
+        VERIFY( sf != NULL );
+        if( sf != NULL ) {
+            VERIFY( fputs( "123 -456 hello", sf ) >= 0 );
+            VERIFY( fclose( sf ) == 0 );
+        }
+        sf = fopen( "SCAN.DAT", "r" );
+        VERIFY( sf != NULL );
+        if( sf != NULL ) {
+            n = fscanf( sf, "%d %d %15s", &a, &b, word );
+            VERIFY( n == 3 );                    /* three fields converted */
+            VERIFY( a == 123 );
+            VERIFY( b == -456 );                 /* signed decimal */
+            VERIFY( strcmp( word, "hello" ) == 0 );
+            VERIFY( fscanf( sf, "%d", &a ) == EOF );  /* nothing left */
+            VERIFY( fclose( sf ) == 0 );
+        }
+        VERIFY( remove( "SCAN.DAT" ) == 0 );
+    }
+#endif
+
     /* --- cleanup + remove() --- */
     VERIFY( remove( "TEST.TXT" ) == 0 );
     fp = fopen( "TEST.TXT", "r" );
