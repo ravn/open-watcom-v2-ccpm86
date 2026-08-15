@@ -41,6 +41,13 @@ under emu2 but not yet confirmed on the authoritative MAME/RC759 oracle).
   foreign LRBC-tagged binary file and asserts the decoded length, so the decode
   arithmetic itself is confirmed only under emu2. Closing this needs a fixture
   file carrying a known partial last record.
+- **The `os_has_lrbc()==false` fallback itself** (record-rounded reopen on a
+  genuinely pre-CP/M-3 target) is tracked + PARKED in **ravn/open-watcom-v2#17**.
+  An IBM 5150 + CP/M-86 1.0 MAME oracle was built to exercise it, since the RC759
+  (Concurrent CP/M-86 3.1) always takes the LRBC path and cannot reach this
+  branch. The harness boots and injects keystrokes reliably, but `disktest.cmd`
+  hits `MEMORY NOT AVAILABLE` — CP/M-86 1.0 self-caps its TPA at 128 KB
+  regardless of installed RAM. Full state + next steps in #17.
 - Text files are unaffected: `text_eof()` recovers the byte-exact end by
   scanning the last record back past its Ctrl-Z (0x1A) padding, on any CP/M.
 
