@@ -33,7 +33,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <sys/stat.h>       /* chmod prototype, mode_t, S_IWRITE (R/O attribute) */
+#include <sys/stat.h>       /* chmod/stat prototypes, mode_t, S_IWRITE (R/O attr) */
+#include <utime.h>          /* struct utimbuf (utime) */
 #include "qread.h"
 #include "qwrite.h"
 
@@ -68,6 +69,7 @@ extern void _bdos_conout( int c );      /* BDOS C_WRITE (fn 2, char in DL) */
 #define BD_DELETE   19
 #define BD_RENAME   23          /* F_RENAME: old FCB in 0..15, new name in 16..31 */
 #define BD_ATTRIB   30          /* F_ATTRIB: set attrs; F6' writes last-rec byte count */
+#define BD_SFIRST   17          /* F_SFIRST: search dir for first match (no lock) */
 #define BD_MAKE     22
 #define BD_SETDMA   26
 #define BD_READRAND 33
@@ -764,6 +766,133 @@ int chmod( const char *name, mode_t pmode )
     else
         fcb[FCB_TYPE] |= 0x80;                      /* read-only: set R/O bit  */
     if( _bdos( BD_ATTRIB, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+        errno = ENOENT;
+        return( -1 );
+    }
+    return( 0 );
+}
+
+/* ---- file-status seam: access / stat / utime -----------------------------
+ *
+ * Watcom's own access/stat/utime (bld/clib/... ) all bottom into DOS INT 21h
+ * (get/set file attributes fn 43h, find-first fn 4Eh, set-file-time fn 5701h)
+ * -- forbidden on this target -- so THIS is the CP/M-86 replacement. Everything
+ * a program can learn about a CP/M file it learns from ONE directory entry:
+ * existence, the read-only (R/O) bit, and the size to the nearest 128-byte
+ * record (exact on CP/M 3+ via the LRBC). CP/M-2.2 keeps NO timestamps, so the
+ * three st_*time fields and utime() are best-effort no-ops (documented below).
+ */
+
+/* Read a file's DIRECTORY ENTRY via F_SFIRST (BDOS fn 17) -- the RIGHT primitive
+   for a status probe: it scans the directory and copies the matched 32-byte
+   entry to the current DMA, allocating NO open-file lock (unlike F_OPEN fn 15).
+   That matters on Concurrent CP/M-86 (the RC759's multitasking OS), where every
+   unmatched F_OPEN leaks a system lock-list entry and a few status calls in a
+   row overflow the small, system-wide list -- the BDOS then aborts the program
+   to the CCP (observed: an F_OPEN-based probe exited disktest to A>). F_SFIRST
+   has no such cost and needs no close.
+
+   On success (return 1) the 32-byte entry is copied to `ent`: byte 0 = user #,
+   bytes 1..8 = name, bytes 9..11 = type -- and the high bit of byte 9 (t1') is
+   the read-only attribute, carried straight from the physical directory on real
+   CP/M and set the same way by emu2's search. Returns 0 = no such file, -1 =
+   illegal CP/M name. AL holds the entry's index (0..3) within the 128-byte DMA;
+   mask to stay inside our work buffer. */
+static int stat_probe( const char *name, unsigned char *ent )
+{
+    unsigned char fcb[36];
+    int           al;
+
+    if( name_to_fcb( name, fcb ) < 0 )
+        return( -1 );
+    set_dma();
+    al = _bdos( BD_SFIRST, (unsigned)(size_t)&fcb[0] );
+    if( al == 0xFF )
+        return( 0 );
+    memcpy( ent, &dma[(al & 3) * 32], 32 );
+    return( 1 );
+}
+
+/* access(name, mode): existence + permission check. CP/M carries only the R/O
+   attribute, so W_OK is the only permission we can truthfully answer -- a file
+   with the R/O bit set fails W_OK (errno EACCES). R_OK/X_OK/F_OK succeed for any
+   file that exists (every CP/M file is readable and, being no OS distinction,
+   nominally "executable"). A missing file (or illegal name) is ENOENT. */
+_WCRTLINK int access( const char *name, int mode )
+{
+    unsigned char ent[32];
+
+    if( stat_probe( name, ent ) != 1 ) {
+        errno = ENOENT;
+        return( -1 );
+    }
+    if( (mode & W_OK) && (ent[FCB_TYPE] & 0x80) ) { /* wants write, file is R/O */
+        errno = EACCES;
+        return( -1 );
+    }
+    return( 0 );
+}
+
+/* stat(name, buf): fill the POSIX status of a CP/M file. What CP/M can back
+   truthfully: st_size (from F_SIZE fn 35, rounded UP to the next 128-byte record
+   -- the inherent CP/M limit for a probe that does not open the file), the write
+   bit of st_mode (from the R/O attribute), execute for a ".CMD" transient
+   program, and st_dev (the drive). st_atime/st_mtime/st_ctime are left 0 for
+   now: CP/M-2.2 has no timestamps at all, and while the CP/M-3 medium this runs
+   on (RC759 Concurrent CP/M-86 3.1) DOES carry per-file SFCB datestamps, reading
+   them via F_TIMEDATE (fn 102) is a tracked enhancement -- 0 is an honest "not
+   yet read", not a claim that the epoch is 1970. */
+_WCRTLINK int stat( const char *name, struct stat *buf )
+{
+    unsigned char ent[32];
+    unsigned char fcb[36];
+    long          records;
+    mode_t        perm;
+
+    if( stat_probe( name, ent ) != 1 ) {
+        errno = ENOENT;
+        return( -1 );
+    }
+
+    /* Size via F_SIZE (fn 35): fills the FCB random record with the file's size
+       in 128-byte records, straight off the directory -- no open, no lock. */
+    name_to_fcb( name, fcb );
+    _bdos( BD_FILESIZE, (unsigned)(size_t)&fcb[0] );
+    records = (long)fcb[FCB_R0 + 0]
+            | ((long)fcb[FCB_R0 + 1] << 8)
+            | ((long)fcb[FCB_R0 + 2] << 16);
+
+    memset( buf, 0, sizeof( *buf ) );
+    buf->st_size = records * SECT;                    /* record-rounded (probe) */
+
+    perm = S_IREAD;                                  /* every CP/M file is readable */
+    if( !(ent[FCB_TYPE] & 0x80) )                    /* R/O bit clear => writable */
+        perm |= S_IWRITE;
+    if( (ent[FCB_TYPE + 0] & 0x7F) == 'C'            /* ".CMD" transient => exec */
+     && (ent[FCB_TYPE + 1] & 0x7F) == 'M'
+     && (ent[FCB_TYPE + 2] & 0x7F) == 'D' )
+        perm |= S_IEXEC;
+    /* replicate owner bits into group/other -- CP/M has no per-class permission */
+    buf->st_mode = (mode_t)(S_IFREG | perm | (perm >> 3) | (perm >> 6));
+
+    buf->st_nlink = 1;
+    buf->st_dev = buf->st_rdev = 0;                  /* CP/M dir entry carries no drive */
+    return( 0 );
+}
+
+/* utime(name, times): CP/M's directory has no host-settable timestamp field we
+   can write from here -- CP/M-2.2 has none at all, and CP/M-3 datestamps are
+   maintained by the BDOS itself (create/update/access), not set to an arbitrary
+   value by a user call. So we honour the POSIX contract we CAN keep -- report
+   ENOENT for a missing file -- and otherwise succeed as a no-op (a program that
+   sets times and never reads them back, as clibtest does, must see success).
+   The `times` argument is accepted and ignored. */
+_WCRTLINK int utime( const char *name, const struct utimbuf *times )
+{
+    unsigned char ent[32];
+
+    (void)times;
+    if( stat_probe( name, ent ) != 1 ) {
         errno = ENOENT;
         return( -1 );
     }

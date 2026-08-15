@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <io.h>
 #include <sys/stat.h>                    /* S_IWRITE: the only chmod bit we map */
+#include <utime.h>                       /* struct utimbuf (utime seam) */
 #ifdef MAME_DONE
 #include "mamedone.h"                    /* mame_done(): OUT 0x2FE stop-signal */
 #endif
@@ -281,6 +282,63 @@ int main( void )
         }
         VERIFY( remove( "CHM.DAT" ) == 0 );
     }
+
+    /* --- access / stat / utime: the file-status seam. CP/M backs these from one
+       directory entry -- existence, the R/O bit, and the size (exact on CP/M 3+
+       via LRBC, else record-rounded). W_OK is the only permission CP/M can
+       answer truthfully (R/O => EACCES); F_OK/R_OK succeed for any existing
+       file, ENOENT for a missing one. stat reports st_size and the S_IWRITE bit
+       tracking the R/O attribute. CP/M-2.2 keeps no timestamps, so utime is a
+       best-effort no-op that still reports ENOENT on a missing file.
+       Gated out of the fscanf harness: that build additionally links the scanf
+       engine + math286 float lib, leaving less TPA, and this block is fully
+       exercised by the diskio harness (on emu2 AND the MAME oracle) already. --- */
+#ifndef FSCANF_TEST
+    {
+        static const char amsg[] = "access-stat-seam!";  /* 17 bytes, not rec-aligned */
+        struct stat   st;
+        struct utimbuf ut;
+        int  L = (int)sizeof( amsg ) - 1;
+        int  h;
+
+        h = open( "AST.DAT", O_WRONLY | O_CREAT | O_TRUNC | O_BINARY );
+        VERIFY( h >= 0 );
+        if( h >= 0 ) {
+            VERIFY( write( h, amsg, L ) == L );
+            VERIFY( close( h ) == 0 );
+        }
+
+        VERIFY( access( "AST.DAT", F_OK ) == 0 );        /* it exists          */
+        VERIFY( access( "AST.DAT", R_OK ) == 0 );        /* readable           */
+        VERIFY( access( "AST.DAT", W_OK ) == 0 );        /* writable (R/W)      */
+        VERIFY( access( "NOSUCH.DAT", F_OK ) == -1 );    /* missing -> ENOENT   */
+
+        VERIFY( chmod( "AST.DAT", S_IREAD ) == 0 );      /* make R/O           */
+        VERIFY( access( "AST.DAT", W_OK ) == -1 );       /* W_OK now EACCES     */
+        VERIFY( access( "AST.DAT", R_OK ) == 0 );        /* still readable      */
+        VERIFY( chmod( "AST.DAT", S_IREAD | S_IWRITE ) == 0 );  /* restore R/W  */
+        VERIFY( access( "AST.DAT", W_OK ) == 0 );        /* writable again      */
+
+        memset( &st, 0, sizeof( st ) );
+        VERIFY( stat( "AST.DAT", &st ) == 0 );
+        VERIFY( st.st_size >= (long)L );                 /* >=17 (exact or rounded) */
+        VERIFY( (st.st_mode & S_IFREG) == S_IFREG );     /* a regular file      */
+        VERIFY( (st.st_mode & S_IWRITE) != 0 );          /* R/W => write bit set */
+        VERIFY( stat( "NOSUCH.DAT", &st ) == -1 );       /* missing -> ENOENT   */
+
+        VERIFY( chmod( "AST.DAT", S_IREAD ) == 0 );      /* R/O reflected in stat */
+        VERIFY( stat( "AST.DAT", &st ) == 0 );
+        VERIFY( (st.st_mode & S_IWRITE) == 0 );          /* R/O => write bit clear */
+        VERIFY( chmod( "AST.DAT", S_IREAD | S_IWRITE ) == 0 );
+
+        ut.actime = ut.modtime = 0;
+        VERIFY( utime( "AST.DAT", &ut ) == 0 );          /* no-op success       */
+        VERIFY( utime( "AST.DAT", NULL ) == 0 );         /* NULL times accepted */
+        VERIFY( utime( "NOSUCH.DAT", &ut ) == -1 );      /* missing -> ENOENT   */
+
+        VERIFY( remove( "AST.DAT" ) == 0 );
+    }
+#endif  /* !FSCANF_TEST */
 
     /* --- tmpnam / tmpfile: unique name + write/rewind/read round-trip, then
        auto-removal on fclose (Watcom fclose fires __RmTmpFileFn on _TMPFIL). --- */

@@ -100,7 +100,6 @@ Still blocked (other clibtest members) on missing seam primitives:
 
 - `handleio`: `chsize` (sparse zero-fill), `dup2` (shared file position),
   `umask`, `_hdopen`/`_os_handle`.
-- `file`: `access`, `stat`, `utime`.
 
 Implemented + emu2-verified (via `test/disktest.c`, purity gate INT21h=0):
 - low-level POSIX handleio subset — `open`, `creat`, `read`, `write`, `close`,
@@ -113,6 +112,23 @@ Implemented + emu2-verified (via `test/disktest.c`, purity gate INT21h=0):
   every other mode bit (read/execute + the CP/M system/archive attributes).
   Round-trip (set R/O, restore R/W, ENOENT on a missing file, data preserved)
   passes under emu2 AND on the real RC759 under MAME.
+- `access` / `stat` / `utime` (the `file` clibtest group) — status probe via
+  **SEARCH FIRST (BDOS fn 17, F_SFIRST)**, deliberately NOT F_OPEN. F_OPEN
+  allocates a Concurrent-CP/M-86 open-file *lock*-list entry that only F_CLOSE
+  releases; an open-without-close probe leaks locks and, after a handful, the
+  system-wide lock list overflows and the BDOS aborts the program to the CCP
+  (observed: an F_OPEN-based probe exited disktest to A> on the real RC759 while
+  emu2 — which models no lock list — passed). F_SFIRST reads the 32-byte
+  directory entry into the DMA with no lock and no close. From that entry:
+  `access` answers W_OK via the R/O bit (EACCES) / else ENOENT; `stat` fills
+  `st_size` (F_SIZE fn 35, record-rounded), `st_mode` (S_IFREG + R/O→S_IWRITE +
+  `.CMD`→S_IEXEC), `st_dev=0`; `utime` is a no-op success (ENOENT on a missing
+  file). **Timestamp gap:** `st_atime/st_mtime/st_ctime` are 0 for now. The RC759
+  medium IS CP/M 3 (disk label `PIC 2-3.1-31`, create+update datestamps enabled)
+  and carries real SFCB datestamps (verified by raw decode: 1985-03-26 12:54),
+  but reading them via F_TIMEDATE (fn 102, runtime-gated off on emu2 which lacks
+  it) is a tracked enhancement, not yet implemented. Passes under emu2 (686) AND
+  on the real RC759 under MAME (686/0).
 - `tmpnam` / `tmpfile` — `"TMPnnnnn.$$$"` names, uniqueness by open()-probe,
   auto-removal on `fclose` via Watcom's own `_TMPFIL` / `__RmTmpFileFn` hook.
 - `fscanf` — Watcom's UNCHANGED `streamio/c/scnf.c` scan engine, proven by the
@@ -133,7 +149,8 @@ PASS, all INT21h=0.
 Working (verified under emu2, purity gate INT21h=0): `fopen`/`fclose`,
 `fread`/`fwrite`, `fgetc`/`fputc`/`fgets`/`fputs`/`fprintf`, `fseek`/`ftell`
 (byte-granular), `remove`/`unlink`/`rename`, `chmod` (W-bit only -> R/O
-attribute), low-level POSIX
+attribute), `access`/`stat`/`utime` (status via SEARCH FIRST fn 17; timestamps
+0 pending fn 102), low-level POSIX
 `open`/`creat`/`read`/`write`/`close`/`lseek`/`tell`/`filelength`/`eof`,
 `tmpnam`/`tmpfile` (auto-removed on `fclose`), `fscanf` (Watcom's unchanged
 scan engine, via the float-coupled `build-fscanf.sh` harness), text
