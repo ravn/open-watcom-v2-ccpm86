@@ -99,18 +99,24 @@ and an emu2 fidelity fix (flush host handle after a random write so a second FCB
 Still blocked (other clibtest members) on missing seam primitives:
 
 - `handleio`: `chsize` (sparse zero-fill), `dup2` (shared file position),
-  `umask`/`chmod` R/O-attribute enforcement, `_hdopen`/`_os_handle`.
-- `file`: `access`, `chmod`, `stat`, `utime`.
+  `umask`, `_hdopen`/`_os_handle`.
+- `file`: `access`, `stat`, `utime`.
 
 Implemented + emu2-verified (via `test/disktest.c`, purity gate INT21h=0):
 - low-level POSIX handleio subset — `open`, `creat`, `read`, `write`, `close`,
   `lseek`, `tell`, `filelength`, `eof` (byte-exact within a single open handle;
   see #1 for the reopened-binary record-rounding limit).
 - `rename` (BDOS fn 23).
+- `chmod` (BDOS fn 30 F_ATTRIB) — **W-bit only** by design: CP/M-86's sole
+  writability attribute is the read-only (R/O) bit (t1', bit 7 of FCB byte 9),
+  so chmod maps *only* `S_IWRITE` (set → clear R/O, clear → set R/O) and ignores
+  every other mode bit (read/execute + the CP/M system/archive attributes).
+  Round-trip (set R/O, restore R/W, ENOENT on a missing file, data preserved)
+  passes under emu2 AND on the real RC759 under MAME.
 - `tmpnam` / `tmpfile` — `"TMPnnnnn.$$$"` names, uniqueness by open()-probe,
   auto-removal on `fclose` via Watcom's own `_TMPFIL` / `__RmTmpFileFn` hook.
 - `fscanf` — Watcom's UNCHANGED `streamio/c/scnf.c` scan engine, proven by the
-  dedicated `build-fscanf.sh` harness (`test/disktest.c -DFSCANF_TEST`, PASS 661
+  dedicated `build-fscanf.sh` harness (`test/disktest.c -DFSCANF_TEST`, PASS 672
   self-checks, INT21h=0). `scnf.c` compiles `scan_float()` unconditionally, so
   fscanf drags the soft-float + ctype + mbyte stack (FIDRQQ/FIERQQ/FIWRQQ,
   `__Bits`/`isdigit`/`isspace`, `mbtowc`, strtod); those are resolved 8087-free
@@ -119,14 +125,15 @@ Implemented + emu2-verified (via `test/disktest.c`, purity gate INT21h=0):
   disk-I/O purity oracle stays float-free.
 
 The disk path is proven by `build-streamio.sh` (Watcom's UNCHANGED iotest.c),
-`build-diskio.sh` (650 round-trip self-checks), and `build-fscanf.sh` (661), all
+`build-diskio.sh` (661 round-trip self-checks), and `build-fscanf.sh` (672), all
 PASS, all INT21h=0.
 
 ### 4. Currently implemented seam surface — for reference
 
 Working (verified under emu2, purity gate INT21h=0): `fopen`/`fclose`,
 `fread`/`fwrite`, `fgetc`/`fputc`/`fgets`/`fputs`/`fprintf`, `fseek`/`ftell`
-(byte-granular), `remove`/`unlink`/`rename`, low-level POSIX
+(byte-granular), `remove`/`unlink`/`rename`, `chmod` (W-bit only -> R/O
+attribute), low-level POSIX
 `open`/`creat`/`read`/`write`/`close`/`lseek`/`tell`/`filelength`/`eof`,
 `tmpnam`/`tmpfile` (auto-removed on `fclose`), `fscanf` (Watcom's unchanged
 scan engine, via the float-coupled `build-fscanf.sh` harness), text

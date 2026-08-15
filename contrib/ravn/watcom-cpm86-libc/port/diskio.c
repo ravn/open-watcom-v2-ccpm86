@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/stat.h>       /* chmod prototype, mode_t, S_IWRITE (R/O attribute) */
 #include "qread.h"
 #include "qwrite.h"
 
@@ -739,6 +740,34 @@ int remove( const char *name )
 int unlink( const char *name )
 {
     return( remove( name ) );
+}
+
+/* chmod: CP/M-86 has no POSIX permission bits -- the only writability attribute
+   a file carries is the read-only (R/O) bit, t1', which is bit 7 of the first
+   file-type byte (FCB byte 9). We therefore support ONLY the write permission
+   bit of `pmode`: S_IWRITE set => make the file R/W (clear R/O); S_IWRITE clear
+   => make it R/O (set R/O). Every other mode bit (read, execute, and the CP/M
+   system/archive attributes) has no portable meaning here and is IGNORED -- a
+   deliberate, documented limitation, not a silent drop. Applied via F_ATTRIB
+   (BDOS fn 30), which matches the file by name and rewrites its directory
+   attributes; BDOS returns 0xFF when no directory entry matched. */
+int chmod( const char *name, mode_t pmode )
+{
+    unsigned char fcb[36];
+
+    if( name_to_fcb( name, fcb ) < 0 ) {
+        errno = ENOENT;
+        return( -1 );
+    }
+    if( pmode & S_IWRITE )
+        fcb[FCB_TYPE] &= 0x7F;                      /* writable: clear R/O bit */
+    else
+        fcb[FCB_TYPE] |= 0x80;                      /* read-only: set R/O bit  */
+    if( _bdos( BD_ATTRIB, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+        errno = ENOENT;
+        return( -1 );
+    }
+    return( 0 );
 }
 
 /* exit(status): CP/M-86 has NO DOS INT 21h/4Ch, but Watcom's own exit() bottoms

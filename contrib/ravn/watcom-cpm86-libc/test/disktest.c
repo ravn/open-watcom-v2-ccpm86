@@ -13,6 +13,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <io.h>
+#include <sys/stat.h>                    /* S_IWRITE: the only chmod bit we map */
 #ifdef MAME_DONE
 #include "mamedone.h"                    /* mame_done(): OUT 0x2FE stop-signal */
 #endif
@@ -246,6 +247,39 @@ int main( void )
         }
         VERIFY( rename( "NOSUCH.DAT", "X.DAT" ) == -1 );  /* missing source fails */
         VERIFY( remove( "LOWB.DAT" ) == 0 );
+    }
+
+    /* --- chmod: on CP/M-86 the ONLY writability attribute is the read-only
+       (R/O) bit, so chmod maps ONLY S_IWRITE -> clear R/O, !S_IWRITE -> set R/O;
+       all other mode bits are ignored. This checks the seam is wired to F_ATTRIB
+       and maps errors: chmod succeeds on an existing file both ways, fails
+       (ENOENT) on a missing one, and never corrupts the file's data. The actual
+       enforcement of R/O (a blocked write/delete) is OS-policy that differs
+       between emu2 and real CP/M, so it is not hard-asserted here. --- */
+    {
+        static const char cmsg[] = "chmod-roundtrip";
+        char  cbuf[24];
+        int   L = (int)sizeof( cmsg ) - 1;
+        int   h;
+
+        h = open( "CHM.DAT", O_WRONLY | O_CREAT | O_TRUNC | O_BINARY );
+        VERIFY( h >= 0 );
+        if( h >= 0 ) {
+            VERIFY( write( h, cmsg, L ) == L );
+            VERIFY( close( h ) == 0 );
+        }
+        VERIFY( chmod( "CHM.DAT", S_IREAD ) == 0 );          /* make R/O          */
+        VERIFY( chmod( "CHM.DAT", S_IREAD | S_IWRITE ) == 0 );/* back to R/W       */
+        VERIFY( chmod( "NOSUCH.DAT", S_IWRITE ) == -1 );     /* missing -> ENOENT  */
+
+        h = open( "CHM.DAT", O_RDONLY | O_BINARY );          /* data must survive  */
+        VERIFY( h >= 0 );
+        if( h >= 0 ) {
+            VERIFY( read( h, cbuf, L ) == L );
+            VERIFY( memcmp( cbuf, cmsg, L ) == 0 );
+            VERIFY( close( h ) == 0 );
+        }
+        VERIFY( remove( "CHM.DAT" ) == 0 );
     }
 
     /* --- tmpnam / tmpfile: unique name + write/rewind/read round-trip, then
