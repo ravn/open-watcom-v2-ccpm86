@@ -71,8 +71,23 @@ call, and no INT 21h is involved or permitted.**
   by the emulated ESC/FWAIT in the *same* process context — so no scheduler
   cooperation (`DEV_SETFLAG`/`DEV_WAITFLAG`, which are for asynchronous hardware
   interrupts) is needed. A plain IVT poke suffices.
-- DR C installs its own 8087 emulator on CP/M-86 the same way when no coprocessor
-  is present.
+**Independent confirmation from DR C (Digital Research C, the RC759's own C
+compiler).** Cross-checked against the actual DR C runtime source
+`scratch/rc759-cmd-toolchain/rc759-drc-official/startup.a86` — an implementation
+that shares *none* of Watcom's DOS code path, so it is a genuine correctness
+oracle (not an equivalence check):
+- DR C's `m.init.hardware.error` (startup.a86 ~lines 1339–1347) installs the
+  integer zero-divide handler by the **identical direct segment-0 poke**:
+  `sub bx,bx / mov ds,bx` (DS = segment 0) then `mov [bx],offset zerodiv /
+  mov 2[bx],cs` — offset word then segment word straight into the IVT, no BDOS,
+  no INT 21h. This is exactly what `port/emu87cpm.asm`'s `xchg_vects` does for
+  INT 0x34–0x3D at `0000:00D0`.
+- DR C's own `m.init.8087` call is **`if 0` / compiled out** of the C startup
+  (startup.a86 ~lines 483–486, commented *"for Fortran 77 only, not for DRC"*).
+  So DR C sets its emulator up **library-driven / self-registering** via the math
+  library rather than an explicit startup call — which is precisely how Watcom's
+  `xinit`/`xfinin` init-table registration works, and which `emu87cpm.asm` keeps
+  verbatim.
 
 Emulator vectors INT 0x34–0x3D occupy physical **`0x34*4 = 0x00D0 … 0x00F7`**
 (10 vectors × 4 = 40 bytes), inside the reserved 0–3FFH region — clear of BDOS
@@ -90,19 +105,31 @@ table, the `__int34…__int3d` INT handlers, `__init_87_emulator`,
 Because the purity gate counts INT 21h *bytes statically*, we cannot link the
 stock `initemu.asm` even if `xchg_vects` were never executed. So we carry a
 CP/M-86 variant in `port/` (`port/emu87cpm.asm`) that is a faithful copy of
-`initemu.asm` with **only** the `xchg_vects` body replaced by a direct IVT poke:
+`initemu.asm` with **only** the `xchg_vects` body replaced by a direct segment-0
+IVT **swap** (a swap, not a plain write, so that the second call from
+`__fini_87_emulator` restores the previous vectors — identical semantics to the
+DOS original):
 
 ```
-    ; install emulator vectors INT 0x34..0x3D from the i34off..i3doff table
-    push es
+xchg_vects proc near
+    push ax / bx / cx / si / di / es
     xor  ax,ax
     mov  es,ax                 ; ES -> segment 0 (the IVT)
-    mov  di,0D0H               ; 0x34 * 4
-    lea  si,i34off             ; 40-byte {off,seg} x10 table (DS = DGROUP)
-    mov  cx,20                  ; 20 words = 10 vectors
-    rep  movs word ptr es:[di], word ptr [si]
-    pop  es
+    lea  si,i34off             ; DS:SI -> 40-byte {off,seg} x10 table (DS = DGROUP)
+    mov  di,34H*4              ; 0D0H = IVT byte offset of INT 0x34
+    mov  cx,20                  ; 20 words = 10 vectors (off+seg each)
+swapw:                          ; swap our table word <-> IVT word
+    mov  ax,es:[di] / mov bx,[si] / mov es:[di],bx / mov [si],ax
+    add  si,2 / add di,2 / loop swapw
+    pop  es / di / si / cx / bx / ax
+    ret
+xchg_vects endp
 ```
+
+**Status: written and assembled clean** (`wasm -bt=dos -0 -ms -fpi87`, 0 errors);
+`wdis` of the object confirms **0× INT 21h**, `ES=0`, `DI=0x00D0`, `CX=0x14`
+(20 words), and the swap loop over the `i34off` table — matching the DR C
+technique above.
 
 `__init_87_emulator` still runs `__x87id` (finds no FPU on RC759), fills the
 table with the `__int34/__int3c/__int3d` handler addresses, then calls our poke
