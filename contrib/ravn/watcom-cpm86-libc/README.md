@@ -222,3 +222,8 @@ Still open (tracked in ravn/rc7xx-work#6):
   record model — 128-byte sectors, no exact byte length; text files use a
   Ctrl-Z (0x1A) terminator, binary files have none.
 - a **float-exercising** run-target to drive and retire the `double` ABI seam.
+  Design + verified findings for this (Watcom's 8087 software emulator on a
+  no-8087 RC759, and how to install its INT 0x34–0x3D vectors via a direct
+  segment-0 IVT poke — no DOS INT 21h): see
+  [`docs/FLOAT_8087_EMULATOR.md`](docs/FLOAT_8087_EMULATOR.md). Tracked as
+  ravn/rc7xx-work#8.
