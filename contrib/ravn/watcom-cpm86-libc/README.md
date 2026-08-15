@@ -165,15 +165,20 @@ nor retires the `double` ABI seam.
 | `build-heap.sh` | heap proof: Watcom malloc/free/calloc/realloc + qsort on CP/M-86 |
 | `build-stdio.sh` | stdio proof: Watcom genuine FILE\* printf/fprintf/puts/fputs on CP/M-86 |
 | `build-stdcbench.sh` | stdcbench proof: full stdcbench 0.8 (c90base+c90lib) on Watcom clib + shim; purity gate + emu2 functional run |
+| `build-float.sh` | double soft-float proof: `-fpc` runtime `__FDx` arithmetic on CP/M-86, no 8087; purity + anti-fold gates |
+| `build-whetstone.sh` | Whetstone proof: transcendental libm (sin/cos/atan/exp/log/sqrt) + real `%e` float printf on CP/M-86, no 8087; adds the `assert_no_286` CPU gate |
 | `run-stdcbench-mame.sh` | stdcbench cross-check: builds `-DMAME_DONE` + runs SCB.CMD on cycle-accurate MAME rc759 (score 20 vs DR C 13) |
 | `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback (direct console printf) |
 | `port/stdioshim.c` | Layer-2 seam: `__qwrite` (BDOS console write) + `isatty` for the FILE\* path |
 | `port/lowlevel.c` | Layer-2 seam: arena `__brk`/`sbrk` + `_curbrk` (near-heap bottom) |
 | `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, BDOS exit, `__STK` stub) |
 | `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`, `errno`, read-path `__lseek`/`fsync`) |
+| `port/errnoptr.c` | `__get_errno_ptr_` for mathlib `_matherr` (returns `&errno`; avoids duplicating the `errno` global that `stubs.c` owns) |
 | `test/main.c` | printf demo driver / oracle |
 | `test/heaptest.c` | heap demo driver / oracle |
 | `test/stdiotest.c` | stdio FILE\* demo driver / oracle |
+| `test/floattest.c` | double soft-float demo driver / oracle |
+| `test/whetstone.c` | Whetstone benchmark driver (libm + `%e` printf) / oracle |
 | `test/scbport.c` | stdcbench glue: BDOS `T_GET` clock, `__InitFiles`, `main`, `mame_done` |
 | `test/portme.h` | stdcbench 0.8 port config (integer c90base+c90lib set) |
 
@@ -183,6 +188,21 @@ Uses the pre-built cross tools + clib source from the scratch OW tree
 (override with `OW=`): `wcc.exe`, `wasm.exe`, `wlink.exe`; runs under `emu2`
 (override with `EMU2=`). `wlink` must include the CP/M-86 paragraph-packing
 fix (`f21f6a9f`).
+
+## CPU-safety gate — 80186 (`assert_no_286`)
+
+The RC759 CPU is an **80186**. Our own code is all built `-0` (8086), but the
+transcendental/long-double math is pulled from Watcom's prebuilt **msdos.286**
+mathlib (there is no msdos.086 mathlib build). The 80186 executes every
+80186/80286 *real-mode integer* instruction, but **not** the 80286
+system/protected-mode additions (`arpl`, `lar`, `lsl`, `lgdt`, `lidt`, `lldt`,
+`sgdt`, `sidt`, `sldt`, `lmsw`, `smsw`, `clts`, `str`, `ltr`, `verr`, `verw`) —
+those would fault on the target. So, as a **standing part of the CP/M-86 build
+process going forward**, every build that makes a non-8086 (e.g. `.286`) library
+object linkable disassembles it and **fails the build** (`assert_no_286`, exit 4)
+if any such opcode appears. This complements `assert_no_8087` (which guards the
+FPU): one gate guards the target's FPU, the other its CPU instruction set. See
+`build-whetstone.sh` for the reference implementation.
 
 ## Milestones delivered
 
@@ -227,6 +247,29 @@ Tracked in ravn/rc7xx-work#6:
    intentionally NOT shipped** — left to a contributor with a real 8087; see
    [`docs/8087_HARDWARE_SUPPORT_DEFERRED.md`](docs/8087_HARDWARE_SUPPORT_DEFERRED.md).
 
+5. ~~**transcendental libm + real `%e` float printf** — prove Watcom's own
+   `sin`/`cos`/`atan`/`exp`/`log`/`sqrt` and its genuine `%e/%f/%g` float
+   formatter run on the no-8087 RC759 by porting the **Whetstone** double
+   benchmark.~~ **DONE** (`build-whetstone.sh` + `test/whetstone.c`,
+   run-verified): compiled `-fpc`, Whetstone links Watcom's **unchanged**
+   soft-float `__FDx` runtime, its transcendental library, and the real
+   `_EFG_Format` (→ `__LDcvt`) float formatter — the latter installed at
+   startup by calling `__setEFGfmt()` from `main()` (our minimal crt0 does not
+   walk the init table). The transcendentals + 80-bit long-double software
+   layer are pulled from Watcom's prebuilt **msdos.286** mathlib (no msdos.086
+   mathlib was ever built); those objects are software-float and INT-21h-free.
+   All 10 per-module check values match, to the printed 4 significant digits,
+   an **independent oracle** (the same `whetston.c` compiled and run with the
+   host `cc -lm`, native IEEE-754 double). Purity gate green (`INT21h=0`,
+   `BDOS>0`); a tripwire asserts the `__FDx` calls survive constant-folding
+   (72 call sites). **New standing build gate:** `assert_no_286` disassembles
+   every prebuilt library object made linkable from a non-8086 source and fails
+   the build if any 80286-only (protected-mode) opcode appears — proving the
+   RC759's 80186 can execute it. (One caveat left open below: the raw-byte
+   `INT34-3D` emulator-trap scan is temporarily disabled — it false-positives
+   on IEEE-double coefficient bytes in the libm constant tables; a
+   disassembly-based code-vs-data replacement is a TODO.)
+
 ## Next milestones (not yet done)
 
 Still open (tracked in ravn/rc7xx-work#6):
@@ -236,6 +279,14 @@ Still open (tracked in ravn/rc7xx-work#6):
   Ctrl-Z (0x1A) terminator, binary files have none.
 - **`-fpc` float cross-check on cycle-accurate MAME rc759** — the authoritative
   no-8087 oracle; emu2 is green but may not faithfully model a no-8087 machine.
+  Applies to both milestone 4 (`build-float.sh`) and milestone 5
+  (`build-whetstone.sh`).
+- **disassembly-based `INT34-3D` purity gate** — the current raw-byte scan
+  false-positives on the IEEE-double coefficient tables that Watcom's libm
+  (`exp`/`log`) embeds (a `CD 3B` byte inside a constant is data, not an
+  `int 3Bh` instruction). It is temporarily disabled in `build-whetstone.sh`.
+  Replace it with a code-vs-data disassembly check (like `assert_no_8087` /
+  `assert_no_286`) that only counts real emulator-trap *instructions*.
 - **8087 hardware paths** (`-fpi` trap-emulator via `port/emu87cpm.asm`,
   `-fpi87` real chip) — deferred to a contributor with 8087 hardware; design +
   verified findings in

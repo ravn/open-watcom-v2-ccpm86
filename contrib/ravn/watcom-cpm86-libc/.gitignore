@@ -3,4 +3,5 @@ build-heap/
 build-stdio/
 build-stdcbench/
 build-float/
+build-whetstone/
 SCB-WC.CMD
