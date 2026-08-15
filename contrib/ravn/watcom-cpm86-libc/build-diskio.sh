@@ -33,6 +33,7 @@ cw streamio/c/noefgfmt.c noefgfmt.obj
 cw string/c/strupr.c     strupr.obj
 cw string/c/strlen.c     strlen.obj
 cw string/c/strcmp.c     strcmp.obj
+cw string/c/strcpy.c     strcpy.obj
 cw convert/c/itoa.c      itoa.obj
 cw convert/c/ltoa.c      ltoa.obj
 cw convert/c/lltoa.c     lltoa.obj
@@ -59,6 +60,7 @@ cw streamio/c/fgets.c    fgets.obj      # fgets -> fgetc
 cw streamio/c/fread.c    fread.obj      # fread -> __filbuf
 cw streamio/c/fseek.c    fseek.obj      # fseek -> __flush/__lseek
 cw streamio/c/ftell.c    ftell.obj      # ftell -> __lseek
+cw streamio/c/rewind.c   rewind.obj     # rewind -> fseek
 cw streamio/c/feof.c     feof.obj
 cw streamio/c/ferror.c   ferror.obj
 cw streamio/c/ioalloc.c  ioalloc.obj    # __ioalloc (buffer via malloc)
@@ -112,10 +114,10 @@ cw memory/c/memcmp.c  memcmp.obj
   file printf.obj file fprintf.obj file fprtf.obj file fputc.obj file fputs.obj \
   file puts.obj file fwrite.obj file flush.obj file fflush.obj \
   file fopen.obj file fclose.obj file allocfp.obj file fgetc.obj file fgets.obj \
-  file fread.obj file fseek.obj file ftell.obj file feof.obj file ferror.obj \
+  file fread.obj file fseek.obj file ftell.obj file rewind.obj file feof.obj file ferror.obj \
   file ioalloc.obj file chktty.obj file iob.obj file initfile.obj \
   file comtflag.obj file freefp.obj file textmode.obj \
-  file prtf.obj file noefgfmt.obj file strupr.obj file strlen.obj file strcmp.obj \
+  file prtf.obj file noefgfmt.obj file strupr.obj file strlen.obj file strcmp.obj file strcpy.obj \
   file itoa.obj file ltoa.obj file lltoa.obj file alphabet.obj file wctomb.obj \
   file nmalloc.obj file nfree.obj file calloc.obj file nrealloc.obj \
   file grownear.obj file amblksiz.obj file heapen.obj file nheapmin.obj \

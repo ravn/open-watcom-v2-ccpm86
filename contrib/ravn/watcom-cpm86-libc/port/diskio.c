@@ -667,3 +667,104 @@ int rename( const char *old, const char *new )
     }
     return( 0 );
 }
+
+/* ---- tmpnam / tmpfile: the streamio-layer temp-file seam ------------------
+ *
+ * Watcom's own tmpfl.c/tmputil.c build the temp name from getenv("TMP") +
+ * getpid() + a hex suffix and lean on access()/_fullpath/_RWD state that this
+ * freestanding CP/M-86 target does not carry. This is the "quite simple"
+ * self-contained replacement: names are "TMPnnnnn.$$$" in the current drive,
+ * uniqueness is proven by trying to open() the candidate (a CP/M directory has
+ * no other namespace to collide with), and removal-on-close reuses Watcom's
+ * OWN fclose path -- fclose calls (*__RmTmpFileFn)(fp) whenever _TMPFIL is set,
+ * so we set that flag and point the hook at rm_tmpfile below. Worked example:
+ * first call yields "TMP00000.$$$"; tmpfile() fopen()s it "wb+", registers
+ * {fp,"TMP00000.$$$"} in tmpreg[0], and a later fclose(fp) fires rm_tmpfile,
+ * which remove()s "TMP00000.$$$" after the handle is already closed. */
+
+extern void _WCNEAR (*__RmTmpFileFn)( FILE *fp );   /* defined in Watcom fclose */
+
+#define TMPFILE_MAX 4                               /* concurrent tmpfile()s */
+
+static struct {
+    FILE *fp;
+    char  name[L_tmpnam];
+} tmpreg[TMPFILE_MAX];
+
+/* fclose's removal hook: find fp's registered temp name and delete it. Called
+   AFTER __close (see Watcom fclose.c), so remove() acts on a closed file. */
+static void _WCNEAR rm_tmpfile( FILE *fp )
+{
+    int i;
+
+    for( i = 0; i < TMPFILE_MAX; i++ ) {
+        if( tmpreg[i].fp == fp ) {
+            remove( tmpreg[i].name );
+            tmpreg[i].fp = NULL;
+            return;
+        }
+    }
+}
+
+/* tmpnam(s): write a free "TMPnnnnn.$$$" into s (or a static buffer if NULL)
+   and return it; NULL if all TMP_MAX candidates are taken. A candidate is free
+   when open(O_RDONLY) fails -- i.e. the file does not exist. */
+_WCRTLINK char *tmpnam( char *s )
+{
+    static char tmpnam_buf[L_tmpnam];
+    static unsigned next = 0;
+    char    *dst = ( s != NULL ) ? s : tmpnam_buf;
+    unsigned n = next;
+    unsigned tries;
+    int      h;
+
+    /* `unsigned` is 16-bit here, so bound the search by an explicit attempt
+       count (TMP_MAX == 26^3 fits in 16 bits) and let n wrap; a 5-digit name
+       spans n in 0..65535, more than enough distinct candidates. */
+    for( tries = 0; tries < (unsigned)TMP_MAX; tries++, n++ ) {
+        dst[0] = 'T'; dst[1] = 'M'; dst[2] = 'P';
+        dst[3] = (char)( '0' + ( n / 10000 ) % 10 );
+        dst[4] = (char)( '0' + ( n /  1000 ) % 10 );
+        dst[5] = (char)( '0' + ( n /   100 ) % 10 );
+        dst[6] = (char)( '0' + ( n /    10 ) % 10 );
+        dst[7] = (char)( '0' +   n           % 10 );
+        dst[8] = '.'; dst[9] = '$'; dst[10] = '$'; dst[11] = '$';
+        dst[12] = '\0';
+        h = open( dst, O_RDONLY );
+        if( h == -1 ) {                 /* does not exist -> name is free */
+            next = n + 1;
+            return( dst );
+        }
+        close( h );                     /* exists -> keep looking */
+    }
+    return( NULL );
+}
+
+/* tmpfile(): create+open a unique temp file "wb+" (O_RDWR|O_CREAT|O_TRUNC,
+   binary) and arrange auto-removal at fclose via the _TMPFIL / __RmTmpFileFn
+   contract. Returns NULL if no name is free, the open fails, or tmpreg[] is
+   full. */
+_WCRTLINK FILE *tmpfile( void )
+{
+    char  name[L_tmpnam];
+    FILE *fp;
+    int   i;
+
+    if( tmpnam( name ) == NULL )
+        return( NULL );
+    fp = fopen( name, "wb+" );
+    if( fp == NULL )
+        return( NULL );
+    for( i = 0; i < TMPFILE_MAX; i++ ) {
+        if( tmpreg[i].fp == NULL ) {
+            tmpreg[i].fp = fp;
+            strcpy( tmpreg[i].name, name );
+            fp->_flag |= _TMPFIL;       /* fclose -> (*__RmTmpFileFn)(fp) */
+            __RmTmpFileFn = rm_tmpfile;
+            return( fp );
+        }
+    }
+    fclose( fp );                       /* registry full: don't leak an entry */
+    remove( name );
+    return( NULL );
+}

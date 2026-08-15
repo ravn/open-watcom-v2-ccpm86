@@ -220,6 +220,32 @@ int main( void )
         VERIFY( remove( "LOWB.DAT" ) == 0 );
     }
 
+    /* --- tmpnam / tmpfile: unique name + write/rewind/read round-trip, then
+       auto-removal on fclose (Watcom fclose fires __RmTmpFileFn on _TMPFIL). --- */
+    {
+        char  nm1[L_tmpnam];
+        char  nm2[L_tmpnam];
+        static const char tmsg[] = "tmpfile-roundtrip";
+        char  tbuf[24];
+        FILE *tf;
+        int   L = (int)sizeof( tmsg ) - 1;
+
+        VERIFY( tmpnam( nm1 ) == nm1 );          /* returns the caller buffer */
+        VERIFY( tmpnam( nm2 ) == nm2 );
+        VERIFY( strcmp( nm1, nm2 ) != 0 );       /* successive names differ */
+        VERIFY( open( nm1, O_RDONLY ) == -1 );   /* tmpnam does not create */
+
+        tf = tmpfile();
+        VERIFY( tf != NULL );
+        if( tf != NULL ) {
+            VERIFY( fwrite( tmsg, 1, L, tf ) == (size_t)L );
+            rewind( tf );
+            VERIFY( fread( tbuf, 1, L, tf ) == (size_t)L );
+            VERIFY( memcmp( tbuf, tmsg, L ) == 0 );  /* data survives round-trip */
+            VERIFY( fclose( tf ) == 0 );             /* auto-removes the temp */
+        }
+    }
+
     /* --- cleanup + remove() --- */
     VERIFY( remove( "TEST.TXT" ) == 0 );
     fp = fopen( "TEST.TXT", "r" );
