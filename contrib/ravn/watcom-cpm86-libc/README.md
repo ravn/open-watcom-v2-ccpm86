@@ -277,16 +277,27 @@ Still open (tracked in ravn/rc7xx-work#6):
 - **disk FILE\* path** (`open`/`close`/`read`/`lseek`) honouring the CP/M
   record model — 128-byte sectors, no exact byte length; text files use a
   Ctrl-Z (0x1A) terminator, binary files have none.
-- **`-fpc` float cross-check on cycle-accurate MAME rc759** — the authoritative
+- ~~**`-fpc` float cross-check on cycle-accurate MAME rc759** — the authoritative
   no-8087 oracle; emu2 is green but may not faithfully model a no-8087 machine.
   Applies to both milestone 4 (`build-float.sh`) and milestone 5
-  (`build-whetstone.sh`).
-- **disassembly-based `INT34-3D` purity gate** — the current raw-byte scan
-  false-positives on the IEEE-double coefficient tables that Watcom's libm
-  (`exp`/`log`) embeds (a `CD 3B` byte inside a constant is data, not an
-  `int 3Bh` instruction). It is temporarily disabled in `build-whetstone.sh`.
-  Replace it with a code-vs-data disassembly check (like `assert_no_8087` /
-  `assert_no_286`) that only counts real emulator-trap *instructions*.
+  (`build-whetstone.sh`).~~ **DONE (2026-08-15)** — Whetstone (LOOP=10) run on
+  real MAME rc759 (**i80186 @ 6.000 MHz**), screen output matched the host
+  `cc -lm` oracle in `%12.4e` for all 10 check values. External timing via a
+  side-effect-free I/O-port-0x2FE write-tap (`whet_time.lua`, START word 0xB000
+  / END 0xE000 through `mame_done()` reading `emu.time()`): **72.45 emulated s
+  ≈ 435 M cycles**. A companion fixed-point Mandelbrot (78×25, ≤30 iter) =
+  **3.57 emulated s ≈ 21 M cycles**. Both are physically plausible for a 6 MHz
+  80186 (Whetstone dominated by ~3500 software transcendentals through the
+  80-bit long-double libm + ~1e5 64-bit `__FDx` ops; Mandelbrot ~⅓ integer-IMUL
+  compute + ~⅔ BDOS console rendering). First real no-8087 performance data
+  point (mame-tests: `whet-mame.sh`, `whet_time.lua`).
+- **disassembly-based `INT34-3D` purity gate** (ravn/open-watcom-v2#15) — the
+  current raw-byte scan false-positives on the IEEE-double coefficient tables
+  that Watcom's libm (`exp`/`log`) embeds (a `CD 3B` byte inside a constant is
+  data, not an `int 3Bh` instruction). It is temporarily disabled in
+  `build-whetstone.sh`. Replace it with a code-vs-data disassembly check (like
+  `assert_no_8087` / `assert_no_286`) that only counts real emulator-trap
+  *instructions*.
 - **8087 hardware paths** (`-fpi` trap-emulator via `port/emu87cpm.asm`,
   `-fpi87` real chip) — deferred to a contributor with 8087 hardware; design +
   verified findings in
