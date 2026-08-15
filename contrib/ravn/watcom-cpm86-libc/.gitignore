@@ -4,4 +4,5 @@ build-stdio/
 build-stdcbench/
 build-float/
 build-whetstone/
+build-whetstone-mame/
 SCB-WC.CMD
