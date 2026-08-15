@@ -2,4 +2,5 @@ build/
 build-heap/
 build-stdio/
 build-stdcbench/
+build-float/
 SCB-WC.CMD

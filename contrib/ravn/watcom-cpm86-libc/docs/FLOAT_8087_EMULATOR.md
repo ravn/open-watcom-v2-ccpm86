@@ -1,5 +1,19 @@
 # Floating point on CP/M-86 with no 8087 — the Watcom software-emulator route
 
+> **STATUS / CORRECTION (supersedes Section 1 below).** This document is now the
+> **DEFERRED-hardware design note**, not the shipped route. Its original Section 1
+> premise — *"there is no pure-integer soft-float; both `-fpi` and `-fpc` execute
+> real 8087 ESC opcodes"* — was **empirically refuted**: `-fpc` emits plain
+> `call __FDA/__FDS/__FDM/__FDD` with **zero ESC, zero INT traps**, and Watcom's
+> `fdmth086.asm` runs the pure-software `__FDxemu` branch whenever `__real87 == 0`
+> (which `port/fpsoftstub.asm` guarantees). So the no-8087 target needs **no
+> emulator and no interrupt-vector install at all**. The shipped, proven route is
+> `-fpc` soft-float — see
+> [`8087_HARDWARE_SUPPORT_DEFERRED.md`](8087_HARDWARE_SUPPORT_DEFERRED.md) for the
+> supported path and the proof. The INT 0x34–0x3D emulator design below is kept
+> only as the **deferred** alternative for a contributor with 8087 hardware; the
+> `port/emu87cpm.asm` IVT seam it describes is unused by the `-fpc` build.
+
 This is the design note for the float/double milestone (tracks rc7xx-work#8):
 running Open Watcom's **unchanged** floating-point path on the RC759 (an 80186
 machine with **no 8087 coprocessor**) through our thin Layer-2 seam. It records

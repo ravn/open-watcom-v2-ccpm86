@@ -184,7 +184,7 @@ Uses the pre-built cross tools + clib source from the scratch OW tree
 (override with `EMU2=`). `wlink` must include the CP/M-86 paragraph-packing
 fix (`f21f6a9f`).
 
-## Next milestones (not yet done)
+## Milestones delivered
 
 Tracked in ravn/rc7xx-work#6:
 
@@ -212,7 +212,20 @@ Tracked in ravn/rc7xx-work#6:
    machine — ~1.5× faster than the DR C runtime. Note: `c90base`/`c90lib`
    exercise **no floating point** (the `c90float`/`c90double` modules are
    upstream stubs), so this does **not** retire the `double` ABI seam — that
-   remains for a float-exercising target.
+   remains for a float-exercising target.~~ *(the float seam is now retired —
+   see milestone 4 below.)*
+4. ~~**double soft-float** — prove Watcom's own `double` arithmetic runs on the
+   no-8087 RC759.~~ **DONE** (`build-float.sh` + `test/floattest.c`,
+   run-verified): compiled `-fpc`, the test's `volatile` operands force genuine
+   runtime `call __FDA/__FDS/__FDM/__FDD` + `__FDI4` into Watcom's **unchanged**
+   soft-float, which selects the pure-software `__FDxemu` branch because our
+   `port/fpsoftstub.asm` sets `__real87 = 0`. **No 8087, no emulator, no
+   interrupt-vector install, no INT 21h.** Purity gate green
+   (`INT21h=0 · BDOS=2 · INT34-3D=0`), a tripwire asserts the `__FDx` calls are
+   not constant-folded, and the output matches the hand-computed oracle
+   `pi6=3141592 mul=40115 add=468 sub=242`. **8087 hardware support is
+   intentionally NOT shipped** — left to a contributor with a real 8087; see
+   [`docs/8087_HARDWARE_SUPPORT_DEFERRED.md`](docs/8087_HARDWARE_SUPPORT_DEFERRED.md).
 
 ## Next milestones (not yet done)
 
@@ -221,9 +234,11 @@ Still open (tracked in ravn/rc7xx-work#6):
 - **disk FILE\* path** (`open`/`close`/`read`/`lseek`) honouring the CP/M
   record model — 128-byte sectors, no exact byte length; text files use a
   Ctrl-Z (0x1A) terminator, binary files have none.
-- a **float-exercising** run-target to drive and retire the `double` ABI seam.
-  Design + verified findings for this (Watcom's 8087 software emulator on a
-  no-8087 RC759, and how to install its INT 0x34–0x3D vectors via a direct
-  segment-0 IVT poke — no DOS INT 21h): see
-  [`docs/FLOAT_8087_EMULATOR.md`](docs/FLOAT_8087_EMULATOR.md). Tracked as
-  ravn/rc7xx-work#8.
+- **`-fpc` float cross-check on cycle-accurate MAME rc759** — the authoritative
+  no-8087 oracle; emu2 is green but may not faithfully model a no-8087 machine.
+- **8087 hardware paths** (`-fpi` trap-emulator via `port/emu87cpm.asm`,
+  `-fpi87` real chip) — deferred to a contributor with 8087 hardware; design +
+  verified findings in
+  [`docs/8087_HARDWARE_SUPPORT_DEFERRED.md`](docs/8087_HARDWARE_SUPPORT_DEFERRED.md)
+  and [`docs/FLOAT_8087_EMULATOR.md`](docs/FLOAT_8087_EMULATOR.md).
+  Tracked as ravn/rc7xx-work#8.
