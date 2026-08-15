@@ -163,7 +163,7 @@ assert_no_286 "$MATH286_SRC"/*.obj
 "$WCC" $USER $INC "$SRC/port/lowlevel.c"  -fo=lowlevel.obj
 "$WCC" $USER $INC "$SRC/port/stubs.c"     -fo=stubs.obj
 "$WCC" $USER $INC "$SRC/port/errnoptr.c"  -fo=errnoptr.obj
-"$WCC" $USER $INC "$SRC/test/whetstone.c" -fo=whetstone.obj
+"$WCC" $USER $INC ${WHET_EXTRA:-} "$SRC/test/whetstone.c" -fo=whetstone.obj
 
 # --- anti-constant-fold tripwire ---------------------------------------------
 # The whole point of #8 is to exercise Watcom's RUNTIME soft-float. If the test's
@@ -253,6 +253,12 @@ PY
 # host cc, native IEEE-754 double). That is an independent correctness check: if
 # Watcom's soft-float + libm + %e formatter on CP/M-86 reproduce these per-module
 # check values to the printed 4 significant digits, the double path is correct.
+# (WHET_NORUN=1 skips this emu2 gate -- used by the MAME build, which measures
+# execution time on cycle-accurate rc759 hardware instead.)
+if [ "${WHET_NORUN:-0}" = "1" ]; then
+  echo "WHET_NORUN=1: skipping emu2 oracle (built whetstone.cmd for MAME rc759)"
+  exit 0
+fi
 OUT="$("$EMU2" whetstone.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 EXP="$(cat <<'ORACLE'
       0       0       0   1.0000e+00  -1.0000e+00  -1.0000e+00  -1.0000e+00

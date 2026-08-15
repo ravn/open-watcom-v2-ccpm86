@@ -29,6 +29,21 @@
 #include <stdio.h>
 #include <math.h>
 
+/* External MAME rc759 timing: when built -DMAME_DONE, bracket the whole run
+   with two OUT 0x2FE bus cycles (START=0xB000, END=0xE000). The rc759 driver
+   does not decode 0x2FE, so the writes are side-effect-free on the guest, but a
+   MAME io-space write-tap (mame-tests/whet_time.lua) reads machine.time at each
+   and reports the elapsed EMULATED seconds -- i.e. the execution time measured
+   from OUTSIDE, never self-timed inside Whetstone. Harmless under emu2. */
+#ifdef MAME_DONE
+#include "mamedone.h"
+#define WHET_START() mame_done(0xB000)
+#define WHET_END()   do { fflush(stdout); mame_done(0xE000); } while(0)
+#else
+#define WHET_START() ((void)0)
+#define WHET_END()   ((void)0)
+#endif
+
 /* CP/M-86 Layer-2 seam init (see stdiotest.c / floattest.c): our minimal
    crt0 does not walk Watcom's init table, so we run the two DOS-free
    initializers ourselves -- __InitFiles() attaches the stdout FILE buffer,
@@ -65,6 +80,8 @@ int main(void)
 
 	__InitFiles();
 	__setEFGfmt();
+
+	WHET_START();
 
 	T  = .499975;
 	T1 = 0.50025;
@@ -164,6 +181,8 @@ int main(void)
 	for (I = 1; I <= N11; I++)
 		X = DSQRT(DEXP(DLOG(X) / T1));
 	POUT(N11, J, K, X, X, X, X);
+
+	WHET_END();
 
 	return 0;
 }
