@@ -65,6 +65,7 @@ extern void _bdos_conout( int c );      /* BDOS C_WRITE (fn 2, char in DL) */
 #define BD_OPEN     15
 #define BD_CLOSE    16
 #define BD_DELETE   19
+#define BD_RENAME   23          /* F_RENAME: old FCB in 0..15, new name in 16..31 */
 #define BD_MAKE     22
 #define BD_SETDMA   26
 #define BD_READRAND 33
@@ -566,4 +567,103 @@ int remove( const char *name )
 int unlink( const char *name )
 {
     return( remove( name ) );
+}
+
+/* ---- Low-level POSIX I/O + rename: the handleio-layer seam ----------------
+ *
+ * Watcom's own handleio open/creat/read/write/close (bld/clib/handleio/c/*.c)
+ * all bottom into DOS INT 21h via __getOSHandle -- forbidden on this target --
+ * so THIS file is the CP/M-86 replacement for that whole layer. These thin
+ * POSIX entry points let a program (and Watcom's UNCHANGED clibtest
+ * handleio/iotest.c) use fd-level I/O directly; they resolve onto the very same
+ * dfiles[] handle table and BDOS record primitives the FILE* seam uses, and
+ * deliberately skip Watcom's per-handle iomode table (__GetIOMode /
+ * __handle_check), matching the rest of this seam. (ow#3 clibtest GAP.)
+ */
+
+/* open(name, mode[, pmode]) -> _sopen. CP/M-86 has no per-file permission bits,
+   so the pmode vararg is accepted for source compatibility and ignored. */
+_WCRTLINK int open( const char *name, int mode, ... )
+{
+    return( _sopen( name, mode, 0 ) );
+}
+
+/* creat(name, pmode) == open write-only, create + truncate. */
+_WCRTLINK int creat( const char *name, mode_t pmode )
+{
+    (void)pmode;
+    return( _sopen( name, O_WRONLY | O_CREAT | O_TRUNC, 0 ) );
+}
+
+/* read/write/close: fd-level, straight onto the record-model primitives. */
+_WCRTLINK int read( int handle, void *buffer, unsigned len )
+{
+    return( __qread( handle, buffer, len ) );
+}
+
+_WCRTLINK int write( int handle, const void *buffer, unsigned len )
+{
+    return( __qwrite( handle, buffer, len ) );
+}
+
+_WCRTLINK int close( int handle )
+{
+    return( __close( handle ) );
+}
+
+/* tell(h) == lseek(h, 0, SEEK_CUR): byte-exact current position. */
+_WCRTLINK long tell( int handle )
+{
+    return( __lseek( handle, 0L, SEEK_CUR ) );
+}
+
+/* filelength(h): the exact logical length tracked in fp->len. Byte-exact for
+   text files and for anything written this session (__qwrite extends fp->len by
+   the true byte count); a binary file merely REOPENED read-only inherits the
+   record-rounded seed on plain CP/M-2.2 -- the KNOWN_ISSUES #1 length LIMIT. */
+_WCRTLINK long filelength( int handle )
+{
+    dfile_t *fp = fd_to_file( handle );
+
+    if( fp == NULL )
+        return( -1L );
+    return( fp->len );
+}
+
+/* eof(h): 1 at/after end-of-file, 0 before it, -1 on a bad handle -- the classic
+   Watcom/DOS contract, decided by the byte-exact position vs. length. */
+_WCRTLINK int eof( int handle )
+{
+    dfile_t *fp = fd_to_file( handle );
+
+    if( fp == NULL )
+        return( -1 );
+    return( fp->pos >= fp->len ? 1 : 0 );
+}
+
+/* rename(old, new) -> BDOS RENAME FILE (fn 23). The 36-byte control block holds
+   the EXISTING file in bytes 0..15 and the NEW name in bytes 16..31 (the drive
+   byte at +16 is 0); BDOS returns 0xFF when no directory entry matched the old
+   name. Worked example: rename("LOWA.DAT","LOWB.DAT") builds
+   fcb = {drv,'LOWA    ','DAT',0.., 0,'LOWB    ','DAT'} and fn 23 flips the
+   directory entry's name+type in place, keeping the file's data blocks. */
+int rename( const char *old, const char *new )
+{
+    unsigned char fcb[36];
+    unsigned char nfcb[36];
+    int           i;
+
+    if( name_to_fcb( old, fcb ) < 0 || name_to_fcb( new, nfcb ) < 0 ) {
+        errno = ENOENT;
+        return( -1 );
+    }
+    for( i = 0; i < 16; i++ )                       /* new-name half: drive 0 */
+        fcb[16 + i] = 0;
+    for( i = FCB_NAME; i < FCB_TYPE + 3; i++ )      /* copy name(1..8)+type(9..11) */
+        fcb[16 + i] = nfcb[i];
+    if( _bdos( BD_RENAME, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+        errno = ENOENT;
+        return( -1 );
+    }
+    return( 0 );
 }

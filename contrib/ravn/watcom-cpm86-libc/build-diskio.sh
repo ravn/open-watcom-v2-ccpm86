@@ -90,6 +90,7 @@ cw heap/c/nheapunl.c  nheapunl.obj
 cw memory/c/memcpy.c  memcpy.obj
 cw memory/c/memset.c  memset.obj
 cw memory/c/memmove.c memmove.obj
+cw memory/c/memcmp.c  memcmp.obj
 
 # --- Layer-1 long helpers (32-bit mul/div for %ld and lseek arithmetic) ---
 "$WASM" -ms -0 -i="$B/watcom/h" "$B/clib/cgsupp/a/i4m.asm" -fo=i4m.obj
@@ -120,9 +121,8 @@ cw memory/c/memmove.c memmove.obj
   file grownear.obj file amblksiz.obj file heapen.obj file nheapmin.obj \
   file mem.obj file _expand.obj file nmemneed.obj file nmsize.obj \
   file nexpand.obj file nheapunl.obj file bfree.obj \
-  file memcpy.obj file memset.obj file memmove.obj \
+  file memcpy.obj file memset.obj file memmove.obj file memcmp.obj \
   file stubs.obj file errnoptr.obj file i4m.obj file i4d.obj
-
 # --- purity gate: zero INT 21h (DOS) ---
 python3 - disktest.cmd <<'PY'
 import sys; d=open(sys.argv[1],'rb').read()

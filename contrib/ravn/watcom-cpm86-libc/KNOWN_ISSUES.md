@@ -69,19 +69,29 @@ seam primitives:
 
 - `streamio`: `tmpnam` / `tmpfile`, `fscanf` read path, `fopen("CON")` (console
   as a named file).
-- `handleio`: `chsize`, `dup`, `filelength`, `eof`.
-- `file`: `rename`, `access`, `chmod`, `stat`, `utime`.
+- `handleio`: `chsize` (sparse zero-fill), `dup`/`dup2` (shared file position),
+  `umask`/`chmod` R/O-attribute enforcement, `_hdopen`/`_os_handle`.
+- `file`: `access`, `chmod`, `stat`, `utime`.
 
-Until these exist the disk path is proven only by our own `test/disktest.c`
-round-trip oracle (511 self-checks, PASS), not by Watcom's suite.
+Implemented + emu2-verified (via `test/disktest.c`, purity gate INT21h=0):
+- low-level POSIX handleio subset — `open`, `creat`, `read`, `write`, `close`,
+  `lseek`, `tell`, `filelength`, `eof` (byte-exact within a single open handle;
+  see #1 for the reopened-binary record-rounding limit).
+- `rename` (BDOS fn 23).
+
+Until the remaining primitives above exist, Watcom's own `clibtest` suite still
+cannot run unchanged; the disk path is proven by our `test/disktest.c`
+round-trip oracle (534 self-checks, PASS) plus the tractable POSIX subset now
+landed.
 
 ### 4. Currently implemented seam surface — for reference
 
 Working (verified under emu2, purity gate INT21h=0): `fopen`/`fclose`,
 `fread`/`fwrite`, `fgetc`/`fputc`/`fgets`/`fputs`/`fprintf`, `fseek`/`ftell`
-(byte-granular), `remove`/`unlink`, text (Ctrl-Z) and binary modes, `O_APPEND`,
-`O_TRUNC`, `O_CREAT`. Backed by CP/M random-record BDOS calls (fn 33/34) with
-per-record DMA (fn 26/51).
+(byte-granular), `remove`/`unlink`/`rename`, low-level POSIX
+`open`/`creat`/`read`/`write`/`close`/`lseek`/`tell`/`filelength`/`eof`, text
+(Ctrl-Z) and binary modes, `O_APPEND`, `O_TRUNC`, `O_CREAT`. Backed by CP/M
+random-record BDOS calls (fn 33/34) with per-record DMA (fn 26/51).
 
 ---
 

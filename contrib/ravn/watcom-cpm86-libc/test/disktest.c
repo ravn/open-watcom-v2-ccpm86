@@ -11,6 +11,8 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <fcntl.h>
+#include <io.h>
 #ifdef MAME_DONE
 #include "mamedone.h"                    /* mame_done(): OUT 0x2FE stop-signal */
 #endif
@@ -174,6 +176,49 @@ int main( void )
     }
     VERIFY( remove( "ODD.DAT" ) == 0 );
     (void)os_reports_lrbc;      /* runtime OS-capability probe (see KNOWN_ISSUES) */
+
+    /* --- low-level POSIX I/O seam (open/creat/read/write/close/lseek/tell/
+       filelength/eof) + rename. All lengths here are asserted WITHIN a single
+       open handle, where fp->len is byte-exact on ANY CP/M (the record-rounding
+       limit only bites a binary file reopened cold -- KNOWN_ISSUES #1). --- */
+    {
+        static const char msg[] = "lowlevel-seam 0123456789";
+        char rbuf[40];
+        int  h;
+        int  L = (int)sizeof( msg ) - 1;             /* 24 bytes, not record-aligned */
+
+        h = open( "LOWA.DAT", O_RDWR | O_CREAT | O_TRUNC | O_BINARY );
+        VERIFY( h >= 0 );
+        if( h >= 0 ) {
+            VERIFY( write( h, msg, L ) == L );
+            VERIFY( filelength( h ) == (long)L );    /* byte-exact this session */
+            VERIFY( tell( h ) == (long)L );          /* position after write */
+            VERIFY( eof( h ) == 1 );                 /* at end */
+            VERIFY( lseek( h, 0L, SEEK_SET ) == 0L );
+            VERIFY( eof( h ) == 0 );                 /* no longer at end */
+            VERIFY( read( h, rbuf, L ) == L );
+            VERIFY( memcmp( rbuf, msg, L ) == 0 );   /* round-trip intact */
+            VERIFY( eof( h ) == 1 );                 /* consumed to end again */
+            VERIFY( lseek( h, 10L, SEEK_SET ) == 10L );
+            VERIFY( tell( h ) == 10L );
+            VERIFY( read( h, rbuf, 5 ) == 5 );
+            VERIFY( memcmp( rbuf, msg + 10, 5 ) == 0 );
+            VERIFY( close( h ) == 0 );
+        }
+
+        /* rename LOWA.DAT -> LOWB.DAT: old name must vanish, data must survive */
+        VERIFY( rename( "LOWA.DAT", "LOWB.DAT" ) == 0 );
+        VERIFY( open( "LOWA.DAT", O_RDONLY | O_BINARY ) == -1 );  /* old gone */
+        h = open( "LOWB.DAT", O_RDONLY | O_BINARY );
+        VERIFY( h >= 0 );
+        if( h >= 0 ) {
+            VERIFY( read( h, rbuf, L ) == L );
+            VERIFY( memcmp( rbuf, msg, L ) == 0 );   /* renamed data intact */
+            VERIFY( close( h ) == 0 );
+        }
+        VERIFY( rename( "NOSUCH.DAT", "X.DAT" ) == -1 );  /* missing source fails */
+        VERIFY( remove( "LOWB.DAT" ) == 0 );
+    }
 
     /* --- cleanup + remove() --- */
     VERIFY( remove( "TEST.TXT" ) == 0 );
