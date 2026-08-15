@@ -131,8 +131,9 @@ fuller crt0 would instead walk the `XI` init table via `__InitRtns` (see
 path**: Watcom's genuine, unchanged `fopen`/`fclose`/`fwrite`/`fputs`/`fprintf`/
 `fread`/`fgets`/`fgetc`/`fseek`/`ftell`/`remove` run against **real CP/M-86 disk
 files**. It write-creates `TEST.TXT`, reads it back line-by-line, seeks by an
-`ftell`-captured offset, appends, re-counts, and `remove`s it — 28 self-checking
-`VERIFY`s, `DISKIO: PASS`, **zero INT 21h**.
+`ftell`-captured offset, appends, re-counts, seeks absolute in a 256-byte binary
+file, checks byte-exact `SEEK_END` on a non-record-aligned binary write, and
+`remove`s it — 511 self-checking `VERIFY`s, `DISKIO: PASS`, **zero INT 21h**.
 
 One seam, `port/diskio.c`, supersedes `stdioshim.c` in this build (it owns the
 same console `__qwrite`/`isatty`) and adds the five low-level primitives `fopen`
@@ -146,8 +147,16 @@ BDOS** calls (`INT E0h`):
   unwritten record reads back as EOF, so we fill the work buffer with `Ctrl-Z`
   (0x1A); a partially-written last record keeps a `Ctrl-Z` tail on disk — exactly
   CP/M's text-EOF convention, for free. Text-mode read stops at the first
-  `Ctrl-Z`; binary does not (a binary length is only known to the nearest 128
-  bytes — an inherent CP/M limit).
+  `Ctrl-Z`; binary does not.
+- **Byte-exact length is tracked locally.** CP/M's directory knows length only
+  to the nearest 128-byte record, so each open handle keeps the true length in
+  `fp->len` (seeded at open, extended by every write). `SEEK_END`/`ftell` are
+  therefore byte-exact for the whole life of an open handle on any CP/M —
+  including a 200-byte binary write reporting 200, not 256. A binary file
+  reopened read-only can only recover an exact length where the OS persisted
+  one (CCP/M-86 / CP/M 3+ LRBC, runtime-detected via BDOS fn 12); on plain
+  CP/M-86 it rounds to a record. That reopen limitation and its
+  MAME-verification gap are on [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 - **`lseek`/`_tell` route straight to `__lseek`.** The stock POSIX wrappers drag
   in the whole per-handle iomode table (`__GetIOMode`/`__handle_check`/`__NFiles`)
   this minimal seam deliberately omits, so `diskio.c` provides its own thin ones.
@@ -160,7 +169,8 @@ Watcom ships its own self-checking stream-I/O regression tests
 gold-standard oracle, as `float01–04` were for soft-float. They each need a few
 more seam primitives than a v1 round-trip (`tmpfile`/`tmpnam`/`fscanf`/
 `fopen("CON")`, or `chsize`/`dup`/`filelength`, or `rename`/`access`/`stat`), so
-`disktest.c` is the focused v1 gate and those are the documented next step.
+`disktest.c` is the focused v1 gate and those are the documented next step
+(the full gap list is in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)).
 
 ## What the stdcbench proof adds (`build-stdcbench.sh`)
 
@@ -221,12 +231,13 @@ nor retires the `double` ABI seam.
 | `test/main.c` | printf demo driver / oracle |
 | `test/heaptest.c` | heap demo driver / oracle |
 | `test/stdiotest.c` | stdio FILE\* demo driver / oracle |
-| `test/disktest.c` | disk FILE\* round-trip driver / self-checking oracle (28 `VERIFY`s, prints `DISKIO: PASS`) |
+| `test/disktest.c` | disk FILE\* round-trip driver / self-checking oracle (511 `VERIFY`s incl. byte-exact `SEEK_END`, prints `DISKIO: PASS`) |
 | `test/floattest.c` | double soft-float demo driver / oracle |
 | `test/whetstone.c` | Whetstone benchmark driver (libm + `%e` printf) / oracle |
 | `test/owtdrv.c` | PASS/FAIL driver wrapping Watcom's own `float01..float04` (`-Dmain=owtest_main`); prints one `OWTEST: PASS/FAIL` verdict |
 | `test/scbport.c` | stdcbench glue: BDOS `T_GET` clock, `main`, `mame_done` (init via crt0 `__CommonInit`) |
 | `test/portme.h` | stdcbench 0.8 port config (integer c90base+c90lib set) |
+| `KNOWN_ISSUES.md` | honest list of bugs, gaps, inherent CP/M limits, and emu2-only (MAME-unverified) results |
 
 ## Toolchain
 
@@ -326,8 +337,8 @@ Tracked in ravn/rc7xx-work#6:
    reads back as EOF so a `Ctrl-Z` (0x1A) tail on the last partial record gives
    CP/M's text-EOF convention for free. `test/disktest.c` write-creates
    `TEST.TXT`, reads it back line-by-line, seeks by an `ftell`-captured offset,
-   appends, re-counts, and `remove`s it — **28 self-checking `VERIFY`s,
-   `DISKIO: PASS`, `INT21h=0 · BDOS=14`.** The stock `lseek`/`_tell` drag in the
+   appends, re-counts, and `remove`s it — **511 self-checking `VERIFY`s,
+   `DISKIO: PASS`, `INT21h=0 · BDOS=15`.** The stock `lseek`/`_tell` drag in the
    per-handle iomode table (`__GetIOMode`/`__handle_check`/`__NFiles`) this
    minimal seam omits, so `diskio.c` provides its own thin ones straight to
    `__lseek`. Watcom's own self-checking `bld/clibtest/streamio/c/iotest.c` (and
@@ -337,12 +348,16 @@ Tracked in ravn/rc7xx-work#6:
 
 ## Next milestones (not yet done)
 
-Still open (tracked in ravn/rc7xx-work#6):
+Still open (tracked in ravn/rc7xx-work#6). The full, honest gap/bug/limitation
+list — including the byte-exact-length caveats below — lives in
+[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 
 - ~~**disk FILE\* path** (`open`/`close`/`read`/`lseek`) honouring the CP/M
   record model — 128-byte sectors, no exact byte length; text files use a
   Ctrl-Z (0x1A) terminator, binary files have none.~~ **DONE** — milestone 6
-  (`build-diskio.sh`).
+  (`build-diskio.sh`). Within-session `SEEK_END` is byte-exact; binary
+  cross-reopen length and a write-side LRBC protocol for CCP/M-86 remain open
+  (see `KNOWN_ISSUES.md`).
 - **Watcom's own `clibtest` stream-I/O suite as an independent disk oracle** —
   run `bld/clibtest/streamio/c/iotest.c` (and `handleio`/`file`) byte-for-byte
   unchanged, the way `build-owtests.sh` runs `float01–04`. Needs a few more

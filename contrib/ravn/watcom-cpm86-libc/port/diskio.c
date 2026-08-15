@@ -61,6 +61,7 @@ extern void _bdos_conout( int c );      /* BDOS C_WRITE (fn 2, char in DL) */
     modify [ax bx cx es];
 
 /* BDOS function numbers we use. */
+#define BD_VERSION  12          /* S_BDOSVER: OS/BDOS version (runtime capability) */
 #define BD_OPEN     15
 #define BD_CLOSE    16
 #define BD_DELETE   19
@@ -83,6 +84,7 @@ extern void _bdos_conout( int c );      /* BDOS C_WRITE (fn 2, char in DL) */
 #define FCB_S2      14
 #define FCB_RC      15
 #define FCB_CR      32
+#define FCB_LRBC    32          /* CP/M 3+ Last Record Byte Count shares FCB+32 */
 #define FCB_R0      33          /* random record number, 3 bytes (little-endian) */
 
 /* ---- open-file table ----------------------------------------------------- */
@@ -92,11 +94,17 @@ extern void _bdos_conout( int c );      /* BDOS C_WRITE (fn 2, char in DL) */
 typedef struct {
     unsigned char fcb[36];
     long          pos;          /* current byte position */
+    long          len;          /* exact logical length, tracked LOCALLY (the
+                                   CP/M directory only knows length to the
+                                   nearest 128-byte record, so we must remember
+                                   the true end ourselves while the file is open) */
     unsigned char used;
     unsigned char text;         /* 1 = stop reads at Ctrl-Z */
     unsigned char readable;
     unsigned char writable;
     unsigned char ateof;
+    unsigned char open_lrbc;    /* LRBC byte captured at open (0xFF = OS gave
+                                   none => no exact length available) */
 } dfile_t;
 
 static dfile_t        dfiles[DISK_MAX];
@@ -120,6 +128,33 @@ static void set_dma( void )
 {
     _bdos( BD_SETDMASEG, _getds() );
     _bdos( BD_SETDMA, (unsigned)(size_t)&dma[0] );
+}
+
+/* Runtime OS capability probe: does this system expose an exact byte length?
+   BDOS fn 12 (S_BDOSVER) returns the version in AL; CP/M 3.0+ (0x30) and the
+   RC759's Concurrent CP/M-86 3.1 (0x31) carry the Last Record Byte Count (LRBC),
+   plain CP/M-86 (a CP/M-2.2 filesystem, 0x2x) does not. This is decided AT
+   RUNTIME -- the same binary runs on both and picks the exact-length path only
+   where the OS actually supports it. Cached: probed once, reused thereafter.
+
+   NOTE: the LRBC decode below is smoke-tested under emu2 only; emu2 is NOT the
+   authoritative oracle for LRBC semantics -- the RC759 running real Concurrent
+   CP/M-86 under MAME is. Until a MAME run confirms it, binary exact length on
+   CP/M 3+ is UNVERIFIED (see KNOWN_ISSUES.md). Local write-tracking (fp->len)
+   is the verified-everywhere behaviour and remains the safety net. */
+static int os_has_lrbc( void )
+{
+    static signed char cached = -1;     /* -1 = unprobed, 0 = no, 1 = yes */
+    if( cached < 0 )
+        cached = (signed char)(( _bdos( BD_VERSION, 0 ) & 0xFF ) >= 0x30);
+    return( cached );
+}
+
+/* Public probe so the test oracle can gate its LRBC-exact-length expectation on
+   the actual OS: exact binary length is only guaranteed on CP/M 3+ (CCP/M-86). */
+int os_reports_lrbc( void )
+{
+    return( os_has_lrbc() );
 }
 
 /* Store a 0-based record number into the FCB random-record field (r0,r1,r2). */
@@ -230,6 +265,48 @@ static long text_eof( dfile_t *fp )
     return( last * SECT + i );
 }
 
+/* Best-effort exact length of an already-open file, straight off the disk. This
+   is the SEED for fp->len at open time; writes thereafter update fp->len
+   exactly (see __qwrite). Text: text_eof() is byte-exact (Ctrl-Z scan). Binary:
+   the CP/M directory has no sub-record length, so this rounds UP to the next
+   128-byte sector -- the inherent CP/M-2.2 limit (tracked on the known-issues
+   list). */
+static long disk_len( dfile_t *fp )
+{
+    long records;
+
+    if( fp->text )
+        return( text_eof( fp ) );
+    set_dma();
+    _bdos( BD_FILESIZE, (unsigned)(size_t)&fp->fcb[0] );
+    records = (long)fp->fcb[FCB_R0 + 0]
+            | ((long)fp->fcb[FCB_R0 + 1] << 8)
+            | ((long)fp->fcb[FCB_R0 + 2] << 16);
+    if( records == 0 )
+        return( 0 );
+    /* Exact byte length on CP/M 3+ (CCP/M-86) via the Last Record Byte Count the
+       OS wrote into FCB+32 at open. LRBC = bytes used in the file's final
+       128-byte record; 0 means the last record is full. So:
+           len = (records-1)*128 + (lrbc==0 ? 128 : lrbc)
+       0xFF means no LRBC was supplied (plain CP/M-86 / 2.2, or the file was
+       stored without one) -- fall back to the record-rounded length.
+
+       IMPORTANT GAP: this only recovers an exact length that some program
+       PERSISTED. Our own write path (see __qwrite/__close) writes whole 128-byte
+       records and does NOT yet transmit an LRBC on close, so a binary file WE
+       wrote reads back record-rounded even here -- only files created by a tool
+       that recorded the LRBC come back byte-exact. Cross-reopen exact length for
+       our own binary output is UNVERIFIED and needs both a write-side LRBC
+       protocol and a MAME/RC759 oracle (emu2 is not authoritative). Within a
+       single open handle, fp->len is always byte-exact (tracked by __qwrite).
+       Tracked on KNOWN_ISSUES.md. */
+    if( os_has_lrbc() && fp->open_lrbc != 0xFF ) {
+        long lrbc = fp->open_lrbc;
+        return( (records - 1) * SECT + (lrbc == 0 ? SECT : lrbc) );
+    }
+    return( records * SECT );
+}
+
 /* ---- the five stdio low-level primitives --------------------------------- */
 
 /* fopen -> _sopen: allocate a slot, open/create the CP/M file, return an fd. The
@@ -256,22 +333,45 @@ _WCRTLINK int _sopen( const char *name, int mode, int shflag, ... )
     fp->writable = (unsigned char)(acc == O_WRONLY || acc == O_RDWR);
     fp->text     = (unsigned char)((mode & O_BINARY) == 0);
     fp->pos      = 0;
+    fp->len      = 0;
     fp->ateof    = 0;
+    fp->open_lrbc = 0xFF;                           /* assume: no LRBC from OS */
+
+    /* Request the exact byte length from the OS at open time. On CP/M 3+
+       (CCP/M-86) the caller signals interest by pre-setting FCB+32 to 0xFF; the
+       BDOS OPEN then replaces it with the Last Record Byte Count. Plain CP/M-86
+       (2.2) leaves it untouched, so it stays 0xFF and we fall back to the
+       record-rounded length. Only meaningful for binary files (text files use
+       text_eof's byte-exact Ctrl-Z scan regardless of OS). */
+    if( os_has_lrbc() && !fp->text )
+        fp->fcb[FCB_LRBC] = 0xFF;
 
     if( mode & O_TRUNC ) {
         _bdos( BD_DELETE, (unsigned)(size_t)&fp->fcb[0] );
         if( _bdos( BD_MAKE, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF )
             return( -1 );
+        /* fresh/empty file: exact length is 0 */
     } else if( _bdos( BD_OPEN, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF ) {
         if( !(mode & O_CREAT) )
             return( -1 );
         if( _bdos( BD_MAKE, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF )
             return( -1 );
+        /* fresh/empty file: exact length is 0 */
+    } else {
+        /* opened an EXISTING file. Capture the LRBC the OS just wrote into FCB+32
+           (0xFF still means "none supplied"), then clear FCB+32 so it does not
+           disturb the random-record I/O that follows. Seed the exact length from
+           disk: text_eof() is byte-exact (Ctrl-Z scan); binary uses the LRBC on
+           CP/M 3+ for byte-exact length, else rounds UP to a 128-byte sector --
+           the inherent CP/M-2.2 limit. Writes thereafter track fp->len exactly. */
+        fp->open_lrbc = fp->fcb[FCB_LRBC];
+        fp->fcb[FCB_CR] = 0;
+        fp->len = disk_len( fp );
     }
 
     fp->used = 1;
     if( mode & O_APPEND )
-        fp->pos = text_eof( fp );
+        fp->pos = fp->len;
     return( DISK_FIRST_FD + i );
 }
 
@@ -361,6 +461,8 @@ int _WCNEAR __qwrite( int handle, const void *buffer, unsigned len )
         cache_rec = rec;
         total += n;
         fp->pos += n;
+        if( fp->pos > fp->len )                     /* extend the exact length */
+            fp->len = fp->pos;
     }
     if( total == 0 && len != 0 )
         return( -1 );
@@ -368,8 +470,11 @@ int _WCNEAR __qwrite( int handle, const void *buffer, unsigned len )
 }
 
 /* fseek/ftell -> __lseek. Byte-granular thanks to the random-record model.
-   SEEK_END uses the record-rounded file size (text callers doing fseek(0,END)+
-   ftell get length to the nearest 128 bytes -- the CP/M limitation). */
+   SEEK_END returns fp->len: byte-exact for text and for anything written this
+   session (fp->len is tracked exactly by __qwrite). A binary file reopened
+   read-only inherits its seed from disk_len(): exact only if a prior program
+   persisted an LRBC on CP/M 3+, otherwise sector-rounded (128-byte-record
+   limit). See KNOWN_ISSUES.md for the binary-reopen-length gap. */
 long _WCNEAR __lseek( int handle, long offset, int origin )
 {
     dfile_t *fp = fd_to_file( handle );
@@ -385,11 +490,10 @@ long _WCNEAR __lseek( int handle, long offset, int origin )
         base = fp->pos;
         break;
     case SEEK_END:
-        set_dma();
-        _bdos( BD_FILESIZE, (unsigned)(size_t)&fp->fcb[0] );
-        base = ((long)fp->fcb[FCB_R0 + 0]
-             | ((long)fp->fcb[FCB_R0 + 1] << 8)
-             | ((long)fp->fcb[FCB_R0 + 2] << 16)) * SECT;
+        /* End-of-file position from the byte-exact length we keep in fp->len:
+           seeded at open (text via Ctrl-Z scan; binary via a persisted LRBC on
+           CP/M 3+, else sector-rounded) and extended exactly by every __qwrite. */
+        base = fp->len;
         break;
     default:
         return( -1L );
