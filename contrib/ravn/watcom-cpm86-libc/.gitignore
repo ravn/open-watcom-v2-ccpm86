@@ -6,3 +6,5 @@ build-float/
 build-whetstone/
 build-whetstone-mame/
 SCB-WC.CMD
+build-owtests/
+build-owtests-mame/

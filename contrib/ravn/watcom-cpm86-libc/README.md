@@ -167,6 +167,7 @@ nor retires the `double` ABI seam.
 | `build-stdcbench.sh` | stdcbench proof: full stdcbench 0.8 (c90base+c90lib) on Watcom clib + shim; purity gate + emu2 functional run |
 | `build-float.sh` | double soft-float proof: `-fpc` runtime `__FDx` arithmetic on CP/M-86, no 8087; purity + anti-fold gates |
 | `build-whetstone.sh` | Whetstone proof: transcendental libm (sin/cos/atan/exp/log/sqrt) + real `%e` float printf on CP/M-86, no 8087; adds the `assert_no_286` CPU gate |
+| `build-owtests.sh` | Runs Open Watcom's OWN `ctest` float regression suite (`float01..float04`, byte-for-byte unchanged) on CP/M-86, `-fpc` no 8087; independent third-party oracle. Needs `-zastd=c99` for the tests' C99 hex-float/`fpclassify` |
 | `run-stdcbench-mame.sh` | stdcbench cross-check: builds `-DMAME_DONE` + runs SCB.CMD on cycle-accurate MAME rc759 (score 20 vs DR C 13) |
 | `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback (direct console printf) |
 | `port/stdioshim.c` | Layer-2 seam: `__qwrite` (BDOS console write) + `isatty` for the FILE\* path |
@@ -174,11 +175,13 @@ nor retires the `double` ABI seam.
 | `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, BDOS exit, `__STK` stub) |
 | `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`, `errno`, read-path `__lseek`/`fsync`) |
 | `port/errnoptr.c` | `__get_errno_ptr_` for mathlib `_matherr` (returns `&errno`; avoids duplicating the `errno` global that `stubs.c` owns) |
+| `port/abortcpm.c` | lightweight `abort()` = CP/M-86 warm-boot (BDOS 0), avoids Watcom's signal/raise machinery (float regression tests' `fail.h` references it) |
 | `test/main.c` | printf demo driver / oracle |
 | `test/heaptest.c` | heap demo driver / oracle |
 | `test/stdiotest.c` | stdio FILE\* demo driver / oracle |
 | `test/floattest.c` | double soft-float demo driver / oracle |
 | `test/whetstone.c` | Whetstone benchmark driver (libm + `%e` printf) / oracle |
+| `test/owtdrv.c` | PASS/FAIL driver wrapping Watcom's own `float01..float04` (`-Dmain=owtest_main`); prints one `OWTEST: PASS/FAIL` verdict |
 | `test/scbport.c` | stdcbench glue: BDOS `T_GET` clock, `__InitFiles`, `main`, `mame_done` |
 | `test/portme.h` | stdcbench 0.8 port config (integer c90base+c90lib set) |
 
