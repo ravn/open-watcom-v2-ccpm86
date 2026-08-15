@@ -27,15 +27,32 @@ void __fatal_runtime_error( char __far *msg, int rc ) { (void)msg; (void)rc; for
    the static YI record holds its address, so the symbol must resolve. */
 void __full_io_exit( void ) {}
 
+/* The disk build (build-diskio.sh) supplies the REAL __lseek in diskio.c, so
+   exclude this stub there via -DDISKIO_LSEEK to avoid a duplicate symbol. */
+#ifndef DISKIO_LSEEK
 long __lseek( int handle, long offset, int origin )
 { (void)handle; (void)offset; (void)origin; return( -1L ); }
+#endif
 
 int fsync( int handle ) { (void)handle; return( -1 ); }
 
 /* errno storage: fputc/flush reference the C `errno` datum (OMF symbol _errno;
    single-thread small model uses a plain global). The real one lives in RT data
-   we don't link, so define it here. */
+   we don't link, so define it here. (`port/errnoptr.c` owns `__get_errno_ptr`,
+   which returns &errno; builds that need the pointer hook link that object.) */
 int errno;
+
+/* Disk-build-only closure stubs (build-diskio.sh compiles with -DDISKIO_LSEEK).
+   fopen() lowercases its mode char via tolower() (stock one indexes the __ctype
+   table we don't link -- ASCII fold is all fopen needs). fgetc's __fill_buffer,
+   on the TTY branch only (fp->_flag & _ISTTY), calls __flushall(_ISTTY) + getche()
+   -- disk streams never take that branch, so both are unreachable but must
+   resolve. Guarded so the other builds' stubs.obj stays byte-identical. */
+#ifdef DISKIO_LSEEK
+int tolower( int c ) { return( ( c >= 'A' && c <= 'Z' ) ? c + ( 'a' - 'A' ) : c ); }
+int __flushall( int mask ) { (void)mask; return( 0 ); }
+int getche( void ) { return( -1 ); }
+#endif
 
 /* fflush(NULL) would flush every open stream via flushall -> the __InitFiles
    stream-link list, which we don't build. We only ever fflush(stdout), so the

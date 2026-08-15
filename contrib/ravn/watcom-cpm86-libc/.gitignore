@@ -8,3 +8,4 @@ build-whetstone-mame/
 SCB-WC.CMD
 build-owtests/
 build-owtests-mame/
+build-diskio/

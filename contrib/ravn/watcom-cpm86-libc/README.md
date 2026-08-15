@@ -125,6 +125,43 @@ before, a forgotten `__InitFiles` left `printf` silently emitting nothing). A
 fuller crt0 would instead walk the `XI` init table via `__InitRtns` (see
 `tasks/memory/reference_watcom_cpm86_startup_initfini.md`).
 
+## What the disk proof adds (`build-diskio.sh`)
+
+`test/disktest.c` lifts the console-only write seam to a full **disk `FILE\*`
+path**: Watcom's genuine, unchanged `fopen`/`fclose`/`fwrite`/`fputs`/`fprintf`/
+`fread`/`fgets`/`fgetc`/`fseek`/`ftell`/`remove` run against **real CP/M-86 disk
+files**. It write-creates `TEST.TXT`, reads it back line-by-line, seeks by an
+`ftell`-captured offset, appends, re-counts, and `remove`s it — 28 self-checking
+`VERIFY`s, `DISKIO: PASS`, **zero INT 21h**.
+
+One seam, `port/diskio.c`, supersedes `stdioshim.c` in this build (it owns the
+same console `__qwrite`/`isatty`) and adds the five low-level primitives `fopen`
+bottoms out into — `_sopen` / `__qread` / `__qwrite` / `__lseek` / `__close` —
+plus `lseek`/`_tell`/`remove`/`unlink`, all backed by CP/M-86 **FCB random-record
+BDOS** calls (`INT E0h`):
+
+- **The record model does the hard work.** CP/M has no byte-granular length —
+  storage is 128-byte records — so we use `READ RANDOM` (fn 33) / `WRITE RANDOM`
+  (fn 34): byte position is just `record = pos>>7`, `offset = pos&127`. An
+  unwritten record reads back as EOF, so we fill the work buffer with `Ctrl-Z`
+  (0x1A); a partially-written last record keeps a `Ctrl-Z` tail on disk — exactly
+  CP/M's text-EOF convention, for free. Text-mode read stops at the first
+  `Ctrl-Z`; binary does not (a binary length is only known to the nearest 128
+  bytes — an inherent CP/M limit).
+- **`lseek`/`_tell` route straight to `__lseek`.** The stock POSIX wrappers drag
+  in the whole per-handle iomode table (`__GetIOMode`/`__handle_check`/`__NFiles`)
+  this minimal seam deliberately omits, so `diskio.c` provides its own thin ones.
+- `'\n'`↔`"\r\n"` translation stays **above** the seam in Watcom's text-mode
+  `fgetc`/`fputc`, so `__qread`/`__qwrite` move raw bytes — same boundary as the
+  console seam.
+
+Watcom ships its own self-checking stream-I/O regression tests
+(`bld/clibtest/streamio/c/iotest.c`, `handleio`, `file`) — the eventual
+gold-standard oracle, as `float01–04` were for soft-float. They each need a few
+more seam primitives than a v1 round-trip (`tmpfile`/`tmpnam`/`fscanf`/
+`fopen("CON")`, or `chsize`/`dup`/`filelength`, or `rename`/`access`/`stat`), so
+`disktest.c` is the focused v1 gate and those are the documented next step.
+
 ## What the stdcbench proof adds (`build-stdcbench.sh`)
 
 The three proofs above each exercise one library subsystem with a toy driver.
@@ -166,6 +203,7 @@ nor retires the `double` ABI seam.
 | `build.sh` | printf proof: reproducible build + purity gate + emu2 oracle gate |
 | `build-heap.sh` | heap proof: Watcom malloc/free/calloc/realloc + qsort on CP/M-86 |
 | `build-stdio.sh` | stdio proof: Watcom genuine FILE\* printf/fprintf/puts/fputs on CP/M-86 |
+| `build-diskio.sh` | disk proof: Watcom genuine FILE\* fopen/fread/fwrite/fgets/fseek/ftell/remove against real CP/M-86 disk files (FCB random-record BDOS); purity gate + emu2 self-checking oracle |
 | `build-stdcbench.sh` | stdcbench proof: full stdcbench 0.8 (c90base+c90lib) on Watcom clib + shim; purity gate + emu2 functional run |
 | `build-float.sh` | double soft-float proof: `-fpc` runtime `__FDx` arithmetic on CP/M-86, no 8087; purity + anti-fold gates |
 | `build-whetstone.sh` | Whetstone proof: transcendental libm (sin/cos/atan/exp/log/sqrt) + real `%e` float printf on CP/M-86, no 8087; adds the `assert_no_286` CPU gate |
@@ -173,15 +211,17 @@ nor retires the `double` ABI seam.
 | `run-stdcbench-mame.sh` | stdcbench cross-check: builds `-DMAME_DONE` + runs SCB.CMD on cycle-accurate MAME rc759 (score 20 vs DR C 13) |
 | `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback (direct console printf) |
 | `port/stdioshim.c` | Layer-2 seam: `__qwrite` (BDOS console write) + `isatty` for the FILE\* path |
+| `port/diskio.c` | Layer-2 seam (disk build): supersedes `stdioshim.c` — `_sopen`/`__qread`/`__qwrite`/`__lseek`/`__close` + `lseek`/`_tell`/`remove`/`unlink`/`isatty` via CP/M-86 FCB random-record BDOS |
 | `port/lowlevel.c` | Layer-2 seam: arena `__brk`/`sbrk` + `_curbrk` (near-heap bottom) |
 | `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, `__CommonInit`, BDOS exit, `__STK` stub) |
 | `port/cominit.c` | `__CommonInit` — crt0-invoked runtime init (ow#16): `__InitFiles` (+ `__setEFGfmt` when `-DCOMMONINIT_EFG`); empty under `-DCOMMONINIT_NOSTDIO` for cprintf-only demos |
-| `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`, `errno`, read-path `__lseek`/`fsync`) |
+| `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`, `errno`, read-path `__lseek`/`fsync`; disk-build-only `tolower`/`__flushall`/`getche` under `-DDISKIO_LSEEK`) |
 | `port/errnoptr.c` | `__get_errno_ptr_` for mathlib `_matherr` (returns `&errno`; avoids duplicating the `errno` global that `stubs.c` owns) |
 | `port/abortcpm.c` | lightweight `abort()` = CP/M-86 warm-boot (BDOS 0), avoids Watcom's signal/raise machinery (float regression tests' `fail.h` references it) |
 | `test/main.c` | printf demo driver / oracle |
 | `test/heaptest.c` | heap demo driver / oracle |
 | `test/stdiotest.c` | stdio FILE\* demo driver / oracle |
+| `test/disktest.c` | disk FILE\* round-trip driver / self-checking oracle (28 `VERIFY`s, prints `DISKIO: PASS`) |
 | `test/floattest.c` | double soft-float demo driver / oracle |
 | `test/whetstone.c` | Whetstone benchmark driver (libm + `%e` printf) / oracle |
 | `test/owtdrv.c` | PASS/FAIL driver wrapping Watcom's own `float01..float04` (`-Dmain=owtest_main`); prints one `OWTEST: PASS/FAIL` verdict |
@@ -222,10 +262,8 @@ Tracked in ravn/rc7xx-work#6:
    direct-`__prtf` console `printf`.~~ **DONE for the console write-path**
    (`build-stdio.sh`, run-verified): `port/stdioshim.c` supplies `__qwrite`
    (BDOS `C_WRITE`) + `isatty`; Watcom's own DOS-free `__InitFiles` attaches the
-   `FILE` buffers from the near-heap. Still open: the **disk** FILE\* path
-   (`open`/`close`/`read`/`lseek`), which must honour the CP/M record model —
-   files are 128-byte sectors with no exact byte length; text files use a
-   Ctrl-Z (0x1A) terminator, binary files have none.
+   `FILE` buffers from the near-heap. The **disk** FILE\* path is now delivered
+   too — see milestone 6.
 3. ~~**stdcbench relink** — rebuild the existing `owc-drc/stdcbench` port against
    Watcom clib + this shim instead of the DR C runtime; gate on the
    c90base + c90lib score, cross-checked against the DR C reference (final
@@ -276,13 +314,40 @@ Tracked in ravn/rc7xx-work#6:
    on IEEE-double coefficient bytes in the libm constant tables; a
    disassembly-based code-vs-data replacement is a TODO.)
 
+6. ~~**disk FILE\* path** — lift the console-only write seam to real CP/M-86
+   disk files so Watcom's own `fopen`/`fclose`/`fwrite`/`fputs`/`fprintf`/
+   `fread`/`fgets`/`fgetc`/`fseek`/`ftell`/`remove` link and run.~~ **DONE**
+   (`build-diskio.sh` + `test/disktest.c`, run-verified): the single seam
+   `port/diskio.c` supersedes `stdioshim.c` and supplies the five primitives
+   `fopen` bottoms out into — `_sopen`/`__qread`/`__qwrite`/`__lseek`/`__close`
+   — plus `lseek`/`_tell`/`remove`/`unlink`, all over CP/M-86 **FCB
+   random-record BDOS** (`READ RANDOM` fn 33 / `WRITE RANDOM` fn 34): byte
+   position is `record = pos>>7`, `offset = pos&127`, and an unwritten record
+   reads back as EOF so a `Ctrl-Z` (0x1A) tail on the last partial record gives
+   CP/M's text-EOF convention for free. `test/disktest.c` write-creates
+   `TEST.TXT`, reads it back line-by-line, seeks by an `ftell`-captured offset,
+   appends, re-counts, and `remove`s it — **28 self-checking `VERIFY`s,
+   `DISKIO: PASS`, `INT21h=0 · BDOS=14`.** The stock `lseek`/`_tell` drag in the
+   per-handle iomode table (`__GetIOMode`/`__handle_check`/`__NFiles`) this
+   minimal seam omits, so `diskio.c` provides its own thin ones straight to
+   `__lseek`. Watcom's own self-checking `bld/clibtest/streamio/c/iotest.c` (and
+   `handleio`/`file`) is the eventual gold-standard oracle (as `float01–04` were
+   for soft-float); it needs a few more primitives than a v1 round-trip
+   (`tmpfile`/`tmpnam`/`fscanf`/`fopen("CON")`), documented as the next step.
+
 ## Next milestones (not yet done)
 
 Still open (tracked in ravn/rc7xx-work#6):
 
-- **disk FILE\* path** (`open`/`close`/`read`/`lseek`) honouring the CP/M
+- ~~**disk FILE\* path** (`open`/`close`/`read`/`lseek`) honouring the CP/M
   record model — 128-byte sectors, no exact byte length; text files use a
-  Ctrl-Z (0x1A) terminator, binary files have none.
+  Ctrl-Z (0x1A) terminator, binary files have none.~~ **DONE** — milestone 6
+  (`build-diskio.sh`).
+- **Watcom's own `clibtest` stream-I/O suite as an independent disk oracle** —
+  run `bld/clibtest/streamio/c/iotest.c` (and `handleio`/`file`) byte-for-byte
+  unchanged, the way `build-owtests.sh` runs `float01–04`. Needs a few more
+  seam primitives first: `tmpnam`/`tmpfile`, `fscanf` read path, and opening the
+  console as a named file (`fopen("CON")`).
 - ~~**`-fpc` float cross-check on cycle-accurate MAME rc759** — the authoritative
   no-8087 oracle; emu2 is green but may not faithfully model a no-8087 machine.
   Applies to both milestone 4 (`build-float.sh`) and milestone 5
