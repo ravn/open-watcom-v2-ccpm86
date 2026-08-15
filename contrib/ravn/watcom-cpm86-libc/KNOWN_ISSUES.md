@@ -59,16 +59,29 @@ This is not implemented. Requires: (a) a CP/M 3 close-with-LRBC sequence, and
 (b) a MAME/RC759 run to confirm the on-disk directory actually records it
 (emu2's behaviour here is not trustworthy).
 
-### 3. Gold-standard `clibtest` disk oracle not yet wired — GAP
+### 3. Gold-standard `clibtest` disk oracle — streamio LANDED
 
 Watcom ships its own self-checking regression tests
 (`bld/clibtest/streamio/c/iotest.c`, `handleio/c/iotest.c`,
 `file/c/filetest.c`). Running them unchanged — the way `build-owtests.sh` runs
-`float01–04` — is the independent gold-standard disk oracle. Blocked on missing
-seam primitives:
+`float01–04` — is the independent gold-standard disk oracle.
 
-- `streamio`: `fopen("CON")` (console as a named file).
-- `handleio`: `chsize` (sparse zero-fill), `dup`/`dup2` (shared file position),
+**`streamio/c/iotest.c` now PASSES unchanged** under emu2, purity INT21h=0
+(`build-streamio.sh` -> "Tests completed (iotest)."). It exercises
+`fopen("CON")`, `freopen` onto std streams and onto CON, `fcloseall`/`flushall`,
+`dup(fileno(stdout))`, `fdopen`, `setbuf`/`setvbuf`, `ungetc`, `perror`, the
+`scanf`/`vscanf`/`vfprintf`/`vprintf` family, `tmpfile` (NUM_FILES=10 at once),
+byte-exact past-EOF `fgetc`, C append semantics, and cross-handle read-after-
+`fflush`. Seam work that made it pass: `fopen("CON")` console device; per-handle
+iomode registration (gated by `-DDISKIO_IOMODE`); `dup`/`exit` seams; crt0
+`argc`/`argv`; `tmpfile` slot count raised to 16; byte-exact EOF via `fp->len`
+for a written handle plus on-demand disk-length re-derivation for a pure reader;
+and an emu2 fidelity fix (flush host handle after a random write so a second FCB
+/ `stat()` sees it, matching real CP/M-86 write-through).
+
+Still blocked (other clibtest members) on missing seam primitives:
+
+- `handleio`: `chsize` (sparse zero-fill), `dup2` (shared file position),
   `umask`/`chmod` R/O-attribute enforcement, `_hdopen`/`_os_handle`.
 - `file`: `access`, `chmod`, `stat`, `utime`.
 
@@ -88,10 +101,9 @@ Implemented + emu2-verified (via `test/disktest.c`, purity gate INT21h=0):
   `msdos.086` clib + `msdos.286` mathlib. Kept OUT of `build-diskio.sh` so the
   disk-I/O purity oracle stays float-free.
 
-Until the remaining primitives above exist, Watcom's own `clibtest` suite still
-cannot run unchanged; the disk path is proven by our `test/disktest.c`
-round-trip oracle (543 self-checks base / 554 with the fscanf block, PASS) plus
-the POSIX + fscanf subset now landed.
+The disk path is proven by `build-streamio.sh` (Watcom's UNCHANGED iotest.c),
+`build-diskio.sh` (543 round-trip self-checks), and `build-fscanf.sh` (554), all
+PASS, all INT21h=0.
 
 ### 4. Currently implemented seam surface — for reference
 

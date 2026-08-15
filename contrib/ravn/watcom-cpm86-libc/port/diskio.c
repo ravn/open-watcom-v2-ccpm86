@@ -90,7 +90,9 @@ extern void _bdos_conout( int c );      /* BDOS C_WRITE (fn 2, char in DL) */
 
 /* ---- open-file table ----------------------------------------------------- */
 #define DISK_FIRST_FD 3         /* 0/1/2 reserved for stdin/stdout/stderr */
-#define DISK_MAX      8
+#define DISK_MAX      16        /* iotest opens NUM_FILES=10 tmpfiles at once;
+                                   keep DISK_FIRST_FD+DISK_MAX <= __NFiles(20) so
+                                   every handle fits the iomode table */
 
 typedef struct {
     unsigned char fcb[36];
@@ -103,7 +105,19 @@ typedef struct {
     unsigned char text;         /* 1 = stop reads at Ctrl-Z */
     unsigned char readable;
     unsigned char writable;
+    unsigned char append;       /* 1 = O_APPEND: every write repositions to
+                                   fp->len first, so a preceding fseek()/rewind()
+                                   cannot divert an append away from EOF (C/POSIX
+                                   append semantics; iotest.c "a+" relies on it) */
+    unsigned char wrote;        /* 1 = this handle has written => fp->len is the
+                                   authoritative byte-exact length (used for EOF).
+                                   0 = pure reader => re-derive length from disk on
+                                   demand so it sees data another handle flushed
+                                   (iotest.c "flushes": one "w" + one "r" handle on
+                                   the same file, reader must see the flushed byte) */
     unsigned char ateof;
+    unsigned char is_con;       /* 1 = console device (fopen("CON")): read/write
+                                   route to the BDOS console, not to a disk FCB */
     unsigned char open_lrbc;    /* LRBC byte captured at open (0xFF = OS gave
                                    none => no exact length available) */
 } dfile_t;
@@ -310,6 +324,71 @@ static long disk_len( dfile_t *fp )
 
 /* ---- the five stdio low-level primitives --------------------------------- */
 
+/* Per-handle iomode table (Watcom handleio/c/iomode.c + stiomode.c, both pure C,
+   no INT 21h). fdopen()/freopen()/dup() consult it to learn a handle's
+   read/write/text/append flags, so _sopen MUST register every handle it opens.
+   Handles 0/1/2 are pre-seeded by iomode.c's __init_mode (stdin=_READ,
+   stdout/stderr=_WRITE); we register slots DISK_FIRST_FD.. as we open them.
+
+   Only the streamio harness exercises fdopen()/dup() and thus links the iomode
+   objects; the diskio/fscanf harnesses do not. OMF resolves EVERY external ref
+   in a linked object (even from unreferenced functions such as dup()), so gate
+   the iomode calls behind DISKIO_IOMODE -- defined only by build-streamio.sh --
+   to keep this shared diskio.obj linkable in the leaner harnesses. */
+#ifdef DISKIO_IOMODE
+extern int _WCNEAR __SetIOMode_grow( int handle, unsigned value );
+extern unsigned _WCNEAR __GetIOMode( int handle );
+#define REGISTER_IOMODE( h, v )     ((void)__SetIOMode_grow( (h), (v) ))
+#define QUERY_IOMODE( h )           __GetIOMode( (h) )
+
+/* Translate an open() access mode into the iomode flag word fdopen() expects
+   (values from <stdio.h>: _READ 0x1, _WRITE 0x2, _BINARY 0x40, _APPEND 0x80). */
+static unsigned iomode_flags_of( int mode )
+{
+    int      acc = mode & (O_RDONLY | O_WRONLY | O_RDWR);
+    unsigned f = 0;
+
+    if( acc == O_RDONLY || acc == O_RDWR )
+        f |= _READ;
+    if( acc == O_WRONLY || acc == O_RDWR )
+        f |= _WRITE;
+    if( mode & O_BINARY )
+        f |= _BINARY;
+    if( mode & O_APPEND )
+        f |= _APPEND;
+    return( f );
+}
+#else  /* !DISKIO_IOMODE: harness links no iomode table */
+#define REGISTER_IOMODE( h, v )     ((void)0)
+#define QUERY_IOMODE( h )           (0u)
+#endif
+
+/* CP/M's console is reached by the reserved name "CON" (and, so the UNCHANGED
+   Watcom clibtest that uses the NT CONIN$/CONOUT$ spellings also links, those).
+   A stream opened on it is a device: reads/writes route to the BDOS console, not
+   to a disk FCB. This is the streamio/iotest.c very first requirement --
+   con = fopen("CON","w") -- and freopen(CONSOLE_IN,...) onto std streams. */
+static int is_console_name( const char *name )
+{
+    static const char *const devs[] = { "CON", "CONIN$", "CONOUT$" };
+    int d;
+
+    for( d = 0; d < 3; d++ ) {
+        const char *a = name, *b = devs[d];
+        for( ;; ) {
+            int ca = *a, cb = *b;
+            if( ca >= 'a' && ca <= 'z' ) ca -= 'a' - 'A';   /* fold to upper */
+            if( ca != cb )
+                break;
+            if( ca == 0 )
+                return( 1 );                                /* full match */
+            a++;
+            b++;
+        }
+    }
+    return( 0 );
+}
+
 /* fopen -> _sopen: allocate a slot, open/create the CP/M file, return an fd. The
    pmode (permission) vararg is unused on CP/M-86 (no per-file mode bits). */
 _WCRTLINK int _sopen( const char *name, int mode, int shflag, ... )
@@ -326,13 +405,37 @@ _WCRTLINK int _sopen( const char *name, int mode, int shflag, ... )
         return( -1 );                               /* too many open files */
     fp = &dfiles[i];
 
+    /* Console device (fopen("CON")): no FCB, no BDOS OPEN/MAKE -- just mark it a
+       console and route __qread/__qwrite to the BDOS console. It always "opens";
+       reads return EOF (the streamio test never reads bytes back from CON, it
+       redirects stdin onto a real file first), writes go to C_WRITE. */
+    if( is_console_name( name ) ) {
+        acc = mode & (O_RDONLY | O_WRONLY | O_RDWR);
+        fp->is_con   = 1;
+        fp->readable = (unsigned char)(acc == O_RDONLY || acc == O_RDWR);
+        fp->writable = (unsigned char)(acc == O_WRONLY || acc == O_RDWR);
+        fp->append   = 0;
+        fp->text     = 1;
+        fp->wrote    = 0;
+        fp->pos      = 0;
+        fp->len      = 0;
+        fp->ateof    = 0;
+        fp->open_lrbc = 0xFF;
+        fp->used     = 1;
+        REGISTER_IOMODE( DISK_FIRST_FD + i, iomode_flags_of( mode ) | _ISTTY );
+        return( DISK_FIRST_FD + i );
+    }
+
     if( name_to_fcb( name, fp->fcb ) < 0 )
         return( -1 );
 
+    fp->is_con   = 0;
     acc = mode & (O_RDONLY | O_WRONLY | O_RDWR);
     fp->readable = (unsigned char)(acc == O_RDONLY || acc == O_RDWR);
     fp->writable = (unsigned char)(acc == O_WRONLY || acc == O_RDWR);
+    fp->append   = (unsigned char)((mode & O_APPEND) != 0);
     fp->text     = (unsigned char)((mode & O_BINARY) == 0);
+    fp->wrote    = 0;
     fp->pos      = 0;
     fp->len      = 0;
     fp->ateof    = 0;
@@ -373,6 +476,7 @@ _WCRTLINK int _sopen( const char *name, int mode, int shflag, ... )
     fp->used = 1;
     if( mode & O_APPEND )
         fp->pos = fp->len;
+    REGISTER_IOMODE( DISK_FIRST_FD + i, iomode_flags_of( mode ) );
     return( DISK_FIRST_FD + i );
 }
 
@@ -386,8 +490,17 @@ int _WCNEAR __qread( int handle, void *buffer, unsigned len )
     if( handle < DISK_FIRST_FD )
         return( 0 );                                /* console: no stdin here */
     fp = fd_to_file( handle );
-    if( fp == NULL || !fp->readable || fp->ateof )
+    if( fp == NULL || !fp->readable )
         return( 0 );
+    /* NOTE: do NOT short-circuit on a latched fp->ateof here. Watcom's fgetc()
+       re-calls __qread after a previous 0-byte (EOF) read (it gates on _cnt, not
+       a sticky EOF flag), and iotest.c "flushes" depends on that retry seeing a
+       byte another handle just fflush()ed. The read loop below re-derives EOF
+       from disk for a pure reader on every call, so a stale ateof cannot wedge
+       the stream shut. */
+    if( fp->is_con )                                /* CON device: no byte input */
+        return( 0 );
+    fp->ateof = 0;                                  /* recomputed below each call */
 
     while( total < len ) {
         long     rec = fp->pos >> 7;
@@ -395,6 +508,28 @@ int _WCNEAR __qread( int handle, void *buffer, unsigned len )
         unsigned avail = SECT - off;
         unsigned n = len - total;
         unsigned k;
+
+        /* Byte-exact EOF. For a handle that has WRITTEN (fp->wrote), fp->len is
+           the authoritative logical length -- iotest.c "r+b" writes 101 bytes
+           then fsetpos()es to offset 101 (inside record 0, bytes 0..127) and
+           asserts fgetc()==EOF; without the exact len we would hand back the
+           Ctrl-Z padding at dma[101]. For a PURE READER, fp->len was only the
+           snapshot taken at open, so re-derive it from disk on demand -- this is
+           how iotest.c "flushes" sees a byte another handle just fflush()ed
+           (one "w" handle + one "r" handle on the same file). */
+        if( fp->pos >= fp->len ) {
+            if( !fp->wrote ) {
+                long dl = disk_len( fp );           /* re-read length off disk */
+                if( dl > fp->len )
+                    fp->len = dl;
+            }
+            if( fp->pos >= fp->len ) {
+                fp->ateof = 1;
+                break;
+            }
+        }
+        if( fp->len - fp->pos < (long)avail )       /* don't cross the exact end */
+            avail = (unsigned)( fp->len - fp->pos );
 
         if( load_record( fp, rec ) != 0 ) {         /* no data at/after here */
             fp->ateof = 1;
@@ -442,6 +577,16 @@ int _WCNEAR __qwrite( int handle, const void *buffer, unsigned len )
     fp = fd_to_file( handle );
     if( fp == NULL || !fp->writable )
         return( -1 );
+    if( fp->is_con ) {                              /* fopen("CON")/freopen -> console */
+        unsigned i;
+        for( i = 0; i < len; i++ )
+            _bdos_conout( in[i] );
+        return( (int)len );
+    }
+
+    if( fp->append )                                /* C append: divert to EOF */
+        fp->pos = fp->len;
+    fp->wrote = 1;                                  /* len is now authoritative */
 
     while( total < len ) {
         long     rec = fp->pos >> 7;
@@ -532,6 +677,10 @@ int _WCNEAR __close( int handle )
     fp = fd_to_file( handle );
     if( fp == NULL )
         return( -1 );
+    if( fp->is_con ) {                              /* console device: just free */
+        fp->used = 0;
+        return( 0 );
+    }
     _bdos( BD_CLOSE, (unsigned)(size_t)&fp->fcb[0] );
     if( cache_fp == fp )
         cache_fp = NULL;
@@ -569,6 +718,23 @@ int unlink( const char *name )
     return( remove( name ) );
 }
 
+/* exit(status): CP/M-86 has NO DOS INT 21h/4Ch, but Watcom's own exit() bottoms
+   into _exit -> __exit which terminates via exactly that -- forbidden here. So
+   this is the CP/M-86 replacement. Flush + close every open FILE* first (via
+   __full_io_exit, so a buffered failure message the streamio test wrote to the
+   console is actually emitted) and then BDOS System Reset (fn 0) ends the
+   process. streamio/iotest.c only calls exit() on a VERIFY/EXPECT failure, so on
+   a clean run this is never reached -- but every build must resolve it. */
+extern void _WCNEAR __full_io_exit( void );
+_WCRTLINK void exit( int status )
+{
+    (void)status;
+    __full_io_exit();
+    _bdos( 0, 0 );                                  /* BDOS fn 0: System Reset */
+    for( ;; )                                       /* not reached */
+        ;
+}
+
 /* ---- Low-level POSIX I/O + rename: the handleio-layer seam ----------------
  *
  * Watcom's own handleio open/creat/read/write/close (bld/clib/handleio/c/*.c)
@@ -576,9 +742,10 @@ int unlink( const char *name )
  * so THIS file is the CP/M-86 replacement for that whole layer. These thin
  * POSIX entry points let a program (and Watcom's UNCHANGED clibtest
  * handleio/iotest.c) use fd-level I/O directly; they resolve onto the very same
- * dfiles[] handle table and BDOS record primitives the FILE* seam uses, and
- * deliberately skip Watcom's per-handle iomode table (__GetIOMode /
- * __handle_check), matching the rest of this seam. (ow#3 clibtest GAP.)
+ * dfiles[] handle table and BDOS record primitives the FILE* seam uses. _sopen
+ * now also registers each handle in Watcom's per-handle iomode table
+ * (__SetIOMode_grow, pure C -- no INT 21h) so fdopen()/freopen()/dup() can learn
+ * a handle's read/write/text flags. (ow#3 clibtest GAP.)
  */
 
 /* open(name, mode[, pmode]) -> _sopen. CP/M-86 has no per-file permission bits,
@@ -610,6 +777,48 @@ _WCRTLINK int close( int handle )
 {
     return( __close( handle ) );
 }
+
+/* dup(oldfd): return a second handle onto the same stream. Watcom's own
+   handleio/c/dup.c bottoms into a TinyDOS INT 21h duplicate -- forbidden here --
+   so this is the CP/M-86 replacement. The streamio clibtest only ever dups a
+   console handle: old_stdout_fd = dup(fileno(stdout)), then fdopen()s it and
+   prints the final "Tests completed" banner through it. So we implement the
+   console case fully (a fresh is_con slot routing to C_WRITE); a disk dup would
+   need shared-position refcounting the seam does not carry, so it is refused. */
+_WCRTLINK int dup( int handle )
+{
+    dfile_t *fp;
+    int      i;
+
+    for( i = 0; i < DISK_MAX; i++ )                 /* find a free slot */
+        if( !dfiles[i].used )
+            break;
+    if( i >= DISK_MAX ) {
+        errno = EMFILE;
+        return( -1 );
+    }
+    fp = &dfiles[i];
+
+    if( handle >= 0 && handle <= 2 ) {              /* dup of a std console handle */
+        fp->is_con   = 1;
+        fp->readable = (unsigned char)(handle == STDIN_FILENO);
+        fp->writable = (unsigned char)(handle != STDIN_FILENO);
+        fp->append   = 0;
+        fp->text     = 1;
+        fp->wrote    = 0;
+        fp->pos      = 0;
+        fp->len      = 0;
+        fp->ateof    = 0;
+        fp->open_lrbc = 0xFF;
+        fp->used     = 1;
+        REGISTER_IOMODE( DISK_FIRST_FD + i, QUERY_IOMODE( handle ) );
+        return( DISK_FIRST_FD + i );
+    }
+
+    errno = EBADF;                                  /* disk dup not supported */
+    return( -1 );
+}
+
 
 /* tell(h) == lseek(h, 0, SEEK_CUR): byte-exact current position. */
 _WCRTLINK long tell( int handle )
@@ -684,7 +893,10 @@ int rename( const char *old, const char *new )
 
 extern void _WCNEAR (*__RmTmpFileFn)( FILE *fp );   /* defined in Watcom fclose */
 
-#define TMPFILE_MAX 4                               /* concurrent tmpfile()s */
+#define TMPFILE_MAX 16                              /* concurrent tmpfile()s;
+                                                       iotest opens NUM_FILES=10
+                                                       at once (must not exceed
+                                                       DISK_MAX slots) */
 
 static struct {
     FILE *fp;

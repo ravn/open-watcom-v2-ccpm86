@@ -24,8 +24,12 @@ void __fatal_runtime_error( char __far *msg, int rc ) { (void)msg; (void)rc; for
 
 /* __full_io_exit registers in the YI (fini) table via iob.c's AYIN; our crt0
    never walks that table (we fflush explicitly), so it is never called -- but
-   the static YI record holds its address, so the symbol must resolve. */
+   the static YI record holds its address, so the symbol must resolve. Builds
+   that link the REAL finalizer (streamio: ioexit.obj, which also gives the real
+   fcloseall) define HAVE_IOEXIT to drop this stub and avoid a duplicate. */
+#ifndef HAVE_IOEXIT
 void __full_io_exit( void ) {}
+#endif
 
 /* The disk build (build-diskio.sh) supplies the REAL __lseek in diskio.c, so
    exclude this stub there via -DDISKIO_LSEEK to avoid a duplicate symbol. */
@@ -56,5 +60,9 @@ int getche( void ) { return( -1 ); }
 
 /* fflush(NULL) would flush every open stream via flushall -> the __InitFiles
    stream-link list, which we don't build. We only ever fflush(stdout), so the
-   fp!=NULL path (a plain __flush) is taken; this stub covers the unused symbol. */
+   fp!=NULL path (a plain __flush) is taken; this stub covers the unused symbol.
+   Builds that genuinely exercise flushall() (streamio) link the real
+   flushall.obj and define HAVE_FLUSHALL to drop this stub. */
+#ifndef HAVE_FLUSHALL
 int flushall( void ) { return( 0 ); }
+#endif

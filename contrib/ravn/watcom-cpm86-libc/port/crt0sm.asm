@@ -24,6 +24,12 @@ _cstart_:
 ; build (see port/cominit.c): empty for the cprintf-only demos, __InitFiles for
 ; stdio builds, +__setEFGfmt for float-printing builds.
         call    __CommonInit_
+; ow#3 streamio: Watcom's main(argc,argv) is __watcall -- argc in AX, argv in DX
+; -- and the object also EXTRNs the global __argc marker. We have no command
+; tail parser, so synthesise argv = { "IOTEST", NULL }: enough for the streamio
+; clibtest's strlwr(argv[0]) banner. Harmless to arg-less mains in other builds.
+        mov     ax, 1                   ; argc = 1
+        mov     dx, offset DGROUP:__argv
         call    main_
         xor     dx, dx
         mov     cl, 0
@@ -38,6 +44,12 @@ BEGDATA segment word public 'BEGDATA'
 BEGDATA ends
 
 _DATA   segment word public 'DATA'
+        public  __argc
+__argc  dw      1                       ; argc marker EXTRN'd by main's object
+__argname db    'IOTEST', 0
+        public  __argv
+__argv  dw      offset DGROUP:__argname ; argv[0]
+        dw      0                       ; argv[1] = NULL
 _DATA   ends
 
 STACK   segment word public 'STACK'
