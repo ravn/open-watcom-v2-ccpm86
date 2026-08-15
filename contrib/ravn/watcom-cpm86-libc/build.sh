@@ -21,7 +21,7 @@ OUTDIR="${OUTDIR:-build}"; mkdir -p "$OUTDIR"; cd "$OUTDIR"
 SRC=".."
 INC="-i=$B/lib_misc/h -i=$B/clib/streamio/h -i=$B/clib/h -i=$B/clib/intel/h -i=$B/watcom/h -i=$B/hdr/dos/h"
 CLIB="-bt=dos -0 -ms -zastd=c99 -zl -x"       # compile Watcom clib source
-USER="-bt=dos -0 -ms -zl"                     # compile our plain port + demo
+USER="-bt=dos -0 -ms -zl -zastd=c99"                     # compile our plain port + demo
 
 # --- Watcom clib objects (reused UNCHANGED from the scratch build tree) ---
 "$WCC" $CLIB $INC "$B/clib/streamio/c/prtf.c"     -fo=prtf.obj      # __prtf core

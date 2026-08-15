@@ -35,7 +35,7 @@ SRC=".."
 INC="-i=$B/lib_misc/h -i=$B/clib/streamio/h -i=$B/clib/h -i=$B/clib/heap/h -i=$B/clib/intel/h -i=$B/comp_cfg/h -i=$B/watcom/h -i=$B/hdr/dos/h"
 AINC="-i=$B/watcom/h -i=$B/comp_cfg/h"
 CLIB="-bt=dos -0 -ms -zastd=c99 -zl -x"       # compile Watcom clib source
-USER="-bt=dos -0 -ms -fpc -zl"                # our port + test (float => -fpc)
+USER="-bt=dos -0 -ms -fpc -zl -zastd=c99"                # our port + test (float => -fpc)
 
 cw() { "$WCC" $CLIB $INC "$1" -fo="$2"; }      # compile a Watcom clib source
 cwf() { "$WCC" $CLIB -fpc -i=$B/mathlib/h $INC "$1" -fo="$2"; } # float-bearing clib/mathlib source (-fpc!)

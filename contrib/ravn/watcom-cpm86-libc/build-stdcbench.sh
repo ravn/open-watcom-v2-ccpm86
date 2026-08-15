@@ -39,7 +39,7 @@ INC="-i=$SRC/test -i=$SCB -i=$B/hdr/dos/h -i=$B/lib_misc/h -i=$B/clib/streamio/h
 # numeric): applied to both the hot clib objects and the benchmark modules so
 # the score is a fair like-for-like comparison against the DR C reference.
 CLIB="-bt=dos -0 -ms -zastd=c99 -zl -otexan"    # compile Watcom clib source
-USER="-bt=dos -0 -ms -zl"                       # compile our port + scbport
+USER="-bt=dos -0 -ms -zl -zastd=c99"                       # compile our port + scbport
 SCBC="-bt=dos -0 -ms -zl -zastd=c99 -otexan"    # compile upstream stdcbench C99
 
 cw() { "$WCC" $CLIB $INC "$1" -fo="$2"; }        # a Watcom clib source

@@ -20,7 +20,7 @@ OUTDIR="${OUTDIR:-build-stdio}"; mkdir -p "$OUTDIR"; cd "$OUTDIR"
 SRC=".."
 INC="-i=$B/lib_misc/h -i=$B/clib/streamio/h -i=$B/clib/h -i=$B/clib/heap/h -i=$B/clib/intel/h -i=$B/comp_cfg/h -i=$B/watcom/h -i=$B/hdr/dos/h"
 CLIB="-bt=dos -0 -ms -zastd=c99 -zl -x"       # compile Watcom clib source
-USER="-bt=dos -0 -ms -zl"                     # compile our port + test
+USER="-bt=dos -0 -ms -zl -zastd=c99"                     # compile our port + test
 
 cw() { "$WCC" $CLIB $INC "$1" -fo="$2"; }     # compile a Watcom clib source
 
