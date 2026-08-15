@@ -41,8 +41,8 @@ USER="-bt=dos -0 -ms -zl -zastd=c99"                     # compile our plain por
 "$WASM" -ms -0 "$SRC/port/crt0sm.asm" -fo=crt0.obj   # CP/M-86 startup + BDOS exit
 "$WCC" $CLIB $INC "$SRC/port/cprintf.c" -fo=cprintf.obj  # __prtf + BDOS C_WRITE callback
 "$WCC" $USER $INC "$SRC/port/lowlevel.c" -fo=lowlevel.obj  # arena __brk/sbrk + wc_heap_init (crt0 seam)
-"$WCC" $USER "$SRC/port/stubs.c"        -fo=stubs.obj    # never-reached closure stubs
-"$WCC" $USER "$SRC/test/main.c"         -fo=main.obj
+"$WCC" $USER $INC "$SRC/port/stubs.c"        -fo=stubs.obj    # never-reached closure stubs
+"$WCC" $USER $INC "$SRC/test/main.c"         -fo=main.obj
 
 # --- link a CP/M-86 .CMD ---
 "$WLINK" format cpm86 op dosseg op quiet name demo.cmd \

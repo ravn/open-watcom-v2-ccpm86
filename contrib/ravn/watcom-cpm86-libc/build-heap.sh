@@ -64,7 +64,7 @@ cw "$B/clib/memory/c/memmove.c"    memmove.obj
 "$WASM" -ms -0 "$SRC/port/crt0sm.asm" -fo=crt0.obj
 cw "$SRC/port/cprintf.c"           cprintf.obj
 "$WCC" $USER $INC "$SRC/port/lowlevel.c" -fo=lowlevel.obj   # arena __brk/sbrk + _curbrk
-"$WCC" $USER "$SRC/port/stubs.c"    -fo=stubs.obj
+"$WCC" $USER $INC "$SRC/port/stubs.c"    -fo=stubs.obj
 "$WCC" $USER $INC "$SRC/test/heaptest.c" -fo=heaptest.obj
 
 # --- link a CP/M-86 .CMD ---
