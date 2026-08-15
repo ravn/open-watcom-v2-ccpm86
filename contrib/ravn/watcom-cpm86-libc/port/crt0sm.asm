@@ -1,6 +1,7 @@
         name    crt0sm
         extrn   main_ : near
         extrn   wc_heap_init_ : near
+        extrn   __CommonInit_ : near
         public  _cstart_
         public  _small_code_
 _small_code_    equ     0
@@ -17,6 +18,12 @@ _cstart_:
         mov     ss, ax
         mov     sp, offset DGROUP:stktop
         call    wc_heap_init_
+; ow#16: this minimal crt0 does not walk Watcom's XI init table, so run the C
+; runtime initializers here (must be AFTER wc_heap_init -- __InitFiles allocates
+; the stdout FILE buffer from the near heap). __CommonInit is macro-gated per
+; build (see port/cominit.c): empty for the cprintf-only demos, __InitFiles for
+; stdio builds, +__setEFGfmt for float-printing builds.
+        call    __CommonInit_
         call    main_
         xor     dx, dx
         mov     cl, 0

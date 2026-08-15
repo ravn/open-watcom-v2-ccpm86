@@ -14,7 +14,8 @@
 
 extern int owtest_main(void);   /* the test's own main(), renamed at compile */
 extern unsigned errors;         /* defined in fail.h (test TU); ++ per failure */
-extern void __InitFiles(void);  /* attaches the stdout FILE buffer (our seam) */
+/* stdout is attached by crt0 via __CommonInit (port/cominit.c, ow#16) before
+ * main() runs, so no __InitFiles() call is needed here. */
 
 #ifdef MAME_DONE
 #include "mamedone.h"           /* -i=<mame-tests> supplies this (owt-mame.sh) */
@@ -23,7 +24,6 @@ extern void __InitFiles(void);  /* attaches the stdout FILE buffer (our seam) */
 int main(void)
 {
     int rc;
-    __InitFiles();              /* stdout not yet live; crt0 does not walk init */
 #ifdef MAME_DONE
     mame_done(0xB000);          /* START edge for external MAME timing */
 #endif

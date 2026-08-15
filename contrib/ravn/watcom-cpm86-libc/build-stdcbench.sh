@@ -125,6 +125,7 @@ cw "$B/clib/search/c/qsort.c"      qsort.obj
 # Layer 2: our thin CP/M-86 seams + stdcbench glue
 # ---------------------------------------------------------------------------
 "$WASM" -ms -0 "$SRC/port/crt0sm.asm"  -fo=crt0.obj
+"$WCC" $USER $INC "$SRC/port/cominit.c"   -fo=cominit.obj   # crt0 runtime init (__InitFiles)
 "$WCC" $USER $INC "$SRC/port/stdioshim.c" -fo=stdioshim.obj
 "$WCC" $USER $INC "$SRC/port/lowlevel.c"  -fo=lowlevel.obj
 "$WCC" $USER $INC "$SRC/port/stubs.c"     -fo=stubs.obj
@@ -148,7 +149,7 @@ done
 # Link a CP/M-86 .CMD
 # ---------------------------------------------------------------------------
 "$WLINK" format cpm86 op dosseg op quiet name scb.cmd \
-  file crt0.obj file scbport.obj $SCBOBJS \
+  file crt0.obj file scbport.obj file cominit.obj $SCBOBJS \
   file stdioshim.obj file lowlevel.obj file stubs.obj \
   file printf.obj file fprtf.obj file fputc.obj file fputs.obj file puts.obj \
   file flush.obj file fflush.obj file ioalloc.obj file chktty.obj \

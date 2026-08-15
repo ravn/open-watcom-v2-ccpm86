@@ -119,8 +119,10 @@ Only two thin seams make it run, both in `port/stdioshim.c`:
 The `FILE` buffer itself comes from the near-heap proof above (each `FILE`'s
 `__stream_link` and buffer are `malloc`'d). `__InitFiles` — Watcom's own, and
 genuinely DOS-free (it only calls the arena `malloc` to attach a `__stream_link`
-to each std `FILE`) — is called once at startup; a fuller crt0 would run it off
-the `XI` init table via `__InitRtns` (see
+to each std `FILE`) — is now run automatically from `crt0` via `__CommonInit`
+(`port/cominit.c`), so programs no longer have to call it by hand (**ow#16**;
+before, a forgotten `__InitFiles` left `printf` silently emitting nothing). A
+fuller crt0 would instead walk the `XI` init table via `__InitRtns` (see
 `tasks/memory/reference_watcom_cpm86_startup_initfini.md`).
 
 ## What the stdcbench proof adds (`build-stdcbench.sh`)
@@ -133,7 +135,7 @@ helpers. `build-stdcbench.sh` compiles the **byte-identical upstream stdcbench
 sources** (the same tree `owc-drc/stdcbench` built on the DR C runtime) and
 links them against Open Watcom's **own, unchanged clib** plus our thin CP/M-86
 seams — no Digital Research C runtime, no `clears.l86`. Only `test/scbport.c`
-(the stdcbench glue: a BDOS `T_GET` clock, `__InitFiles`, `main`) is ours.
+(the stdcbench glue: a BDOS `T_GET` clock and `main`) is ours.
 
 **Two run-verified results:**
 
@@ -172,7 +174,8 @@ nor retires the `double` ABI seam.
 | `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback (direct console printf) |
 | `port/stdioshim.c` | Layer-2 seam: `__qwrite` (BDOS console write) + `isatty` for the FILE\* path |
 | `port/lowlevel.c` | Layer-2 seam: arena `__brk`/`sbrk` + `_curbrk` (near-heap bottom) |
-| `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, BDOS exit, `__STK` stub) |
+| `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, `__CommonInit`, BDOS exit, `__STK` stub) |
+| `port/cominit.c` | `__CommonInit` — crt0-invoked runtime init (ow#16): `__InitFiles` (+ `__setEFGfmt` when `-DCOMMONINIT_EFG`); empty under `-DCOMMONINIT_NOSTDIO` for cprintf-only demos |
 | `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`, `errno`, read-path `__lseek`/`fsync`) |
 | `port/errnoptr.c` | `__get_errno_ptr_` for mathlib `_matherr` (returns `&errno`; avoids duplicating the `errno` global that `stubs.c` owns) |
 | `port/abortcpm.c` | lightweight `abort()` = CP/M-86 warm-boot (BDOS 0), avoids Watcom's signal/raise machinery (float regression tests' `fail.h` references it) |
@@ -182,7 +185,7 @@ nor retires the `double` ABI seam.
 | `test/floattest.c` | double soft-float demo driver / oracle |
 | `test/whetstone.c` | Whetstone benchmark driver (libm + `%e` printf) / oracle |
 | `test/owtdrv.c` | PASS/FAIL driver wrapping Watcom's own `float01..float04` (`-Dmain=owtest_main`); prints one `OWTEST: PASS/FAIL` verdict |
-| `test/scbport.c` | stdcbench glue: BDOS `T_GET` clock, `__InitFiles`, `main`, `mame_done` |
+| `test/scbport.c` | stdcbench glue: BDOS `T_GET` clock, `main`, `mame_done` (init via crt0 `__CommonInit`) |
 | `test/portme.h` | stdcbench 0.8 port config (integer c90base+c90lib set) |
 
 ## Toolchain
@@ -257,8 +260,8 @@ Tracked in ravn/rc7xx-work#6:
    run-verified): compiled `-fpc`, Whetstone links Watcom's **unchanged**
    soft-float `__FDx` runtime, its transcendental library, and the real
    `_EFG_Format` (→ `__LDcvt`) float formatter — the latter installed at
-   startup by calling `__setEFGfmt()` from `main()` (our minimal crt0 does not
-   walk the init table). The transcendentals + 80-bit long-double software
+   startup by `__CommonInit` (`port/cominit.c`, built `-DCOMMONINIT_EFG`), which
+   `crt0` calls before `main` (our minimal crt0 does not walk the init table). The transcendentals + 80-bit long-double software
    layer are pulled from Watcom's prebuilt **msdos.286** mathlib (no msdos.086
    mathlib was ever built); those objects are software-float and INT-21h-free.
    All 10 per-module check values match, to the printed 4 significant digits,

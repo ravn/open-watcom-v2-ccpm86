@@ -44,13 +44,9 @@
 #define WHET_END()   ((void)0)
 #endif
 
-/* CP/M-86 Layer-2 seam init (see stdiotest.c / floattest.c): our minimal
-   crt0 does not walk Watcom's init table, so we run the two DOS-free
-   initializers ourselves -- __InitFiles() attaches the stdout FILE buffer,
-   __setEFGfmt() points printf's %e/%f/%g formatter at Watcom's real
-   _EFG_Format (mathlib efgfmt.c/ldcvt.c) instead of the noefgfmt stub. */
-extern void __InitFiles( void );
-extern void __setEFGfmt( void );
+/* CP/M-86 runtime init (__InitFiles + __setEFGfmt) now runs from crt0 via
+   __CommonInit (port/cominit.c, built here with -DCOMMONINIT_EFG) -- ow#16,
+   so main() no longer has to attach stdout or install the EFG formatter. */
 
 /* map the FORTRAN math functions to the C versions */
 #define DSIN	sin
@@ -77,9 +73,6 @@ int main(void)
 	long I;
 	long N1, N2, N3, N4, N6, N7, N8, N9, N10, N11;
 	double X1, X2, X3, X4, X, Y, Z;
-
-	__InitFiles();
-	__setEFGfmt();
 
 	WHET_START();
 

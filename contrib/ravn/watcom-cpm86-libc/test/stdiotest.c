@@ -18,16 +18,11 @@
 
 #include <stdio.h>
 
-/* Attach a __stream_link (buffer holder) to each std FILE. In a full Watcom
-   startup this runs off the XI init table (via __InitRtns); our minimal CP/M-86
-   crt0 defers table-walking, so we invoke this one genuinely-DOS-free initializer
-   ourselves before the first stdio call. It only calls our arena malloc -- see
-   reference_watcom_cpm86_startup_initfini.md for the documented crt0 upgrade. */
-extern void __InitFiles( void );
+/* Stream buffers are attached by crt0 via __CommonInit (port/cominit.c) before
+   main() runs -- ow#16 -- so stdout is already live on the first stdio call. */
 
 int main( void )
 {
-    __InitFiles();
     printf( "printf %d %s\n", 42, "ok" );
     puts( "puts line" );
     fputs( "fputs line\n", stdout );

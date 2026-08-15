@@ -118,6 +118,7 @@ assert_no_286 "$MATH286_SRC"/*.obj
 
 # --- our thin CP/M-86 seam (Layer 2) + the PASS/FAIL driver ---
 "$WASM" -ms -0 "$SRC/port/crt0sm.asm" -fo=crt0.obj
+"$WCC" $USER $INC "$SRC/port/cominit.c"   -fo=cominit.obj   # crt0 runtime init (__InitFiles)
 "$WCC" $USER $INC "$SRC/port/stdioshim.c" -fo=stdioshim.obj
 "$WCC" $USER $INC "$SRC/port/lowlevel.c"  -fo=lowlevel.obj
 "$WCC" $USER $INC "$SRC/port/stubs.c"     -fo=stubs.obj
@@ -125,7 +126,7 @@ assert_no_286 "$MATH286_SRC"/*.obj
 "$WCC" $USER $INC "$SRC/port/abortcpm.c"  -fo=abortcpm.obj
 "$WCC" $USER $INC ${OWT_EXTRA:-} "$SRC/test/owtdrv.c" -fo=owtdrv.obj
 
-SEAM="file crt0.obj file owtdrv.obj file stdioshim.obj file lowlevel.obj \
+SEAM="file crt0.obj file cominit.obj file owtdrv.obj file stdioshim.obj file lowlevel.obj \
   file printf.obj file fprintf.obj file fprtf.obj file fputc.obj file fputs.obj \
   file puts.obj file flush.obj file fflush.obj file ioalloc.obj file chktty.obj \
   file iob.obj file initfile.obj file ferror.obj \
@@ -165,7 +166,7 @@ for t in $TESTS; do
     echo "SKIP $t: does not compile with this toolchain"; sed 's/^/    cc> /' "$t.cc.log" | head -8
     continue
   fi
-  assert_no_8087 "$t.obj" crt0.obj owtdrv.obj stdioshim.obj lowlevel.obj stubs.obj abortcpm.obj
+  assert_no_8087 "$t.obj" crt0.obj cominit.obj owtdrv.obj stdioshim.obj lowlevel.obj stubs.obj abortcpm.obj
 
   "$WLINK" format cpm86 op dosseg op quiet name "$t.cmd" \
     $SEAM file "$t.obj" $LIBS 2>"$t.ln.log" || { echo "LINK FAIL $t:"; sed 's/^/    ln> /' "$t.ln.log" | head -20; PASS_ALL=0; continue; }

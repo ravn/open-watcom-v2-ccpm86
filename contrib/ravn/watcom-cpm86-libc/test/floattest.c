@@ -5,9 +5,9 @@
  * runtime (__FDM/__FDD/__FDA/__FDS + __FDI4 double->long). No inline 8087 opcode
  * is emitted or executed and no interrupt-vector emulator is installed.
  *
- * Printing uses the already-proven stdio FILE* write-path; as in stdiotest.c our
- * minimal crt0 does not walk Watcom's init table, so we call the DOS-free
- * __InitFiles() ourselves and fflush(stdout) at the end.
+ * Printing uses the already-proven stdio FILE* write-path; stdout is attached
+ * by crt0 via __CommonInit (port/cominit.c, ow#16) before main() runs, so we
+ * only fflush(stdout) at the end.
  *
  * Oracle (hand-computed, independent of the compiler):
  *     a=355, b=113
@@ -18,8 +18,6 @@
  */
 #include <stdio.h>
 
-extern void __InitFiles( void );
-
 int main( void )
 {
     volatile double a = 355.0, b = 113.0;
@@ -28,7 +26,6 @@ int main( void )
     long add = (long)(a + b);
     long sub = (long)(a - b);
 
-    __InitFiles();
     printf( "pi6=%ld mul=%ld add=%ld sub=%ld\n", pi6, mul, add, sub );
     fflush( stdout );
     return( 0 );

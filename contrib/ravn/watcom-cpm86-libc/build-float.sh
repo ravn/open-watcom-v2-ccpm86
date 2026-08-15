@@ -90,6 +90,7 @@ aw "$B/fpuemu/i86/asm/emustub.asm" emustub.obj       # FIxRQQ stubs + no-op emu 
 
 # --- our thin CP/M-86 seam (Layer 2) + the float test ---
 "$WASM" -ms -0 "$SRC/port/crt0sm.asm" -fo=crt0.obj
+"$WCC" $USER $INC "$SRC/port/cominit.c"   -fo=cominit.obj   # crt0 runtime init (__InitFiles)
 "$WCC" $USER $INC "$SRC/port/stdioshim.c" -fo=stdioshim.obj
 "$WCC" $USER $INC "$SRC/port/lowlevel.c"  -fo=lowlevel.obj
 "$WCC" $USER $INC "$SRC/port/stubs.c"     -fo=stubs.obj
@@ -113,6 +114,7 @@ echo "soft-float: $NFD runtime __FDx call site(s) in floattest.obj (not folded)"
 # --- link a CP/M-86 .CMD ---
 "$WLINK" format cpm86 op dosseg op quiet name floattest.cmd \
   file crt0.obj file floattest.obj file stdioshim.obj file lowlevel.obj \
+  file cominit.obj \
   file printf.obj file fprintf.obj file fprtf.obj file fputc.obj file fputs.obj \
   file puts.obj file flush.obj file fflush.obj file ioalloc.obj file chktty.obj \
   file iob.obj file initfile.obj file ferror.obj \
@@ -152,7 +154,7 @@ assert_no_8087() {
   done
   [ "$bad" -eq 0 ] || exit 2
 }
-assert_no_8087 floattest.obj crt0.obj stdioshim.obj lowlevel.obj stubs.obj
+assert_no_8087 floattest.obj crt0.obj cominit.obj stdioshim.obj lowlevel.obj stubs.obj
 
 # --- purity gate: zero INT 21h (DOS) AND zero executed 8087 trap (INT 34-3D) ---
 python3 - floattest.cmd <<'PY'

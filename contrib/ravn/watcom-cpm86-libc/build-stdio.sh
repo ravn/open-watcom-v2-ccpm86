@@ -78,6 +78,7 @@ cw "$B/clib/memory/c/memmove.c"    memmove.obj
 
 # --- our thin CP/M-86 seam (Layer 2) + test ---
 "$WASM" -ms -0 "$SRC/port/crt0sm.asm" -fo=crt0.obj
+"$WCC" $USER $INC "$SRC/port/cominit.c"   -fo=cominit.obj   # crt0 runtime init (__InitFiles)
 "$WCC" $USER $INC "$SRC/port/stdioshim.c" -fo=stdioshim.obj  # __qwrite + isatty
 "$WCC" $USER $INC "$SRC/port/lowlevel.c"  -fo=lowlevel.obj   # arena __brk/sbrk
 "$WCC" $USER $INC "$SRC/port/stubs.c"     -fo=stubs.obj
@@ -86,6 +87,7 @@ cw "$B/clib/memory/c/memmove.c"    memmove.obj
 # --- link a CP/M-86 .CMD ---
 "$WLINK" format cpm86 op dosseg op quiet name stdiotest.cmd \
   file crt0.obj file stdiotest.obj file stdioshim.obj file lowlevel.obj \
+  file cominit.obj \
   file printf.obj file fprintf.obj file fprtf.obj file fputc.obj file fputs.obj \
   file puts.obj file flush.obj file fflush.obj file ioalloc.obj file chktty.obj \
   file iob.obj file initfile.obj file ferror.obj \

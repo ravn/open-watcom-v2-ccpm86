@@ -36,11 +36,9 @@
 
 /* Watcom's genuine stdio std streams are dead until __InitFiles attaches a
    __stream_link to each __iob entry (the static FILE has _link == NULL, and
-   _FP_BASE(fp) == fp->_link->_base).  __InitFiles is DOS-free (only near-heap
-   malloc), so we call it once at the top of main -- exactly as the stdio
-   milestone (test/stdiotest.c) proved.  See tasks/memory/
-   reference_watcom_cpm86_startup_initfini.md. */
-extern void __InitFiles( void );
+   _FP_BASE(fp) == fp->_link->_base).  crt0 now runs __InitFiles via
+   __CommonInit (port/cominit.c, ow#16) before main(), so stdout is already
+   live here -- no per-program init call needed. */
 
 /* Concurrent CP/M-86 T_GET (BDOS fn 105 / 0x69): entry CL = 105, DX = DAT
    offset, DS = DAT segment; fills the DAT structure {word day since 1978-01-01;
@@ -117,8 +115,6 @@ void abort( void )
 int main( void )
 {
     unsigned long score;
-
-    __InitFiles();
 
     printf( "\n%s\n", stdcbench_name_version_string );
     score = stdcbench();
