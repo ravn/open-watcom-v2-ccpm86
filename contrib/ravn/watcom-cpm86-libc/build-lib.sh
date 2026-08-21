@@ -122,6 +122,16 @@ cw string/c/strerror.c strerror.obj
 cw string/c/sprintf.c  sprintf.obj
 cw string/c/vsprintf.c vsprintf.obj
 
+echo "==> Layer 1: string/time/math additions used by Info-ZIP zip"
+cw string/c/strncat.c  strncat.obj      # zip name handling
+cw string/c/strstr.c   strstr.obj       # zip option/name scanning
+cw string/c/strlwr.c   strlwr.obj       # _strlwr (kept for completeness)
+cw memory/c/memchr.c   memchr.obj       # pulled by asctime
+cw math/c/div.c        div.obj          # pulled by asctime
+cw time/c/asctime.c    asctime.obj      # zip -T / listing timestamps
+"$WCC" $CLIB $INC -i="$B/clib/math/h" "$B/clib/math/c/rand.c" -fo=rand.obj  # rand + srand (crypt seed; needs randnext.h)
+cw memory/c/fmemset.c  fmemset.obj      # _fmemset far fill (far-data model)
+
 echo "==> Layer 1: ctype table"
 cw char/c/istable.c    istable.obj      # __IsTable / __Bits classification table
 
@@ -328,6 +338,8 @@ rm -f clibcpm.lib
     +strlen.obj +strcmp.obj +strcpy.obj +strncpy.obj +strcat.obj +strncmp.obj \
     +strnicmp.obj +strchr.obj +strrchr.obj +strupr.obj +strerror.obj \
     +sprintf.obj +vsprintf.obj +istable.obj \
+    +strncat.obj +strstr.obj +strlwr.obj +asctime.obj +rand.obj +fmemset.obj \
+    +memchr.obj +div.obj \
     +itoa.obj +ltoa.obj +lltoa.obj +alphabet.obj +wctomb.obj \
     +atoi.obj +strtol.obj +strtok.obj +setbits.obj +bits.obj +toupper.obj +setvbuf.obj \
     +prtf.obj +noefgfmt.obj \
