@@ -44,9 +44,35 @@ extern unsigned char _bdos( unsigned char fn, unsigned param );
     value [al]                  \
     modify [ax bx cx dx es];
 
+/* _fbdos: FCB-bearing BDOS gateway that loads DS from a FAR FCB pointer (see the
+ * full rationale in diskio.c). Needed here because readdir() calls set_dma()
+ * before F_SFIRST/F_SNEXT, leaving DS at dma[]'s segment rather than the search
+ * FCB's -- under the large model that made the directory search read a stale
+ * segment. */
+extern unsigned char _fbdos( unsigned char fn, void __far *fcb );
+#pragma aux _fbdos =            \
+    "push ds"                   \
+    "push es"                   \
+    "pop  ds"                   \
+    "int  0E0h"                 \
+    "pop  ds"                   \
+    parm [cl] [es dx]           \
+    value [al]                  \
+    modify [ax bx cx dx es];
+
 extern unsigned _getds( void );
 #pragma aux _getds =            \
     "mov ax,ds"                 \
+    value [ax]                  \
+    modify [ax];
+
+/* _getss: the DGROUP segment.  In the large model DGROUP is SS-based here
+ * (statics are addressed ss:, and _fbdos relies on es==ss to pass an FCB's
+ * segment), while DS floats.  dma[] is a DGROUP static, so its real segment is
+ * SS -- that, not the floating DS, is what F_DMASEG must be given. */
+extern unsigned _getss( void );
+#pragma aux _getss =           \
+    "mov ax,ss"                 \
     value [ax]                  \
     modify [ax];
 
@@ -82,7 +108,7 @@ typedef struct {
  * on the load-time default DMA base still being live). */
 static void set_dma( void )
 {
-    _bdos( BD_SETDMASEG, _getds() );
+    _bdos( BD_SETDMASEG, _getss() );        /* dma[] lives in DGROUP == SS */
     _bdos( BD_SETDMA, (unsigned)(size_t)&dma[0] );
 }
 
@@ -193,8 +219,8 @@ _WCRTLINK struct dirent *readdir( DIR *dirp )
 
     set_dma();
     for( ;; ) {
-        al = _bdos( d->first ? BD_SFIRST : BD_SNEXT,
-                    (unsigned)(size_t)&d->fcb[0] );
+        al = _fbdos( d->first ? BD_SFIRST : BD_SNEXT,
+                    (void __far *)&d->fcb[0] );
         d->first = 0;
         if( al == 0xFF )                            /* 0xFF = no more matches  */
             return( NULL );

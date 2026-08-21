@@ -49,6 +49,31 @@ extern unsigned char _bdos( unsigned char fn, unsigned param );
     value [al]                  \
     modify [ax bx cx dx es];
 
+/* _fbdos: a BDOS gateway for the FCB-bearing calls. Unlike _bdos (which passes
+ * only the FCB offset in DX and leaves the segment implicit in DS), _fbdos takes
+ * a FAR pointer and loads DS from its segment for the duration of the INT 0E0h.
+ *
+ * WHY this exists: BDOS reads the FCB at DS:DX. The old _bdos assumed DS==DGROUP
+ * (true only in near-data models). Under the LARGE model (-ml, far data) DS
+ * floats -- e.g. set_dma() touches dma[] and leaves DS==dma's segment, so a
+ * following _bdos(F_SFIRST, &fcb) would read the FCB from the WRONG segment.
+ * Worked example (the "name not matched" bug): stat("FILE.TXT") built a correct
+ * FCB {'FILE    TXT'} in bdos_fcb, but F_SFIRST ran with DS=2CE9 while bdos_fcb
+ * lived at DGROUP 1CF1 -> BDOS saw an empty name '' and never matched the file.
+ * Loading DS from the FCB pointer itself makes every FCB call correct regardless
+ * of the ambient DS. (The DMA buffer is targeted separately via BD_SETDMASEG, an
+ * absolute segment, so the search result still lands in dma[].) */
+extern unsigned char _fbdos( unsigned char fn, void __far *fcb );
+#pragma aux _fbdos =            \
+    "push ds"                   \
+    "push es"                   \
+    "pop  ds"                   \
+    "int  0E0h"                 \
+    "pop  ds"                   \
+    parm [cl] [es dx]           \
+    value [al]                  \
+    modify [ax bx cx dx es];
+
 extern unsigned _getds( void );
 #pragma aux _getds =            \
     "mov ax,ds"                 \
@@ -130,6 +155,15 @@ static dfile_t        dfiles[DISK_MAX];
 static unsigned char  dma[SECT];        /* our 128-byte DMA / work buffer */
 static dfile_t       *cache_fp;         /* which file's record is in dma */
 static long           cache_rec;        /* which record is in dma (valid iff cache_fp) */
+
+/* Shared scratch FCB for the name-only BDOS calls (stat/remove/chmod/rename).
+ * MUST live in DGROUP, not on the stack: _bdos passes the FCB in DX and the
+ * BDOS reads it at DS:DX -- a stack-local FCB is at SS:offset, and in this model
+ * SS != DS, so BDOS would read an empty/garbage FCB (the "name not matched" bug:
+ * F_SFIRST searched for '' and never found FILE.TXT). One buffer suffices because
+ * these calls are synchronous and single-threaded (no BDOS re-entrancy), and no
+ * two of them are ever live at the same time. */
+static unsigned char  bdos_fcb[36];
 
 /* ---- stdin/stdout redirection (shell-style  < file  > file  >> file) -------
    CP/M's CCP has no I/O redirection, so a hosted program does it ITSELF: after
@@ -311,7 +345,7 @@ static int load_record( dfile_t *fp, long rec )
                 return( 0 );                     /* already fresh in dma[] */
             fcb_set_record( w->fcb, rec );
             set_dma();
-            rc = _bdos( BD_READRAND, (unsigned)(size_t)w->fcb );
+            rc = _fbdos( BD_READRAND, (void __far *)w->fcb );
             if( rc == 1 || rc == 4 ) {
                 memset( dma, CPM_EOF, SECT );
                 cache_fp = NULL;
@@ -334,7 +368,7 @@ static int load_record( dfile_t *fp, long rec )
 
     fcb_set_record( fp->fcb, rec );
     set_dma();
-    rc = _bdos( BD_READRAND, (unsigned)(size_t)fp->fcb );
+    rc = _fbdos( BD_READRAND, (void __far *)fp->fcb );
     if( rc == 1 || rc == 4 ) {          /* 1 = reading unwritten data, 4 = past EOF */
         memset( dma, CPM_EOF, SECT );
         cache_fp = NULL;
@@ -359,7 +393,7 @@ static long text_eof( dfile_t *fp )
     int   i;
 
     set_dma();
-    _bdos( BD_FILESIZE, (unsigned)(size_t)&fp->fcb[0] );
+    _fbdos( BD_FILESIZE, (void __far *)&fp->fcb[0] );
     records = (long)fp->fcb[FCB_R0 + 0]
             | ((long)fp->fcb[FCB_R0 + 1] << 8)
             | ((long)fp->fcb[FCB_R0 + 2] << 16);
@@ -387,7 +421,7 @@ static long disk_len( dfile_t *fp )
     if( fp->text )
         return( text_eof( fp ) );
     set_dma();
-    _bdos( BD_FILESIZE, (unsigned)(size_t)&fp->fcb[0] );
+    _fbdos( BD_FILESIZE, (void __far *)&fp->fcb[0] );
     records = (long)fp->fcb[FCB_R0 + 0]
             | ((long)fp->fcb[FCB_R0 + 1] << 8)
             | ((long)fp->fcb[FCB_R0 + 2] << 16);
@@ -545,14 +579,14 @@ _WCRTLINK int _sopen( const char *name, int mode, int shflag, ... )
         fp->fcb[FCB_LRBC] = 0xFF;
 
     if( mode & O_TRUNC ) {
-        _bdos( BD_DELETE, (unsigned)(size_t)&fp->fcb[0] );
-        if( _bdos( BD_MAKE, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF )
+        _fbdos( BD_DELETE, (void __far *)&fp->fcb[0] );
+        if( _fbdos( BD_MAKE, (void __far *)&fp->fcb[0] ) == 0xFF )
             return( -1 );
         /* fresh/empty file: exact length is 0 */
-    } else if( _bdos( BD_OPEN, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF ) {
+    } else if( _fbdos( BD_OPEN, (void __far *)&fp->fcb[0] ) == 0xFF ) {
         if( !(mode & O_CREAT) )
             return( -1 );
-        if( _bdos( BD_MAKE, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF )
+        if( _fbdos( BD_MAKE, (void __far *)&fp->fcb[0] ) == 0xFF )
             return( -1 );
         /* fresh/empty file: exact length is 0 */
     } else {
@@ -753,7 +787,7 @@ int _WCNEAR __qwrite( int handle, const void *buffer, unsigned len )
         memcpy( &dma[off], in + total, n );
         fcb_set_record( fp->fcb, rec );
         set_dma();
-        if( _bdos( BD_WRITERND, (unsigned)(size_t)&fp->fcb[0] ) != 0 )
+        if( _fbdos( BD_WRITERND, (void __far *)&fp->fcb[0] ) != 0 )
             break;                                  /* disk full / error */
         cache_fp = fp;                              /* dma still holds this record */
         cache_rec = rec;
@@ -833,7 +867,7 @@ int _WCNEAR __close( int handle )
         fp->used = 0;
         return( 0 );
     }
-    _bdos( BD_CLOSE, (unsigned)(size_t)&fp->fcb[0] );
+    _fbdos( BD_CLOSE, (void __far *)&fp->fcb[0] );
     /* Write-side exact length (LRBC) -- KNOWN_ISSUES #2. On CP/M 3+ / Concurrent
        CP/M-86 (the RC759's OS) a program records a file's exact byte length by
        re-issuing F_ATTRIB (BDOS fn 30) AFTER close with the F6' request flag set
@@ -852,7 +886,7 @@ int _WCNEAR __close( int handle )
         if( lrbc != 0 ) {
             fp->fcb[6]        |= 0x80;              /* F6' = "set byte count"      */
             fp->fcb[FCB_LRBC]  = lrbc;             /* FCB+32 = used bytes, last rec */
-            _bdos( BD_ATTRIB, (unsigned)(size_t)&fp->fcb[0] );
+            _fbdos( BD_ATTRIB, (void __far *)&fp->fcb[0] );
             fp->fcb[6]        &= 0x7F;              /* clear F6' again (tidy up)    */
         }
     }
@@ -874,13 +908,13 @@ int isatty( int handle )
    primitive Watcom's own clibtest (streamio/file) uses to clean temp files. */
 int remove( const char *name )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
 
     if( name_to_fcb( name, fcb ) < 0 ) {
         errno = ENOENT;
         return( -1 );
     }
-    if( _bdos( BD_DELETE, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+    if( _fbdos( BD_DELETE, (void __far *)&fcb[0] ) == 0xFF ) {
         errno = ENOENT;
         return( -1 );
     }
@@ -903,7 +937,7 @@ int unlink( const char *name )
    attributes; BDOS returns 0xFF when no directory entry matched. */
 int chmod( const char *name, mode_t pmode )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
 
     if( name_to_fcb( name, fcb ) < 0 ) {
         errno = ENOENT;
@@ -913,7 +947,7 @@ int chmod( const char *name, mode_t pmode )
         fcb[FCB_TYPE] &= 0x7F;                      /* writable: clear R/O bit */
     else
         fcb[FCB_TYPE] |= 0x80;                      /* read-only: set R/O bit  */
-    if( _bdos( BD_ATTRIB, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+    if( _fbdos( BD_ATTRIB, (void __far *)&fcb[0] ) == 0xFF ) {
         errno = ENOENT;
         return( -1 );
     }
@@ -948,13 +982,13 @@ int chmod( const char *name, mode_t pmode )
    mask to stay inside our work buffer. */
 static int stat_probe( const char *name, unsigned char *ent )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
     int           al;
 
     if( name_to_fcb( name, fcb ) < 0 )
         return( -1 );
     set_dma();
-    al = _bdos( BD_SFIRST, (unsigned)(size_t)&fcb[0] );
+    al = _fbdos( BD_SFIRST, (void __far *)&fcb[0] );
     if( al == 0xFF )
         return( 0 );
     memcpy( ent, &dma[(al & 3) * 32], 32 );
@@ -993,7 +1027,7 @@ _WCRTLINK int access( const char *name, int mode )
 _WCRTLINK int stat( const char *name, struct stat *buf )
 {
     unsigned char ent[32];
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
     long          records;
     mode_t        perm;
 
@@ -1011,7 +1045,7 @@ _WCRTLINK int stat( const char *name, struct stat *buf )
        and the mismatch derails length-driven callers such as UnZip's
        end-of-central-directory scan (G.ziplen = statbuf.st_size). */
     name_to_fcb( name, fcb );
-    _bdos( BD_FILESIZE, (unsigned)(size_t)&fcb[0] );
+    _fbdos( BD_FILESIZE, (void __far *)&fcb[0] );
     records = (long)fcb[FCB_R0 + 0]
             | ((long)fcb[FCB_R0 + 1] << 8)
             | ((long)fcb[FCB_R0 + 2] << 16);
@@ -1019,12 +1053,12 @@ _WCRTLINK int stat( const char *name, struct stat *buf )
     memset( buf, 0, sizeof( *buf ) );
     buf->st_size = records * SECT;                    /* record-rounded default */
     if( records > 0 && os_has_lrbc() ) {
-        unsigned char ofcb[36];
+        unsigned char *ofcb = bdos_fcb;  /* reuse shared scratch (records saved) */
         name_to_fcb( name, ofcb );
         ofcb[FCB_LRBC] = 0xFF;                        /* ask CP/M 3+ for the LRBC */
-        if( _bdos( BD_OPEN, (unsigned)(size_t)&ofcb[0] ) != 0xFF ) {
+        if( _fbdos( BD_OPEN, (void __far *)&ofcb[0] ) != 0xFF ) {
             unsigned char lrbc = ofcb[FCB_LRBC];
-            _bdos( BD_CLOSE, (unsigned)(size_t)&ofcb[0] );
+            _fbdos( BD_CLOSE, (void __far *)&ofcb[0] );
             if( lrbc != 0xFF )                        /* exact final-record length */
                 buf->st_size = (records - 1) * SECT + (lrbc == 0 ? SECT : lrbc);
         }
@@ -1204,7 +1238,7 @@ _WCRTLINK int eof( int handle )
    directory entry's name+type in place, keeping the file's data blocks. */
 int rename( const char *old, const char *new )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
     unsigned char nfcb[36];
     int           i;
 
@@ -1216,7 +1250,7 @@ int rename( const char *old, const char *new )
         fcb[16 + i] = 0;
     for( i = FCB_NAME; i < FCB_TYPE + 3; i++ )      /* copy name(1..8)+type(9..11) */
         fcb[16 + i] = nfcb[i];
-    if( _bdos( BD_RENAME, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+    if( _fbdos( BD_RENAME, (void __far *)&fcb[0] ) == 0xFF ) {
         errno = ENOENT;
         return( -1 );
     }

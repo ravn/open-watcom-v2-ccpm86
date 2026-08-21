@@ -59,16 +59,47 @@ static unsigned __cpm86_fh_base_seg  = 0;   /* 0 == base page not read yet */
 static unsigned __cpm86_fh_total_paras;     /* whole Extra group, in paragraphs */
 static unsigned __cpm86_fh_used_paras;      /* paragraphs already carved out */
 
+/* The linker merges program FAR_DATA and OPTION FARHEAP into one type-3 EXTRA
+ * group.  This marker lives in FAR_DATA in farheap.obj, which is pulled from the
+ * library after the application objects, so its far offset is the first byte
+ * after the application's initialized far data.  Starting the heap at
+ * ceil(marker+1) avoids overwriting that data.
+ *
+ * Example: ZIP.CMD's header has Extra G_LENGTH=G_MIN=423 paras.  With
+ * carve-from-0 the first _fmalloc formats a heapblk at EXTRA:0000, corrupting
+ * Zip's far string tables; a later allocation spins in __MemAllocator's
+ * free-list walk.  The marker lands at the end of those 423 paras, so the first
+ * heap slab starts at EXTRA+423 instead. */
+static unsigned char __far __cpm86_fh_data_end_marker;
+
+static unsigned __cpm86_fh_marker_paras( void )
+{
+    union {
+        unsigned char __far *p;
+        unsigned             w[2];       /* w[0]=offset, w[1]=segment */
+    } u;
+    unsigned off;
+
+    u.p = &__cpm86_fh_data_end_marker;
+    off = u.w[0] + 1;
+    return( ( off + 15 ) >> 4 );
+}
+
 static void __cpm86_fh_init( void )
 {
     unsigned char near  *le = CPM86_BP_EXTRA_LEN;
     unsigned long        last_off;
+    unsigned             data_paras;
 
     last_off = (unsigned long)le[0]
              | ( (unsigned long)le[1] << 8 )
              | ( (unsigned long)le[2] << 16 );
     __cpm86_fh_total_paras = (unsigned)( ( last_off + 1 ) >> 4 );
     __cpm86_fh_base_seg = *CPM86_BP_EXTRA_SEG;
+    data_paras = __cpm86_fh_marker_paras();
+    __cpm86_fh_used_paras = data_paras < __cpm86_fh_total_paras
+                          ? data_paras
+                          : __cpm86_fh_total_paras;
 }
 
 __segment __AllocSeg( unsigned int amount )

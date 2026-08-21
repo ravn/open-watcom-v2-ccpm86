@@ -20,15 +20,24 @@
 #include <stddef.h>
 
 int _ismbblead( unsigned int c ) { (void)c; return 0; }
-void __fatal_runtime_error( char __far *msg, int rc ) { (void)msg; (void)rc; for( ;; ) ; }
+/* NEAR: the clib declares this `_WCNEAR __fatal_runtime_error` (streamio/h),
+   so noefgfmt / __InitFiles reach it via a NEAR call. In a far-code model
+   (medium/large) a plain definition would compile FAR (retf) and the near
+   caller's stack would mismatch on return -> control returns to a bogus CS.
+   `__near` forces a near (ret) body; it is a no-op in near-code models
+   (small/compact), so their stubs.obj stays byte-identical. */
+void __near __fatal_runtime_error( char __far *msg, int rc ) { (void)msg; (void)rc; for( ;; ) ; }
 
 /* __full_io_exit registers in the YI (fini) table via iob.c's AYIN; our crt0
    never walks that table (we fflush explicitly), so it is never called -- but
    the static YI record holds its address, so the symbol must resolve. Builds
    that link the REAL finalizer (streamio: ioexit.obj, which also gives the real
    fcloseall) define HAVE_IOEXIT to drop this stub and avoid a duplicate. */
+/* NEAR: clib header declares `_WCNEAR __full_io_exit` and iob.c's AYIN record
+   holds its address as a near (offset-only) pointer, so the definition must be
+   near to match the fixup. `__near` is a no-op in near-code models. */
 #ifndef HAVE_IOEXIT
-void __full_io_exit( void ) {}
+void __near __full_io_exit( void ) {}
 #endif
 
 /* The disk build (build-diskio.sh) supplies the REAL __lseek in diskio.c, so
@@ -74,8 +83,12 @@ int errno;
    -- disk streams never take that branch, so both are unreachable but must
    resolve. Guarded so the other builds' stubs.obj stays byte-identical. */
 #ifdef DISKIO_LSEEK
+/* __flushall/getche NEAR: fgetc's __fill_buffer (declared with `_WCNEAR
+   __flushall`) NEAR-calls __flushall on the TTY branch; a far-code definition
+   would return via retf and corrupt CS. `__near` matches the header's linkage
+   (no-op in near-code models). getche stays default (far, public API). */
 int tolower( int c ) { return( ( c >= 'A' && c <= 'Z' ) ? c + ( 'a' - 'A' ) : c ); }
-int __flushall( int mask ) { (void)mask; return( 0 ); }
+int __near __flushall( int mask ) { (void)mask; return( 0 ); }
 int getche( void ) { return( -1 ); }
 #endif
 
