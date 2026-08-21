@@ -90,7 +90,14 @@ case "$MODEL" in
   # data -- see cmd_check.py [F1] + test/compact_farheap_test.c; heaptest's small
   # far data does not hit it.)
   c) ZMFLAG=""    ; CRT0SRC="crt0cm.asm" ; LIBNAME="clibc.lib"  ; CRT0NAME="cstartcm.obj"  ;;
-  *) echo "MODEL must be s, m or c (got '$MODEL')" >&2; exit 1 ;;
+  # LARGE = medium's FAR code (-zm per-function *_TEXT, `_big_code_` marker,
+  # far calls/retf) + compact's FAR data (-ml also defines __BIG_DATA__, so the
+  # SAME fmalloc.c far-heap path as compact is active). Only new artifact is
+  # crt0lm.asm (== crt0mm's far-code startup; far-data needs nothing there).
+  # Motivating deliverable: Info-ZIP `zip`, whose pristine source only type-
+  # checks under a far-DATA model (flush_block char far* vs char*, E1129).
+  l) ZMFLAG="-zm" ; CRT0SRC="crt0lm.asm" ; LIBNAME="clibl.lib"  ; CRT0NAME="cstartlm.obj"  ;;
+  *) echo "MODEL must be s, m, c or l (got '$MODEL')" >&2; exit 1 ;;
 esac
 echo "==> building CP/M-86 clib for MODEL=$MODEL  (-m$MODEL $ZMFLAG -> $LIBNAME + $CRT0NAME)"
 

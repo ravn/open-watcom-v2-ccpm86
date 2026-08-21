@@ -39,13 +39,36 @@ WORK="$(mktemp -d)"; [ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$WORK"' EXIT
 
 # model -> (zm-flag, lib, crt0, extra-link-options)
 model_zm()   { case $1 in m) echo "-zm";; *) echo "";; esac; }
-model_lib()  { case $1 in s) echo clibs.lib;; m) echo clibm.lib;; c) echo clibc.lib;; esac; }
-model_crt()  { case $1 in s) echo cstartcpm.obj;; m) echo cstartmm.obj;; c) echo cstartcm.obj;; esac; }
-model_link() { case $1 in c) echo "option farheap=0x30000";; *) echo "";; esac; }
-model_libm() { case $1 in s) echo libms.lib;; m) echo libmm.lib;; c) echo libmc.lib;; esac; }
+model_lib()  { case $1 in s) echo clibs.lib;; m) echo clibm.lib;; c) echo clibc.lib;; l) echo clibl.lib;; esac; }
+model_crt()  { case $1 in s) echo cstartcpm.obj;; m) echo cstartmm.obj;; c) echo cstartcm.obj;; l) echo cstartlm.obj;; esac; }
+model_link() { case $1 in c|l) echo "option farheap=0x30000";; *) echo "";; esac; }
+model_libm() { case $1 in s) echo libms.lib;; m) echo libmm.lib;; c) echo libmc.lib;; l) echo libml.lib;; esac; }
 
 pass=0; fail=0; skip=0
 declare -a RESULTS
+# _rec: append a result AND echo it live (feedback_show_progress_on_long_runs).
+_rec() { RESULTS+=("$1"); printf '   >> %s\n' "$1"; }
+
+# guard: run a command with a HARD per-test wall-clock timeout so a hung guest
+# (e.g. the far-data stdin/redir spin) cannot stall the whole matrix. macOS has
+# no timeout(1)/gtimeout, so use perl's alarm. stdin/stdout/stderr pass straight
+# through (perl exec inherits fds), so it composes inside a `printf | guard ... |
+# tr` pipeline. On timeout the child is SIGKILL'd and guard exits 124 -> the test
+# just yields empty/partial output and is scored RUN-FAIL, and the run CONTINUES.
+: "${TEST_TIMEOUT:=25}"          # seconds per individual test (override via env)
+guard() {
+    perl -e '
+        my $t = shift @ARGV;
+        my $pid = fork();
+        die "fork: $!" unless defined $pid;
+        if ($pid == 0) { exec { $ARGV[0] } @ARGV or exit 127; }
+        local $SIG{ALRM} = sub { kill "KILL", $pid; waitpid($pid, 0); exit 124; };
+        alarm $t;
+        waitpid($pid, 0);
+        exit($? >> 8);
+    ' "$TEST_TIMEOUT" "$@"
+}
+
 
 # run_test <model> <name> <src> <runner:uni|emu2> <oracle-mode:exact|substr> <oracle> [cflags] [+libm] [stdin]
 # 7th arg adds compile flags (e.g. -fpc); 8th "libm" also links the math library;
@@ -57,7 +80,7 @@ run_test() {
     libmlib=""; [ "$wantm" = libm ] && libmlib="library $LIBDIR/$(model_libm "$model")"
     d="$WORK/$model-$name"; mkdir -p "$d"
     if ! "$WCC" -bt=dos -0 -m"$model" $zm $xcflags -zastd=c99 $INC -i="$B/mathlib/h" "test/$src" -fo="$d/t.obj" >"$d/cc.log" 2>&1; then
-        RESULTS+=("$model  $name  COMPILE-FAIL"); fail=$((fail+1)); return
+        _rec "$model  $name  COMPILE-FAIL"; fail=$((fail+1)); return
     fi
     cmd="$d/${name}.cmd"
     # shellcheck disable=SC2086
@@ -65,19 +88,19 @@ run_test() {
         name "$cmd" file "$LIBDIR/$crt" file "$d/t.obj" library "$LIBDIR/$lib" $libmlib >"$d/link.log" 2>&1
     if [ ! -f "$cmd" ]; then
         local undef; undef="$(grep -oE "undefined (reference|symbol) [A-Za-z0-9_]+" "$d/link.log" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
-        RESULTS+=("$model  $name  LINK-FAIL  undef: ${undef:-?}"); fail=$((fail+1)); return
+        _rec "$model  $name  LINK-FAIL  undef: ${undef:-?}"; fail=$((fail+1)); return
     fi
     if [ "$runner" = emu2 ]; then
-        out="$(printf '%s' "$xstdin" | "$EMU2" "$cmd" 2>/dev/null | tr -d '\r\000')"
+        out="$(printf '%s' "$xstdin" | guard "$EMU2" "$cmd" 2>/dev/null | tr -d '\r\000')"
     else
-        out="$(printf '%s' "$xstdin" | "$PY" "$RUNNER" "$cmd" 2>"$d/run.log" | tr -d '\r\000')"
+        out="$(printf '%s' "$xstdin" | guard "$PY" "$RUNNER" "$cmd" 2>"$d/run.log" | tr -d '\r\000')"
     fi
     local ok=0
     if [ "$omode" = exact ]; then [ "$out" = "$oracle" ] && ok=1; else echo "$out" | grep -q "$oracle" && ok=1; fi
     if [ "$ok" = 1 ]; then
-        RESULTS+=("$model  $name  PASS"); pass=$((pass+1))
+        _rec "$model  $name  PASS"; pass=$((pass+1))
     else
-        RESULTS+=("$model  $name  RUN-FAIL  got: $(echo "$out" | head -1)"); fail=$((fail+1))
+        _rec "$model  $name  RUN-FAIL  got: $(echo "$out" | head -1)"; fail=$((fail+1))
         [ "${KEEP:-0}" = 1 ] && cp "$cmd" "./FAIL-$model-$name.cmd" 2>/dev/null
     fi
 }
@@ -94,7 +117,7 @@ run_redir() {
     zm="$(model_zm "$model")"; lib="$(model_lib "$model")"; crt="$(model_crt "$model")"; lopt="$(model_link "$model")"
     d="$WORK/$model-redir"; mkdir -p "$d"
     if ! "$WCC" -bt=dos -0 -m"$model" $zm -zastd=c99 $INC "test/redirtest.c" -fo="$d/t.obj" >"$d/cc.log" 2>&1; then
-        RESULTS+=("$model  redir  COMPILE-FAIL"); fail=$((fail+1)); return
+        _rec "$model  redir  COMPILE-FAIL"; fail=$((fail+1)); return
     fi
     cmd="$d/redir.cmd"
     # shellcheck disable=SC2086
@@ -102,21 +125,21 @@ run_redir() {
         name "$cmd" file "$LIBDIR/$crt" file "$d/t.obj" library "$LIBDIR/$lib" >"$d/link.log" 2>&1
     if [ ! -f "$cmd" ]; then
         local undef; undef="$(grep -oE "undefined (reference|symbol) [A-Za-z0-9_]+" "$d/link.log" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
-        RESULTS+=("$model  redir  LINK-FAIL  undef: ${undef:-?}"); fail=$((fail+1)); return
+        _rec "$model  redir  LINK-FAIL  undef: ${undef:-?}"; fail=$((fail+1)); return
     fi
     # emu2 maps the run dir as drive A:; the redirect operands must reach the CP/M
     # command tail as literal argv, so quote them (else the HOST shell redirects).
     ( cd "$d" && printf 'HELLO WORLD\032' > IN.TXT && rm -f OUT.TXT \
-        && "$EMU2" redir.cmd WORLD '<IN.TXT' '>OUT.TXT' >/dev/null 2>&1 )
+        && guard "$EMU2" redir.cmd WORLD '<IN.TXT' '>OUT.TXT' >/dev/null 2>&1 )
     if [ ! -f "$d/OUT.TXT" ]; then
-        RESULTS+=("$model  redir  RUN-FAIL  no OUT.TXT"); fail=$((fail+1)); return
+        _rec "$model  redir  RUN-FAIL  no OUT.TXT"; fail=$((fail+1)); return
     fi
     got="$(tr -d '\r\n' < "$d/OUT.TXT" | tr -d '\032')"
     want="argc=2 [WORLD]HELLO WORLD|bytes=11"
     if [ "$got" = "$want" ]; then
-        RESULTS+=("$model  redir  PASS"); pass=$((pass+1))
+        _rec "$model  redir  PASS"; pass=$((pass+1))
     else
-        RESULTS+=("$model  redir  RUN-FAIL  got: $got"); fail=$((fail+1))
+        _rec "$model  redir  RUN-FAIL  got: $got"; fail=$((fail+1))
     fi
 }
 
@@ -150,7 +173,7 @@ for m in $MODELS; do
     if [ "$m" != m ]; then
         run_test "$m" conin coninput_test.c uni substr "n=2 f=314159 i=42" "-fpc" libm $'3.14159 42\n'
     else
-        RESULTS+=("$m  conin  SKIP  (medium stdin FILE* hang -- KNOWN_ISSUES.md)"); skip=$((skip+1))
+        _rec "$m  conin  SKIP  (medium stdin FILE* hang -- KNOWN_ISSUES.md)"; skip=$((skip+1))
     fi
     # disk needs the file BDOS only emu2 emulates; emu2 now also applies P_LOAD
     # relocation (ravn/emu2-cpm86#1), so it runs medium/compact .CMDs too -- disk
