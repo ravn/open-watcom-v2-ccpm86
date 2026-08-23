@@ -34,11 +34,11 @@ RUNNER="$OW/contrib/ravn/cpm86run_unicorn.py"
 EMU2="${EMU2:-/Users/ravn/z80/emu2-cpm86/emu2}"
 PY="${PYTHON:-python3}"
 INC="-i=$B/lib_misc/h -i=$B/clib/streamio/h -i=$B/clib/string/h -i=$B/clib/h -i=$B/clib/heap/h -i=$B/clib/intel/h -i=$B/watcom/h -i=$B/hdr/dos/h"
-MODELS="${MODELS:-s m c}"
+MODELS="${MODELS:-s m c l}"
 WORK="$(mktemp -d)"; [ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$WORK"' EXIT
 
 # model -> (zm-flag, lib, crt0, extra-link-options)
-model_zm()   { case $1 in m) echo "-zm";; *) echo "";; esac; }
+model_zm()   { case $1 in m|l) echo "-zm";; *) echo "";; esac; }
 model_lib()  { case $1 in s) echo clibs.lib;; m) echo clibm.lib;; c) echo clibc.lib;; l) echo clibl.lib;; esac; }
 model_crt()  { case $1 in s) echo cstartcpm.obj;; m) echo cstartmm.obj;; c) echo cstartcm.obj;; l) echo cstartlm.obj;; esac; }
 model_link() { case $1 in c|l) echo "option farheap=0x30000";; *) echo "";; esac; }

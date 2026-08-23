@@ -21,6 +21,14 @@ medium. Note `sscanf` (the `scanf` row) exercises the same `%`-parser + `__cnvs2
 float read in all three models and passes — only the console *byte source* in
 medium is affected.
 
+**Narrowed 2026-08-23: it is the NEAR-data + far-code combination, not far code.**
+The LARGE model (far code + FAR data) runs `conin` AND `redir` GREEN. So the hang
+is specific to medium's far-code / **near-data** layout, not far code per se —
+which points at the stdin FILE\* buffer / handle-0 state living in DGROUP (near)
+being reached wrongly from the far-code stdin path. Large model (same far code,
+but data far) does not hit it. Good next probe: compare the `__qread(0)`/`getc`
+buffer access in a medium vs large disassembly.
+
 **Also affects command-tail redirection in medium.** `test/redirtest.c`
 (`redir` row, `< > >>` I/O redirection) copies stdin→stdout, so it too hits the
 medium stdin read: with `<IN.TXT` the disk-fed `redir_in` read faults (emu2
