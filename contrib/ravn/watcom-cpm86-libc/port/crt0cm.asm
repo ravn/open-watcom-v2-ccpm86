@@ -62,14 +62,18 @@ _cstart_:
 ; allocates the stdout FILE buffer). __CommonInit is macro-gated per build
 ; (see port/cominit.c).
         call    __CommonInit_
-; Watcom's main(argc,argv) is __watcall -- argc in AX, argv in DX. Parse the
-; CP/M-86 command tail (base page DS:0080h = length, DS:0081h.. = chars,
-; space-separated) into a real argv vector. argv and the base page are NEAR
-; data (DGROUP), unaffected by the far data model.
+; Watcom's main(argc,argv) is __watcall. In COMPACT model (far DATA) a `char *`
+; is a FAR pointer, so each argv[] entry is 4 bytes (offset,segment) and argv is
+; passed as a FAR pointer in CX:BX (segment CX, offset BX) -- NOT small model's
+; near DX. The strings (program name in _prog0, tokens in the base page) all live
+; in DGROUP == DS, so every argv[i] segment word is simply DS. Parse the CP/M-86
+; command tail (base page DS:0080h = length, DS:0081h.. chars, space-separated)
+; into that far argv vector.
         mov     di, offset DGROUP:_argvtab
         mov     ax, offset DGROUP:_prog0
-        mov     [di], ax                ; argv[0] = program name
-        add     di, 2
+        mov     [di], ax                ; argv[0] offset = program name
+        mov     [di+2], ds              ; argv[0] segment = DGROUP
+        add     di, 4                   ; far-pointer stride
         mov     bx, 1                   ; argc = 1
         mov     si, 81h                 ; first command-tail character
         mov     cl, byte ptr ds:[80h]   ; tail length
@@ -86,8 +90,9 @@ ct_skip:
 ct_tok:
         cmp     bx, 32                  ; argv table guard (32 slots)
         jae     ct_done
-        mov     [di], si                ; argv[argc] = token start
-        add     di, 2
+        mov     [di], si                ; argv[argc] offset = token start
+        mov     [di+2], ds              ; argv[argc] segment = DGROUP
+        add     di, 4                   ; far-pointer stride
         inc     bx
 ct_scan:
         cmp     si, bp
@@ -103,16 +108,19 @@ ct_cut:
 ct_end:
         mov     byte ptr [si], 0        ; terminate final token (within base page)
 ct_done:
-        mov     word ptr [di], 0        ; argv[argc] = NULL
+        mov     word ptr [di], 0        ; argv[argc] = NULL (far ptr = 0:0)
+        mov     word ptr [di+2], 0
         mov     word ptr ds:__argc, bx  ; publish argc to the marker
         mov     ax, bx                  ; argc -> AX (__watcall)
-        mov     dx, offset DGROUP:_argvtab   ; argv -> DX
+        mov     bx, offset DGROUP:_argvtab   ; argv offset -> BX
+        mov     cx, ds                       ; argv segment -> CX (far ptr CX:BX)
 ; ow: apply shell-style stdin/stdout redirection (< > >>) on the command tail.
 ; __CommonRedirect scans argv, opens the redirect files, compacts argv in place
 ; and returns the surviving argc in AX (no-op in builds without the disk layer).
-; DX is call-clobbered, so reload the argv pointer before calling main.
+; CX:BX are call-clobbered, so reload the far argv pointer before calling main.
         call    __CommonRedirect_
-        mov     dx, offset DGROUP:_argvtab   ; argv -> DX (reload after the call)
+        mov     bx, offset DGROUP:_argvtab   ; argv offset -> BX (reload)
+        mov     cx, ds                       ; argv segment -> CX (reload)
         call    main_
 ; ow: flush + commit any redirected stdout file before the CP/M system reset.
         call    __CommonRedirectClose_
@@ -135,7 +143,7 @@ __argc  dw      1                       ; argc marker EXTRN'd by main's object
 _prog0  db      'UNZIP', 0              ; argv[0]
         public  __argv
 __argv  label   word                    ; keep the public symbol some objs EXTRN
-_argvtab dw     33 dup(0)               ; argv[]: 32 slots + NULL terminator
+_argvtab dd     33 dup(0)               ; argv[]: 32 FAR-pointer slots + NULL (compact: 4 B each)
 _DATA   ends
 
 ; Stack size: 512 B overflows deep call chains (see crt0sm.asm for the UnZip

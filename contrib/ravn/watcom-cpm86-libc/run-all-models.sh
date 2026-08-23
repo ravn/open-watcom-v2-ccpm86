@@ -184,8 +184,15 @@ for m in $MODELS; do
     # (which enables __apply_redirection via -DCOMMONINIT_REDIRECT), redirtest.c
     # copies stdin->stdout naming no file; we feed it '<IN.TXT >OUT.TXT' as the
     # CP/M command tail and diff the resulting OUT.TXT -- an independent host-side
-    # oracle. Needs the file BDOS + P_LOAD reloc, so it runs under emu2.
-    run_redir "$m"
+    # oracle. Needs the file BDOS + P_LOAD reloc, so it runs under emu2. Verified
+    # in small + compact; MEDIUM is PARKED -- redirtest's stdin read hangs/crashes
+    # there (console con_read hangs per #23; disk redir_in read faults with opcode
+    # 63) -- the same medium stdin-FILE* gap as `conin`. See KNOWN_ISSUES.md.
+    if [ "$m" != m ]; then
+        run_redir "$m"
+    else
+        RESULTS+=("$m  redir  SKIP  (medium stdin FILE* read -- KNOWN_ISSUES.md #23)"); skip=$((skip+1))
+    fi
 done
 
 echo

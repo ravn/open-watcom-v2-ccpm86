@@ -21,6 +21,20 @@ medium. Note `sscanf` (the `scanf` row) exercises the same `%`-parser + `__cnvs2
 float read in all three models and passes — only the console *byte source* in
 medium is affected.
 
+**Also affects command-tail redirection in medium.** `test/redirtest.c`
+(`redir` row, `< > >>` I/O redirection) copies stdin→stdout, so it too hits the
+medium stdin read: with `<IN.TXT` the disk-fed `redir_in` read faults (emu2
+"unimplemented opcode 63" — a wild fetch), and with console stdin it hangs like
+`conin`. So `redir` is verified in **small + compact** and SKIPped in medium
+(same #23 root cause). The argv build and stdout (`>`) redirect DO work in medium
+(OUT.TXT gets the argv line); only the stdin read is broken. **Compact `redir`
+was separately broken and is now FIXED**: `crt0cm.asm` built argv[] as 2-byte
+near pointers, but compact `char *` is a 4-byte FAR pointer and `main`/`
+__CommonRedirect` take argv as a far pointer in CX:BX — so every `argv[i]` read as
+garbage (`argc=3 [] []`), the `>`/`<` operands were unrecognised, and no
+redirection happened. Fixed by emitting far argv entries (`dd`, offset+DS) and
+passing argv in CX:BX.
+
 Status legend: **BUG** (wrong result), **GAP** (unimplemented), **LIMIT**
 (inherent to the platform, not fixable in the library), **UNVERIFIED** (works
 under emu2 but not yet confirmed on the authoritative MAME/RC759 oracle).
