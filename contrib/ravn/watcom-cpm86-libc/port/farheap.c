@@ -87,16 +87,40 @@ static unsigned __cpm86_fh_marker_paras( void )
 
 static void __cpm86_fh_init( void )
 {
-    unsigned char near  *le = CPM86_BP_EXTRA_LEN;
-    unsigned long        last_off;
-    unsigned             data_paras;
+    unsigned    data_paras;
 
-    last_off = (unsigned long)le[0]
-             | ( (unsigned long)le[1] << 8 )
-             | ( (unsigned long)le[2] << 16 );
-    __cpm86_fh_total_paras = (unsigned)( ( last_off + 1 ) >> 4 );
     __cpm86_fh_base_seg = *CPM86_BP_EXTRA_SEG;
     data_paras = __cpm86_fh_marker_paras();
+
+#ifdef CPM86_FARHEAP_PARAS
+    /* Real CCP/M-86 (Concurrent 3.1) writes only G_MIN (the initialized far-data
+     * size) to DS:0x0C, NOT G_MAX (initialized + farheap reservation). The loader
+     * reserves G_MAX paragraphs at load time (that is why the farheap option size
+     * affects the "For lidt lager" load check), but init_base copies ldt_min --
+     * which is G_MIN -- into the base-page Extra length field.
+     *
+     * Consequence: the DS:0x0C fallback below gives total_paras = G_MIN =
+     * data_paras, so available_paras = 0 and every __AllocSeg call returns
+     * _NULLSEG. This macro is the fix: pass -DCPM86_FARHEAP_PARAS=N at
+     * compile time (N = farheap_bytes/16) so __AllocSeg can carve from the
+     * full reserved Extra region. N must match `op farheap=<farheap_bytes>`
+     * in the wlink command (build-zip-cpm86.sh does this via the FARHEAP
+     * shell variable). */
+    __cpm86_fh_total_paras = data_paras + (unsigned)CPM86_FARHEAP_PARAS;
+#else
+    /* Fallback: read from the base-page Extra descriptor. Works under emu2
+     * (which writes G_MAX) and unicorn; fails on real CCP/M-86 as noted above.
+     * Programs linked without -DCPM86_FARHEAP_PARAS use this path. */
+    {
+        unsigned char near  *le = CPM86_BP_EXTRA_LEN;
+        unsigned long        last_off;
+        last_off = (unsigned long)le[0]
+                 | ( (unsigned long)le[1] << 8 )
+                 | ( (unsigned long)le[2] << 16 );
+        __cpm86_fh_total_paras = (unsigned)( ( last_off + 1 ) >> 4 );
+    }
+#endif
+
     __cpm86_fh_used_paras = data_paras < __cpm86_fh_total_paras
                           ? data_paras
                           : __cpm86_fh_total_paras;
