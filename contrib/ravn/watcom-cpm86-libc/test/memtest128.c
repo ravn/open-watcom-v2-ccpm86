@@ -11,6 +11,7 @@
    which itself proves the emu2 fidelity gap this pairs with. */
 
 #include <stdint.h>
+#include <i86.h>
 #ifdef MAME_DONE
 #include "mamedone.h"
 #endif
@@ -36,29 +37,49 @@ struct mpb {
 
 int main( void )
 {
-    static struct mpb m;   /* static -> lives in DS (DGROUP), not SS */
-    unsigned bx;
+    static struct mpb m[4];   /* static -> lives in DS (DGROUP), not SS */
+    static unsigned min_want[4] = { 1, 4, 16, 64 };
+    static unsigned max_want[4] = { 4, 16, 64, 1024 };
+    unsigned i, j, bx, ok = 1, successes = 0;
 
-    m.start = 0;
-    m.min   = 0x0080;      /* 2 KB min  */
-    m.max   = 0x0400;      /* 64 KB wanted */
-    m.pdadr = 0;
-    m.flags = 0;
-
-    bx = _bdos_mem( 128, &m );
-
-    cprintf( "BDOS128 bx=%04x start=%04x max=%04x (paras)\r\n",
-             bx, m.start, m.max );
-    if( bx != 0xFFFF && m.start != 0 )
-        cprintf( "OK: granted %u paras (%u KB) at seg %04x\r\n",
-                 m.max, (unsigned)( m.max >> 6 ), m.start );
-    else
-        cprintf( "FAIL: fn 128 not supported / no memory\r\n" );
-
+    cprintf( "BDOS128 contract test\r\n" );
+    for( i = 0; i < 4; ++i ) {
+        m[i].start = 0;
+        m[i].min = min_want[i];
+        m[i].max = max_want[i];
+        m[i].pdadr = 0;
+        m[i].flags = 0;
+        bx = _bdos_mem( 128, &m[i] );
+        cprintf( "alloc min=%u bx=%04x start=%04x max=%u\r\n",
+                 min_want[i], bx, m[i].start, m[i].max );
+        if( bx == 0xFFFF )
+            continue; /* exhaustion is valid after earlier successful grants */
+        ++successes;
+        if( m[i].start == 0 || m[i].max < m[i].min ||
+            m[i].max > max_want[i] ) {
+            cprintf( "FAIL: invalid returned MPB\r\n" );
+            ok = 0;
+            continue;
+        }
+        {
+            unsigned char __far *p =
+                (unsigned char __far *)MK_FP( m[i].start, 0 );
+            unsigned long bytes = (unsigned long)m[i].max * 16UL;
+            unsigned char pattern = (unsigned char)( 0x31 + i );
+            for( j = 0; (unsigned long)j < bytes; ++j )
+                p[j] = pattern;
+            for( j = 0; (unsigned long)j < bytes; ++j )
+                if( p[j] != pattern ) {
+                    ok = 0;
+                    break;
+                }
+        }
+    }
+    cprintf( "BDOS128 result: %s (%u grants)\r\n",
+             ok && successes ? "PASS" : "FAIL", successes );
 #ifdef MAME_DONE
-    /* HI=1 if fn128 unsupported/failed, LO=granted paras low byte */
-    mame_done( (unsigned)( ( ( bx == 0xFFFF || m.start == 0 ) ? 1 : 0 ) << 8 )
-               | ( m.max & 0xFF ) );
+    mame_done( (unsigned)( ( ok && successes ? 0 : 1 ) << 8 )
+               | ( successes & 0xFF ) );
 #endif
-    return( 0 );
+    return ok && successes ? 0 : 1;
 }

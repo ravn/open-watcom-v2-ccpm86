@@ -42,8 +42,8 @@
 /* INT 0E0h: function in CL, parameter (near offset, or a segment for fn 51) in
    DX, result byte returned in AL. Small model => DS is the one data group, so a
    near &object is the DMA/FCB offset the BDOS wants. */
-extern unsigned char _bdos( unsigned char fn, unsigned param );
-#pragma aux _bdos =             \
+extern unsigned char _bdos_raw( unsigned char fn, unsigned param );
+#pragma aux _bdos_raw =         \
     "int 0E0h"                  \
     parm [cl] [dx]              \
     value [al]                  \
@@ -63,8 +63,8 @@ extern unsigned char _bdos( unsigned char fn, unsigned param );
  * Loading DS from the FCB pointer itself makes every FCB call correct regardless
  * of the ambient DS. (The DMA buffer is targeted separately via BD_SETDMASEG, an
  * absolute segment, so the search result still lands in dma[].) */
-extern unsigned char _fbdos( unsigned char fn, void __far *fcb );
-#pragma aux _fbdos =            \
+extern unsigned char _fbdos_raw( unsigned char fn, void __far *fcb );
+#pragma aux _fbdos_raw =        \
     "push ds"                   \
     "push es"                   \
     "pop  ds"                   \
@@ -73,6 +73,50 @@ extern unsigned char _fbdos( unsigned char fn, void __far *fcb );
     parm [cl] [es dx]           \
     value [al]                  \
     modify [ax bx cx dx es];
+
+/* BDOS call trace: C wrappers over the raw INT 0E0h gateways so every BDOS
+   call prints fn + args + return.  Console output uses _bdos_conout (a separate
+   gateway), so the trace's own printf does not recurse here.  A re-entrancy
+   guard is kept anyway for safety.  Gated behind CPM86_BDOS_TRACE. */
+#ifdef CPM86_BDOS_TRACE
+static int _bdos_tracing = 0;
+static unsigned char _bdos( unsigned char fn, unsigned param )
+{
+    unsigned char r = _bdos_raw( fn, param );
+    if( fn == 26 || fn == 51 )          /* skip per-record set-DMA noise */
+        return( r );
+    if( !_bdos_tracing ) {
+        _bdos_tracing = 1;
+        printf( "  <bdos fn=%d dx=%04x -> %02x>\n", (int)fn, param, (unsigned)r );
+        fflush( stdout );
+        _bdos_tracing = 0;
+    }
+    return( r );
+}
+static unsigned char _fbdos( unsigned char fn, void __far *fcb )
+{
+    unsigned char __far *f = (unsigned char __far *)fcb;
+    unsigned char r = _fbdos_raw( fn, fcb );
+    /* Only trace drive-0 (B:, the temp/archive) FCB calls -- skips the ~30
+       read-only A: .sys input scans that would otherwise flood the trace. */
+    if( f[0] != 0 )
+        return( r );
+    if( !_bdos_tracing ) {
+        _bdos_tracing = 1;
+        printf( "  <fbdos fn=%d drv=%d %c%c%c%c%c%c%c%c.%c%c%c ex=%d cr=%d -> %02x>\n",
+                (int)fn, (int)f[0],
+                f[1]&0x7F, f[2]&0x7F, f[3]&0x7F, f[4]&0x7F, f[5]&0x7F,
+                f[6]&0x7F, f[7]&0x7F, f[8]&0x7F, f[9]&0x7F, f[10]&0x7F, f[11]&0x7F,
+                (int)f[12], (int)f[32], (unsigned)r );
+        fflush( stdout );
+        _bdos_tracing = 0;
+    }
+    return( r );
+}
+#else
+#  define _bdos(fn,param)   _bdos_raw((fn),(param))
+#  define _fbdos(fn,fcb)    _fbdos_raw((fn),(fcb))
+#endif
 
 extern unsigned _getds( void );
 #pragma aux _getds =            \
@@ -867,7 +911,15 @@ int _WCNEAR __close( int handle )
         fp->used = 0;
         return( 0 );
     }
-    _fbdos( BD_CLOSE, (void __far *)&fp->fcb[0] );
+    /* Only F_CLOSE a file we actually WROTE.  A read-only file needs no close on
+       CP/M -- the directory is unchanged -- and on Concurrent CP/M-86 an F_CLOSE
+       of a file opened read-only on another (possibly write-protected/system)
+       drive can return 0xFF (e.g. the A: distribution disk), which would wrongly
+       surface as an I/O error.  CCP/M releases all read locks at program exit
+       anyway, so skipping the close for read-only handles is both correct and
+       safe. */
+    if( fp->wrote )
+        _fbdos( BD_CLOSE, (void __far *)&fp->fcb[0] );
     /* Write-side exact length (LRBC) -- KNOWN_ISSUES #2. On CP/M 3+ / Concurrent
        CP/M-86 (the RC759's OS) a program records a file's exact byte length by
        re-issuing F_ATTRIB (BDOS fn 30) AFTER close with the F6' request flag set

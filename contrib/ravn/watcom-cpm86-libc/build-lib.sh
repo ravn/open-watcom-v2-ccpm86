@@ -314,7 +314,7 @@ FPINC="$INC -i=$B/mathlib/h -i=$B/clib/startup/h"
 echo "==> Layer 2: CP/M-86 seam (BDOS) + closure stubs + port seams"
 "$WCC" $USER $INC -DCOMMONINIT_REDIRECT "$SRC/port/cominit.c"  -fo=cominit.obj  # -DCOMMONINIT_REDIRECT: shell-style < > >> command-tail redirection (disk layer present)
 "$WCC" $USER $INC "$SRC/port/cprintf.c"  -fo=cprintf.obj     # direct-to-console printf (stdio-free tests)
-"$WCC" $USER $INC "$SRC/port/diskio.c"   -fo=diskio.obj      # FCB BDOS file I/O
+"$WCC" $USER $INC ${CPM86_TRACE:+-dCPM86_BDOS_TRACE} "$SRC/port/diskio.c"   -fo=diskio.obj      # FCB BDOS file I/O
 "$WCC" $USER $INC ${WC_ARENA_BYTES:+-dWC_ARENA_BYTES=$WC_ARENA_BYTES} "$SRC/port/lowlevel.c" -fo=lowlevel.obj
 "$WCC" $USER $INC "$SRC/port/farheap.c"  -fo=farheap.obj     # Stage A far heap __AllocSeg/__GrowSeg
 "$WCC" $USER $INC "$SRC/port/errnoptr.c" -fo=errnoptr.obj
