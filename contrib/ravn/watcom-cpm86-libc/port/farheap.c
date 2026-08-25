@@ -158,6 +158,13 @@ extern unsigned __cpm86_bdos_alloc( unsigned char fn, unsigned mpb_ofs );
 /* 0 = untried, 1 = BDOS 128 works, -1 = unavailable -> fall back to carving */
 static int      __cpm86_fh_dynamic = 0;
 static unsigned __cpm86_fh_last_paras;   /* paras granted by the last fn-128 call */
+/* Set once fn 128 (M_ALLOC) has returned its documented OFFFFH failure code
+ * (Concurrent CP/M Programmer's Reference Guide, 6.2.6): proof the call EXISTS
+ * and merely ran out of memory.  Lets __AllocSeg tell a genuine CCP/M
+ * out-of-memory from fn 128 being absent (plain CP/M-86), so a tight-memory
+ * failure returns _NULLSEG cleanly instead of carving memory that overlaps
+ * live data/stack (which corrupts the deflate tables -> bad/aborting output). */
+static int      __cpm86_fh_fn128_seen = 0;
 
 /* Ask CCP/M (BDOS 128) for a fresh far-heap segment big enough for `amount`.
  * On success returns the segment and stores the ACTUAL granted paragraphs in
@@ -182,6 +189,8 @@ static __segment __cpm86_fh_bdos_alloc( unsigned int amount )
     mpb.flags = 0;
 
     bx = __cpm86_bdos_alloc( 128, (unsigned)(void __near *)&mpb );
+    if( bx == 0xFFFF )
+        __cpm86_fh_fn128_seen = 1;      /* fn 128 exists, just out of memory */
     if( bx == 0xFFFF || mpb.start == 0 )
         return( _NULLSEG );
     if( mpb.max >= PARAS_IN_64K )       /* one slab addresses at most 64K */
@@ -208,8 +217,15 @@ __segment __AllocSeg( unsigned int amount )
         if( seg != _NULLSEG ) {
             __cpm86_fh_dynamic = 1;
             chunk_paras = __cpm86_fh_last_paras;
+        } else if( __cpm86_fh_fn128_seen ) {
+            /* fn 128 is present and simply out of memory: NEVER carve the Extra
+             * reservation here.  With OPTION FARHEAP 0 the carve would hand out
+             * memory overlapping live data/stack and corrupt the deflate tables
+             * (observed: bad-CRC archives, then a CPU trap).  Mark dynamic so the
+             * fallback below returns _NULLSEG cleanly -> honest ZE_MEM. */
+            __cpm86_fh_dynamic = 1;
         } else if( __cpm86_fh_dynamic == 0 ) {
-            __cpm86_fh_dynamic = -1;    /* first call failed -> fn 128 absent */
+            __cpm86_fh_dynamic = -1;    /* first call failed & no fn 128 -> absent */
         }
     }
 
