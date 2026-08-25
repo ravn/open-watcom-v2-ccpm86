@@ -144,6 +144,7 @@ cw mbyte/c/wctomb.c      wctomb.obj
 
 echo "==> Layer 1: string-to-number + strtok + toupper + setvbuf (editor deps)"
 cw convert/c/atoi.c      atoi.obj
+cw convert/c/atol.c      atol.obj
 cw convert/c/strtol.c    strtol.obj
 cw string/c/strtok.c     strtok.obj
 cw string/c/setbits.c    setbits.obj
@@ -341,7 +342,7 @@ rm -f clibcpm.lib
     +strncat.obj +strstr.obj +strlwr.obj +asctime.obj +rand.obj +fmemset.obj \
     +memchr.obj +div.obj \
     +itoa.obj +ltoa.obj +lltoa.obj +alphabet.obj +wctomb.obj \
-    +atoi.obj +strtol.obj +strtok.obj +setbits.obj +bits.obj +toupper.obj +setvbuf.obj \
+    +atoi.obj +atol.obj +strtol.obj +strtok.obj +setbits.obj +bits.obj +toupper.obj +setvbuf.obj \
     +prtf.obj +noefgfmt.obj \
     +printf.obj +fprintf.obj +fprtf.obj +fputc.obj +fputs.obj +puts.obj \
     +putchar.obj +getchar.obj +gets.obj \
