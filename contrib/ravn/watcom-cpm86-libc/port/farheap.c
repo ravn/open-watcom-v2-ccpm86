@@ -126,27 +126,109 @@ static void __cpm86_fh_init( void )
                           : __cpm86_fh_total_paras;
 }
 
+/* Concurrent CP/M-86 dynamic memory allocation (BDOS function 128, M_ALLOC).
+ * This is the CORRECT source of far-heap segments on the real RC759 CCP/M-86:
+ * the OS hands out a segment from its free list and REPORTS THE ACTUAL GRANTED
+ * SIZE back in the MPB, so we can never over-commit past what really exists --
+ * unlike the compile-time OPTION FARHEAP reservation, whose spread grant the
+ * loader does not tell the program (base-page 0x0C carries only G_MIN).  See
+ * scratch/ccpm86-src/kern/memory.mem (malloc_entry) + mpb.def + modfunc.def
+ * (f_malloc = 128), confirmed on real MAME rc759, 2026-08-25.
+ *
+ *   in:  CL=128, DX=near &MPB.   MPB = {start,min,max,pdadr,flags} (paras).
+ *   out: BX=0 ok / 0xFFFF fail;  MPB.start=granted seg, MPB.max=ACTUAL paras. */
+struct __cpm86_mpb {
+    unsigned start;   /* 0 == relocatable request; out: granted base seg */
+    unsigned min;     /* least acceptable paragraphs                     */
+    unsigned max;     /* wanted paragraphs; out: ACTUAL granted paras    */
+    unsigned pdadr;   /* 0 == calling process                            */
+    unsigned flags;   /* 0 == plain unused memory                        */
+};
+
+/* fn in CL, near &MPB (DS-relative offset) in DX; BDOS reads DS:DX.  Passing the
+ * bare offset (not a void*) keeps this correct in the large model too, where a
+ * void* would be a 4-byte far pointer that will not fit DX. */
+extern unsigned __cpm86_bdos_alloc( unsigned char fn, unsigned mpb_ofs );
+#pragma aux __cpm86_bdos_alloc =    \
+    "int 0E0h"                      \
+    __parm [__cl] [__dx]            \
+    __value [__bx]                  \
+    __modify [__ax __bx __cx __dx __es];
+
+/* 0 = untried, 1 = BDOS 128 works, -1 = unavailable -> fall back to carving */
+static int      __cpm86_fh_dynamic = 0;
+static unsigned __cpm86_fh_last_paras;   /* paras granted by the last fn-128 call */
+
+/* Ask CCP/M (BDOS 128) for a fresh far-heap segment big enough for `amount`.
+ * On success returns the segment and stores the ACTUAL granted paragraphs in
+ * __cpm86_fh_last_paras; on failure returns _NULLSEG. */
+static __segment __cpm86_fh_bdos_alloc( unsigned int amount )
+{
+    static struct __cpm86_mpb __near mpb;  /* __near -> DGROUP (BDOS reads DS:DX) */
+    unsigned min_paras;
+    unsigned bx;
+
+    /* paragraphs needed to hold the request plus this slab's heap bookkeeping */
+    min_paras = (unsigned)( ( amount + sizeof( heapblk ) + 2 * TAG_SIZE + 15 ) >> 4 );
+    if( min_paras == 0 )
+        min_paras = 1;
+    if( min_paras >= PARAS_IN_64K )     /* a single slab must fit one 64K segment */
+        return( _NULLSEG );
+
+    mpb.start = 0;
+    mpb.min   = min_paras;
+    mpb.max   = PARAS_IN_64K - 1;       /* ask for a big slab; OS clamps to free */
+    mpb.pdadr = 0;
+    mpb.flags = 0;
+
+    bx = __cpm86_bdos_alloc( 128, (unsigned)(void __near *)&mpb );
+    if( bx == 0xFFFF || mpb.start == 0 )
+        return( _NULLSEG );
+    if( mpb.max >= PARAS_IN_64K )       /* one slab addresses at most 64K */
+        mpb.max = PARAS_IN_64K - 1;
+    __cpm86_fh_last_paras = mpb.max;    /* the ACTUAL grant -- no over-commit */
+    return( (__segment)mpb.start );
+}
+
 __segment __AllocSeg( unsigned int amount )
 {
-    unsigned    chunk_paras;
+    unsigned    chunk_paras = 0;
     unsigned    heaplen;
     __segment   seg;
 
-    ( void )amount;    /* slabs come from the fixed Extra reservation, sized independently of any one request */
-
     if( !__heap_enabled )
         return( _NULLSEG );
-    if( __cpm86_fh_base_seg == 0 )
-        __cpm86_fh_init();
-    if( __cpm86_fh_used_paras >= __cpm86_fh_total_paras )
-        return( _NULLSEG );     /* whole Extra reservation already carved out */
 
-    chunk_paras = __cpm86_fh_total_paras - __cpm86_fh_used_paras;
-    if( chunk_paras > PARAS_IN_64K )
-        chunk_paras = PARAS_IN_64K;
+    /* Preferred path: ask CCP/M for real memory (fn 128), which reports the
+     * actual grant.  Fall back to carving the loader's OPTION FARHEAP Extra
+     * reservation only where fn 128 is unavailable (plain CP/M-86 / an emulator
+     * that lacks it). */
+    if( __cpm86_fh_dynamic >= 0 ) {
+        seg = __cpm86_fh_bdos_alloc( amount );
+        if( seg != _NULLSEG ) {
+            __cpm86_fh_dynamic = 1;
+            chunk_paras = __cpm86_fh_last_paras;
+        } else if( __cpm86_fh_dynamic == 0 ) {
+            __cpm86_fh_dynamic = -1;    /* first call failed -> fn 128 absent */
+        }
+    }
 
-    seg = (__segment)( __cpm86_fh_base_seg + __cpm86_fh_used_paras );
-    __cpm86_fh_used_paras += chunk_paras;
+    if( chunk_paras == 0 ) {
+        /* --- fallback: carve the OPTION FARHEAP Extra reservation --- */
+        if( __cpm86_fh_dynamic == 1 )
+            return( _NULLSEG );         /* fn 128 in use but out of memory */
+        if( __cpm86_fh_base_seg == 0 )
+            __cpm86_fh_init();
+        if( __cpm86_fh_used_paras >= __cpm86_fh_total_paras )
+            return( _NULLSEG );         /* whole Extra reservation already carved */
+
+        chunk_paras = __cpm86_fh_total_paras - __cpm86_fh_used_paras;
+        if( chunk_paras > PARAS_IN_64K )
+            chunk_paras = PARAS_IN_64K;
+
+        seg = (__segment)( __cpm86_fh_base_seg + __cpm86_fh_used_paras );
+        __cpm86_fh_used_paras += chunk_paras;
+    }
 
     /* Format the new slab as a fresh one-block heap -- identical to the
      * common (OS-independent) tail of Watcom's own allocseg.c. Duplicated
