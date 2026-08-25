@@ -29,6 +29,7 @@ LIBDIR="$OW/lib286/cpm86"
 INC="-i=$B/clib/h -i=$B/watcom/h -i=$B/hdr/dos/h -i=$B/clib/heap/h"
 FARHEAP_SIZE=0xF0000                  # ask for ~960 KB; MAME grants what fits in 384 KB
 SEG=${SEG:-16384}                     # VARIABLE segment size (<= 64 KB Watcom cap)
+TEST_SRC="${TEST_SRC:-test/farheap_smalltest.c}"
 
 MAMEDIR=/Users/ravn/z80/scratch/rc759-cmd-toolchain/mame-tests
 MAME_BIN=/Users/ravn/z80/mame/regnecentralend
@@ -46,10 +47,22 @@ DUMP="$OUTDIR/mame_ram.bin"
 
 echo "== 1. build FHMAME.CMD (-DMAME_DONE) =="
 "$WCC" -bt=dos -0 -ms -zastd=c99 -DMAME_DONE -DSEG=${SEG}u -i="$MAMEDIR" $INC \
-    test/farheap_smalltest.c -fo="$OUTDIR/t.obj"
-"$WLINK" format cpm86 op dosseg op quiet op start=_cstart_ op farheap=$FARHEAP_SIZE \
-    name "$OUTDIR/FHMAME.CMD" \
-    file "$LIBDIR/cstartcpm.obj" file "$OUTDIR/t.obj" library "$LIBDIR/clibs.lib"
+    "$TEST_SRC" -fo="$OUTDIR/t.obj"
+# memtest128.c is a pure BDOS-128 (M_ALLOC) raw-syscall probe -- it never
+# touches an "option farheap" Extra group, so don't request one at link time.
+# Requesting a huge Extra group (op farheap=$FARHEAP_SIZE) makes the LOADER
+# itself reserve nearly the whole TPA for that unused group before main()
+# even runs, starving the test's own runtime BDOS-128 calls of everything but
+# a sliver -- an artifact of the shared build recipe, not a real fidelity bug.
+if [ "$TEST_SRC" = "test/memtest128.c" ]; then
+    "$WLINK" format cpm86 op dosseg op quiet op start=_cstart_ \
+        name "$OUTDIR/FHMAME.CMD" \
+        file "$LIBDIR/cstartcpm.obj" file "$OUTDIR/t.obj" library "$LIBDIR/clibs.lib"
+else
+    "$WLINK" format cpm86 op dosseg op quiet op start=_cstart_ op farheap=$FARHEAP_SIZE \
+        name "$OUTDIR/FHMAME.CMD" \
+        file "$LIBDIR/cstartcpm.obj" file "$OUTDIR/t.obj" library "$LIBDIR/clibs.lib"
+fi
 echo "   FHMAME.CMD = $(stat -f%z "$OUTDIR/FHMAME.CMD") bytes"
 
 echo "== 2. install FHMAME.CMD as autostart menu.cmd on a copy of mandel.img =="
@@ -85,9 +98,15 @@ W=$(( WORD ))
 HI=$(( (W >> 8) & 0xFF ))       # blocks that FAILED the round-trip (expect 0)
 N=$(( W & 0xFF ))               # far blocks obtained on MAME (< Unicorn: 384 KB RAM)
 echo "MAME guest self-check word=$WORD -> n=$N far block(s), $HI failed"
-echo "-- independent RAM-dump scan of the MAME snapshot (--seg $SEG --count $N) --"
-python3 test/verify_farheap_dump.py "$DUMP" --seg "$SEG" --count "$N" && SCAN=0 || SCAN=$?
-if [ "$HI" = "0" ] && [ "$N" -gt 0 ] && [ "$SCAN" = "0" ]; then
+if [ "$TEST_SRC" = "test/memtest128.c" ]; then
+  python3 test/verify_memtest128_dump.py "$DUMP"
+else
+  echo "-- independent RAM-dump scan of the MAME snapshot (--seg $SEG --count $N) --"
+  python3 test/verify_farheap_dump.py "$DUMP" --seg "$SEG" --count "$N" && SCAN=0 || SCAN=$?
+fi
+if [ "$TEST_SRC" = "test/memtest128.c" ]; then
+  :
+elif [ "$HI" = "0" ] && [ "$N" -gt 0 ] && [ "$SCAN" = "0" ]; then
   echo "PASS: MAME rc759 corroborates Unicorn -- far-heap works on real hardware"
   echo "      (MAME granted $N x $SEG B far heap; Unicorn's 1 MB grants more -- same algorithm)"
 else
