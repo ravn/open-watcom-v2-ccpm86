@@ -295,7 +295,7 @@ _WCRTDATA extern __w_FILE  _WCDATA __iob[];
 #define stderr  ((__w_FILE *)&__iob[2])     /* standard error file  */
 :segment DOS
 :include ext.sp
-#if defined(__DOS__) || defined(__WINDOWS__)
+#if defined(__DOS__) || defined(__WINDOWS__) || defined(__CPM86__)
 #define stdaux  ((__w_FILE *)&__iob[3])     /* standard auxiliary file  */
 #define stdprn  ((__w_FILE *)&__iob[4])     /* standard printer file  */
 #endif
@@ -309,7 +309,7 @@ _WCRTDATA extern __w_FILE  _WCDATA __iob[];
 #define stderr  (__get_std_file(2))     /* standard error file  */
 :segment DOS
 :include ext.sp
-#if defined(__DOS__) || defined(__WINDOWS__)
+#if defined(__DOS__) || defined(__WINDOWS__) || defined(__CPM86__)
 #define stdaux  (__get_std_file(3))     /* standard auxiliary file  */
 #define stdprn  (__get_std_file(4))     /* standard printer file  */
 #endif

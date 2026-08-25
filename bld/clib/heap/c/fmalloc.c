@@ -136,7 +136,7 @@ release_heap:
     return( _MK_FP( seg, cstg ) );
 }
 
-#if defined(__DOS__) && defined(__BIG_DATA__)
+#if (defined(__DOS__) || defined(__CPM86__)) && defined(__BIG_DATA__)
 static void _WCNEAR ___nheapgrow( void )
 {
     /* near heap growing routine in large data models. */

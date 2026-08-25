@@ -426,12 +426,16 @@ static void SetFinalTargetSystem( OPT_STORAGE *data, char *target_name )
 #if _CPU == 8086
         if( strcmp( target_name, "CPM86" ) == 0 ) {
             /*
-             * CP/M-86 is a DOS-family target (see setTargetSystem): also make
-             * the __DOS__ marker visible so DOS-gated headers and clib apply,
-             * while __CPM86__ (predefined just above from target_name) lets
-             * source distinguish CP/M-86 from bare MS-DOS.
+             * CP/M-86 is a first-class platform, NOT DOS (issue #34).  Define
+             * __CPM__ (the generic CP/M-family marker, mirroring how __DOS__ is
+             * generic for DOS) alongside __CPM86__ (predefined just above from
+             * target_name), and do NOT predefine __DOS__/_DOS/MSDOS (see the
+             * TS_DOS case below).  Architecture-shared behaviour is reached via
+             * _M_I86 / __I86__ (already predefined for this 8086 target); the few
+             * DOS-family clib/header gates CP/M-86 also needs list __CPM86__
+             * explicitly.
              */
-            PreDefine_Macro( "__DOS__" );
+            PreDefine_Macro( "__CPM__" );
         }
 #endif
     }
@@ -453,9 +457,20 @@ static void SetFinalTargetSystem( OPT_STORAGE *data, char *target_name )
 
     switch( TargetSystem ) {
     case TS_DOS:
-        PreDefine_Macro( "_DOS" );
-        if( CompFlags.non_iso_compliant_names_enabled ) {
-            PreDefine_Macro( "MSDOS" );
+#if _CPU == 8086
+        if( target_name != NULL && strcmp( target_name, "CPM86" ) == 0 ) {
+            /*
+             * CP/M-86 shares DOS codegen (TS_DOS has no codegen effect here --
+             * see setTargetSystem) but is NOT DOS: emit no _DOS/MSDOS predefines.
+             * It is identified by __CPM86__/__CPM__ (predefined above).
+             */
+        } else
+#endif
+        {
+            PreDefine_Macro( "_DOS" );
+            if( CompFlags.non_iso_compliant_names_enabled ) {
+                PreDefine_Macro( "MSDOS" );
+            }
         }
         break;
     case TS_QNX:
