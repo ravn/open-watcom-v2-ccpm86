@@ -22,3 +22,7 @@ build-farheap/
 build-farheap-small/
 build-lib-mm/
 MEDTEST.CMD
+
+# largehello test build outputs
+test/largehello/*.CMD
+test/largehello/*.map
