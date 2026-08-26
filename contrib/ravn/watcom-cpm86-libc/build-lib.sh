@@ -262,6 +262,14 @@ echo "==> Layer 1: long mul/div helpers (%ld, lseek arithmetic)"
 "$WASM" -m$MODEL -0 -i="$B/watcom/h" "$B/clib/cgsupp/a/i4m.asm" -fo=i4m.obj
 "$WASM" -m$MODEL -0 -i="$B/watcom/h" "$B/clib/cgsupp/a/i4d.asm" -fo=i4d.obj
 
+echo "==> Layer 1: huge-pointer compare/subtract (__PTS/__PTC -- Info-ZIP ZIPSPLIT)"
+# pts.asm's csnorm.inc lives under cgsupp/h; it externs _HShift (the huge shift
+# byte) which our port supplies via hshift.asm (real-mode = 12). Pulled ON DEMAND
+# only by programs that compare `char huge *` pointers (ZIPSPLIT does; the other
+# Info-ZIP binaries do not).
+"$WASM" -m$MODEL -0 -i="$B/watcom/h" -i="$B/clib/cgsupp/h" "$B/clib/cgsupp/a/pts.asm" -fo=pts.obj
+"$WASM" -m$MODEL -0 "$SRC/port/hshift.asm" -fo=hshift.obj
+
 # --- Layer 1: double SOFT-FLOAT runtime (-fpc __FDxemu path, NO 8087) ---------
 # The RC759 target has no 8087. Programs compiled -fpc emit __FDx double libcalls
 # that dispatch at runtime on __real87 (=0 here) to a PURE-SOFTWARE path. These
@@ -342,7 +350,7 @@ rm -f clibcpm.lib
     +strncat.obj +strstr.obj +strlwr.obj +asctime.obj +rand.obj +fmemset.obj \
     +memchr.obj +div.obj \
     +itoa.obj +ltoa.obj +lltoa.obj +alphabet.obj +wctomb.obj \
-    +atoi.obj +atol.obj +strtol.obj +strtok.obj +setbits.obj +bits.obj +toupper.obj +setvbuf.obj \
+    +atoi.obj +atol.obj +pts.obj +hshift.obj +strtol.obj +strtok.obj +setbits.obj +bits.obj +toupper.obj +setvbuf.obj \
     +prtf.obj +noefgfmt.obj \
     +printf.obj +fprintf.obj +fprtf.obj +fputc.obj +fputs.obj +puts.obj \
     +putchar.obj +getchar.obj +gets.obj \
