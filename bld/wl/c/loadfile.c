@@ -1206,6 +1206,43 @@ offset  WriteGroupLoad( group_entry *group, bool repos )
     return( PosLoad() - grp_start );
 }
 
+static bool DoGroupLeaderInitOnly( void *_seg, void *_info )
+/**********************************************************/
+/* Like DoGroupLeader but skips BSS and STACK class segments so the
+ * file image ends after the last initialised byte (no zero-fill). */
+{
+    seg_leader      *seg = _seg;
+    grpwriteinfo    *info = _info;
+    class_entry     *class = seg->class;
+
+    if( (class->flags & CLASS_STACK)
+      || stricmp( class->name.u.ptr, BSSClassName ) == 0 )
+        return( false );
+    if( EMIT_CLASS( class ) && EMIT_SEG( seg ) ) {
+        info->seg_start = info->grp_start + SEG_GROUP_DELTA( seg );
+        DoWriteLeader( seg, info );
+    }
+    return( false );
+}
+
+offset  WriteGroupLoadInitOnly( group_entry *group )
+/***************************************************/
+/* Write only the initialised (non-BSS, non-STACK) portion of group.
+ * Returns the bytes written; the caller uses this for the file-image
+ * length field, while using CalcGroupSize for the alloc (min/max) field. */
+{
+    grpwriteinfo    info;
+    unsigned_32     grp_start;
+
+    grp_start = PosLoad();
+    info.repos     = false;
+    info.copy      = false;
+    info.grp_start = grp_start;
+    info.lastgrp   = NULL;
+    Ring2Lookup( group->leaders, DoGroupLeaderInitOnly, &info );
+    return( PosLoad() - grp_start );
+}
+
 void FreeOutFiles( void )
 /***********************/
 {

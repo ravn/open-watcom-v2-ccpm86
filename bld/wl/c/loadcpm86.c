@@ -120,37 +120,6 @@ static bool cpm86GroupIsCode( group_entry *group )
     return( group != NULL && (group->leaders->class->flags & CLASS_CODE) != 0 );
 }
 
-/* Ring2Lookup callback: find the lowest offset of a BSS or STACK class segment
- * within its group; the result accumulates in *(offset *)data. */
-static bool cpm86FindBSSStart( void *_seg, void *_data )
-/******************************************************/
-{
-    seg_leader  *seg = _seg;
-    offset      *bss_off = _data;
-    class_entry *class = seg->class;
-    offset      grp_off;
-
-    if( (class->flags & CLASS_STACK)
-      || stricmp( class->name.u.ptr, BSSClassName ) == 0 ) {
-        grp_off = SEG_GROUP_DELTA( seg );
-        if( grp_off < *bss_off )
-            *bss_off = grp_off;
-    }
-    return( false );
-}
-
-/* Return the number of paragraphs of initialised (file-image) data in `group`,
- * i.e. the byte range [0, first BSS/STACK segment).  The CP/M-86 DATA descriptor
- * stores this in G_Length; the loader reads only that many paragraphs from the
- * file and zero-fills the rest up to G_Min, keeping BSS/stack out of the image. */
-static offset cpm86DataImgParas( group_entry *group )
-/***************************************************/
-{
-    offset  bss_off = group->totalsize; /* assume all init unless BSS found */
-
-    Ring2Lookup( group->leaders, cpm86FindBSSStart, &bss_off );
-    return( CMD_PARAS( bss_off ) );
-}
 
 static int cpm86GroupCmdType( group_entry *target )
 /**************************************************
@@ -419,17 +388,13 @@ void FiniCPM86LoadFile( void )
             if( cpm86GroupCmdType( group ) != CMD_TYPE_DATA )
                 continue;
             CurrSect = group->section;
-            {
-                /* Write the full group (WriteGroupLoad writes BSS as zeros) but
-                 * then seek back to just after the last initialised paragraph.
-                 * The CP/M-86 loader zero-fills from G_Length to G_Min at load
-                 * time, so storing BSS zeros in the file is wasted space. */
-                unsigned long grp_file_start = PosLoad();
-                offset init_paras = cpm86DataImgParas( group );
-                WriteGroupLoad( group, false );
-                SeekLoad( grp_file_start + init_paras * CMD_PARA_SIZE );
-                data_img_paras += init_paras;
-            }
+            /* Write only the initialised portion (stops before BSS/STACK).
+             * The CP/M-86 loader zero-fills from G_Length up to G_Min. */
+            img_len = WriteGroupLoadInitOnly( group );
+            pad = (size_t)( -(long)img_len & ( CMD_PARA_SIZE - 1 ) );
+            if( pad != 0 )
+                PadLoad( pad );
+            data_img_paras += CMD_PARAS( img_len );
             data_alloc_paras += CMD_PARAS( CalcGroupSize( group ) );
             have_data = true;
         }
