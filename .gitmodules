@@ -1,3 +1,0 @@
-[submodule "contrib/ravn/cpm86-crossdev"]
-	path = contrib/ravn/cpm86-crossdev
-	url = git@github.com:ravn/cpm86-crossdev.git

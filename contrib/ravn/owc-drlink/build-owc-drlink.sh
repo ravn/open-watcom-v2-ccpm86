@@ -40,7 +40,7 @@ pick() { for t in "$@"; do command -v "$t" >/dev/null 2>&1 && { echo "$t"; retur
 WCC=$(pick wcc "$BINB/bwcc")
 WASM=$(pick wasm "$BINB/bwasm")
 
-XDEV="$HERE/../cpm86-crossdev"
+XDEV="${XDEV:-$REPO/../cpm86-crossdev}"   # top-level ~/z80/cpm86-crossdev (nested dup removed; overridable)
 # CANONICAL TOOLCHAIN (see wlink-cpm86-plan.md): authentic DR LINK-86 v1.4
 # (19 March 1984), the same native CP/M-86 linker DR C 1.11 uses, run under the
 # emu2-cpm86 fork (executes a CP/M-86 .CMD natively).  NOT linkcmd.exe (LINK-86

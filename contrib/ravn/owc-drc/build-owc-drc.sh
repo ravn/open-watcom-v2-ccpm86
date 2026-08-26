@@ -21,7 +21,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
-XDEV="$HERE/../cpm86-crossdev"
+XDEV="${XDEV:-$REPO/../cpm86-crossdev}"   # top-level ~/z80/cpm86-crossdev (nested dup removed; overridable)
 BIN="$REPO/build/binbuild"
 # CANONICAL TOOLCHAIN (see wlink-cpm86-plan.md): the AUTHENTIC DR LINK-86 v1.4
 # (19 March 1984) -- the same native CP/M-86 linker DR C v1.11 uses -- run under
