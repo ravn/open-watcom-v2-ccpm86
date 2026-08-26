@@ -1,8 +1,14 @@
 # Open Watcom C/C++ for CP/M-86
 
+> NOTE:  This is early software which runs for me but has not yet been thoroughly tested by others.  Notably **far heap** and **far code** were really hard to get working so please test thoroughly if you use those and report any problems you find.
+
 This document describes the CP/M-86 platform support in the ravn fork of
 Open Watcom v2.  The target is the 16-bit Intel 8086/80186 processor running
-under Digital Research CP/M-86 or Concurrent CP/M-86 (CCP/M-86).
+under Digital Research CP/M-86 or Concurrent CP/M-86 (CCP/M-86).  Testing has been done on the Regnecentralen "Piccoline" Rc759 with 384 Kb RAM running CCP/M-86 3.1 as running in MAME, and on the emu2 CP/M-86 emulator.   
+
+This is a full port to a new platform  strongly based on the 16-bit MS-DOS work, and using Digital Research C v. 1.11 as the oracle for CMD-files. 
+
+Note:  `<file` and `>file` can be used to redirect input and output if the diskio layer has been pulled in by the linker.  CP/M-86 does not support this natively.
 
 ## Compiler invocation
 
@@ -17,7 +23,7 @@ directly under CP/M-86, CCP/M-86, or an emulator such as emu2.
 
 ### Docker
 
-Pre-built Docker images are available:
+Pre-built Docker images are available (image names are not final):
 
 ```sh
 # Compile
@@ -27,6 +33,10 @@ docker run --rm -v "$PWD":/work open-watcom-cpm86:latest \
 # Run
 docker run --rm -v "$PWD":/work emu2-cpm86:latest emu2 hello.cmd
 ```
+## Pitfalls
+
+* CCP uppercases the command line tail passed to the program.  No proper workaround has been found yet.
+
 
 ## Memory models
 
@@ -38,9 +48,11 @@ docker run --rm -v "$PWD":/work emu2-cpm86:latest emu2 hello.cmd
 | `-mcmodel=l` | large | Multiple CODE and DATA segments. All pointers far. |
 | `-mcmodel=h` | huge | Like large; individual arrays may exceed 64 KB. |
 
-For most CP/M-86 programs the **small** model is the right choice.
+For most CP/M-86 programs the **small** model is the right choice.  
 
 ### Far heap (compact/large model)
+
+> Memory management was difficult to get right and may be buggy for large models. Test well!
 
 To allocate far memory from a compact or large model program, pass
 `OPTION FARHEAP=<n>` to `wlink` (or `-Wl,option -Wl,farheap=<n>` via
@@ -106,7 +118,7 @@ The CP/M-86 clibs (`lib286/cpm86/clibs.lib`, `clibm.lib`, etc.) provide:
 
 ### Concurrent CP/M-86 extensions
 
-On Concurrent CP/M-86 (CCP/M-86), additional BDOS functions are available:
+On Concurrent CP/M-86 (CCP/M-86), additional BDOS functions are available in emu2:
 
 | Function | Number | Description |
 |----------|--------|-------------|
@@ -125,9 +137,9 @@ On Concurrent CP/M-86 (CCP/M-86), additional BDOS functions are available:
   DATA segment with global variables and the stack.  Use compact/large model
   with `OPTION FARHEAP` for programs needing more than ~30 KB of heap.
 - **No `double` / 64-bit float**: on CP/M-86 hardware without an 8087 FPU,
-  use `-msoft-float` and avoid `double`; use `float` instead.
+  use `-msoft-float` and avoid `double`; use `float` instead.  CMD-format for this is untested.
 - **`putchar` pulls in stdio**: the standard `putchar()` links the full
-  stdio/file I/O layer.  For minimal programs, call BDOS function 2 directly.
+  stdio/file I/O layer, but also provides redirection of data.  For minimal programs, call BDOS function 2 directly.
 
 ## Examples
 
