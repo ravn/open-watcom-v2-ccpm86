@@ -1435,11 +1435,11 @@ static int redirect_one( char *a, char *next )
         name  = a + 1;
     } else if( a[0] == '>' && a[1] == '>' ) {
         is_in = 0;
-        mode  = O_WRONLY | O_CREAT | O_APPEND;   /* append, create if absent */
+        mode  = O_WRONLY | O_CREAT | O_APPEND | O_BINARY;   /* append, binary: LRBC exact size */
         name  = a + 2;
     } else if( a[0] == '>' ) {
         is_in = 0;
-        mode  = O_WRONLY | O_CREAT | O_TRUNC;     /* truncate/create */
+        mode  = O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;    /* truncate/create, binary: LRBC */
         name  = a + 1;
     } else {
         return( 0 );                             /* not a redirect operand */

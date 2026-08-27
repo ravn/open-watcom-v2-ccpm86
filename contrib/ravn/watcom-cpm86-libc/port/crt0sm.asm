@@ -93,8 +93,14 @@ ct_done:
         mov     dx, offset DGROUP:_argvtab   ; argv -> DX (reload after the call)
         call    main_
 ; ow: flush + commit any redirected stdout file before the CP/M system reset.
+; Preserve main()'s return value (AX) across the close call so it can be
+; examined by the BDOS termination call.  CP/M-86 fn 0 (P_TERM) ignores DX,
+; but passing the exit code there preserves it for any future OS that does.
+        push    ax
         call    __CommonRedirectClose_
-        xor     dx, dx
+        pop     ax
+        mov     dh, 0
+        mov     dl, al                  ; exit code in DL (low byte of return val)
         mov     cl, 0
         int     0E0h
 ; Watcom stack-overflow check helper — no-op stub (no clib on CP/M-86 yet)
