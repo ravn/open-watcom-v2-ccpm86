@@ -855,6 +855,10 @@ static  int  ParseArgs( int argc, char **argv )
                 StackSize = MemStrdup( Word + 11 );
                 wcc_option = false;
             }
+            /* -mm/-ms/-mc/-ml/-mt: single-letter memory model; pass to wcc */
+            if( Word[1] == '\0' && strchr( "stcml", Word[0] ) != NULL ) {
+                break;
+            }
             wcc_option = false;     /* dont' pass on unknown options */
             break;
         case 'z':
