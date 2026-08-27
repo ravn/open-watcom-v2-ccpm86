@@ -121,8 +121,11 @@ ct_done:
         mov     cx, ds                  ; argv segment -> CX (reload)
         call    far ptr main_
 ; ow: flush + commit any redirected stdout file before the CP/M system reset.
+        push    ax
         call    far ptr __CommonRedirectClose_
-        xor     dx, dx
+        pop     ax
+        mov     dh, 0
+        mov     dl, al
         mov     cl, 0                   ; BDOS 0 = System Reset (terminate)
         int     0E0h
 ; Watcom emits `call far ptr __STK` as a stack-depth probe at each function
