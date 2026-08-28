@@ -1,5 +1,5 @@
 /*
- * mandel.c -- 80x25 ASCII Mandelbrot set, fixed-point 8.8 arithmetic.
+ * mandel.c -- 79x25 ASCII Mandelbrot set, fixed-point 8.8 arithmetic.
  *
  * Ported verbatim (computation untouched) from the llvm-z80 test-gen example
  * z80-utils/test-gen/examples/mandelbrot.c so the CP/M-86 result can be
@@ -13,9 +13,13 @@
  *   * entry is cmain, not main -- owcrt.asm bridges DR C's "main" call to it
  *     (Open Watcom special-cases the name "main"; -Dmain=cmain avoids that).
  *
- * Output is deterministic (no timing, no input): 25 lines x 80 columns of the
+ * Output is deterministic (no timing, no input): 25 lines x 79 columns of the
  * escape-count glyphs, so DR C and every Open Watcom variant must produce
  * byte-identical output -- that identity is the correctness oracle.
+ * 79 columns (not 80): the RC759 Piccoline CRT auto-wraps at column 80, so a
+ * full 80-char line followed by \r\n would produce a spurious blank line.  79
+ * clips the right edge of the Mandelbrot plot by one pixel (negligible for an
+ * ASCII art render) but displays correctly on all terminals.
  */
 int putchar();          /* K&R decl: DR C v1.11 predates ANSI prototypes */
 
@@ -31,7 +35,7 @@ int main()              /* K&R definition: no (void) prototype in DR C v1.11.
 {
     int py, px;
     for (py = 0; py < 25; py++) {
-        for (px = 0; px < 80; px++) {
+        for (px = 0; px < 79; px++) {
             /* Map pixel to the complex plane:
                x in [-2.0, +0.5], y in [-1.25, +1.25], both in 8.8.
                cr uses px*8 (== px*640/80): the literal px*640 reaches 50560 at
