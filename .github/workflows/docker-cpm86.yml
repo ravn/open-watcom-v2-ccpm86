@@ -1,0 +1,136 @@
+name: Docker CP/M-86 image
+
+# Bygger et multi-arch Docker image (linux/amd64 + linux/arm64) med
+# Open Watcom toolchain + CP/M-86 clib (alle 4 modeller: s m c l).
+#
+# Imaget publiceres til ghcr.io som:
+#   ghcr.io/ravn/open-watcom-v2-ccpm86:amd64   (platform-specifik)
+#   ghcr.io/ravn/open-watcom-v2-ccpm86:arm64   (platform-specifik)
+#   ghcr.io/ravn/open-watcom-v2-ccpm86:latest  (multi-arch manifest)
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'contrib/ravn/watcom-cpm86-libc/**'
+      - '.github/workflows/docker-cpm86.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: docker-cpm86-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-image:
+    name: Build image (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch:   amd64
+            runner: ubuntu-latest
+            bindir: binl64
+            owtools: GCC
+          - arch:   arm64
+            runner: ubuntu-24.04-arm
+            bindir: arml64
+            owtools: GCC
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Open Watcom (host tools -> rel/${{ matrix.bindir }}/)
+        env:
+          OWTOOLS:       ${{ matrix.owtools }}
+          OWDOCBUILD:    '0'
+          OWDISTRBUILD:  '0'
+        run: |
+          . ./cmnvars.sh
+          sh build.sh rel
+
+      - name: Verify host tools
+        run: |
+          test -x "rel/${{ matrix.bindir }}/owcc" || { echo "!! owcc missing"; exit 1; }
+          file "rel/${{ matrix.bindir }}/owcc"
+
+      - name: Build CP/M-86 clib (alle modeller s m c l)
+        run: |
+          CLIB="contrib/ravn/watcom-cpm86-libc"
+          REL="$(pwd)/rel"
+          OW="$(pwd)"
+          for MODEL in s m c l; do
+            echo "--- model=$MODEL ---"
+            MODEL="$MODEL" \
+            OW="$OW" \
+            OWCC_BIN="$REL/${{ matrix.bindir }}/wcc" \
+            OWASM_BIN="$REL/${{ matrix.bindir }}/wasm" \
+            OWLIB_BIN="$REL/${{ matrix.bindir }}/wlib" \
+            OUTDIR="$CLIB/build-lib-${MODEL}-ci" \
+              sh "$CLIB/build-lib.sh"
+          done
+          mkdir -p "rel/lib286/cpm86"
+          cp lib286/cpm86/*.lib  rel/lib286/cpm86/
+          cp lib286/cpm86/cstart*.obj rel/lib286/cpm86/
+          echo "==> cpm86 clib installeret:"
+          ls -lh rel/lib286/cpm86/
+
+      - name: Login ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Byg og push platform-image
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/open-watcom-v2-ccpm86:${{ matrix.arch }}"
+          docker build \
+            --platform "linux/${{ matrix.arch }}" \
+            --build-arg "BINDIR=${{ matrix.bindir }}" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            -f .github/docker/Dockerfile \
+            -t "$IMAGE" \
+            rel/
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Smoke-test image
+        run: |
+          docker run --rm --platform "linux/${{ matrix.arch }}" "$IMAGE" \
+            sh -c '
+              owcc -v 2>&1 | head -1
+              ls /opt/watcom/lib286/cpm86/clibs.lib \
+                 /opt/watcom/lib286/cpm86/clibm.lib \
+                 /opt/watcom/lib286/cpm86/clibc.lib \
+                 /opt/watcom/lib286/cpm86/clibl.lib \
+              && echo "cpm86: alle 4 modeller OK"
+            '
+
+  merge-manifest:
+    name: Multi-arch manifest
+    needs: build-image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Login ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Opret og push multi-arch manifest
+        run: |
+          BASE="ghcr.io/${{ github.repository_owner }}/open-watcom-v2-ccpm86"
+          docker buildx imagetools create \
+            --tag "$BASE:latest" \
+            "$BASE:amd64" \
+            "$BASE:arm64"
+          echo "==> manifest:"
+          docker buildx imagetools inspect "$BASE:latest"
