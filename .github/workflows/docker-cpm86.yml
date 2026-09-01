@@ -44,11 +44,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install build dependencies
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends dosbox
+
       - name: Build Open Watcom (host tools -> rel/${{ matrix.bindir }}/)
         env:
           OWTOOLS:       ${{ matrix.owtools }}
           OWDOCBUILD:    '0'
           OWDISTRBUILD:  '0'
+          OWDOSBOX:      dosbox
         run: |
           . ./cmnvars.sh
           sh build.sh rel
