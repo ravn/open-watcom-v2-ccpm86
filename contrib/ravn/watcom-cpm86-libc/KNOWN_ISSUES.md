@@ -193,6 +193,50 @@ The disk path is proven by `build-streamio.sh` (Watcom's UNCHANGED iotest.c),
 `build-diskio.sh` (661 round-trip self-checks), and `build-fscanf.sh` (672), all
 PASS, all INT21h=0.
 
+### 3b. Seeking outside the file — gap content is UNDEFINED (tested/characterized)
+
+Raised in **ravn/open-watcom-v2-ccpm86#46**. What happens when you seek past
+the end is now pinned by `test/disktest.c` (the "seeking OUTSIDE the file"
+block), but only for the parts that are actually defined:
+
+- **Seek past end succeeds** and reports the requested offset — the position is
+  a plain number, never clamped to the length. Seeking *before* the start is an
+  error (`-1`), not a clamp to 0.
+- **A seek alone never extends the file**; `filelength()` is unchanged until a
+  write happens.
+- **Reads at or after the end always return 0 bytes.** `__qread` clamps against
+  the exact tracked length, so neither the last record's Ctrl-Z padding nor the
+  post-LRBC tail can leak out as data. This is the strict answer to #46: unlike
+  several other CP/M runtimes, you cannot read past EOF into the record tail
+  here. Asserted at three positions — far beyond the last record, exactly on
+  the end, and inside the final record's padding.
+- **Writing at a far offset extends the length over the gap** and the written
+  bytes read back intact.
+
+**Undefined, and deliberately NOT asserted: the content of the gap.** It is not
+a UNIX sparse hole. Measured under emu2 (10-byte file, then `write("XY")` at
+offset 500) the gap is inconsistent *within a single file*: records touched by
+the seam's read-modify-write come back `0x1A` (the Ctrl-Z fill `load_record()`
+puts into a fresh record), while records CP/M never allocated come back `0x00`.
+On-disk verification of that same file: bytes 10..127 are `1a`, bytes 128..383
+are `00`. On real hardware an allocated-but-unwritten block may instead hold
+whatever was there previously. Gap content is therefore emulator- and
+filesystem-dependent; a test pinning it would be pinning an accident.
+
+Verified under emu2 against the first-class clib (`bld/clib/_cpm/c/diskio.c`):
+`DISKIO: PASS (719 tests, 0 failures)`, up from a 686-test baseline — i.e. all
+33 new checks execute, none are skipped. The assertions were mutation-checked
+(flipping the expected read count makes the run report `***FAIL***`), so they
+are observably falsifiable rather than vacuous.
+
+**Not yet run against `port/diskio.c`** (the copy `build-diskio.sh` compiles):
+`wasm` segfaults under qemu on `port/crt0sm.asm` in both Docker images, so that
+path needs the native `osxa64` toolchain or the MAME harness. The functions the
+test exercises — `__lseek`, the `__qread` end-of-file clamp, `filelength`,
+`eof`, and the write-side length extension — were diffed and are **byte
+-identical** between the two copies, so the behaviour is expected to match; that
+expectation is reasoned, not yet executed.
+
 ### 4. Currently implemented seam surface — for reference
 
 Working (verified under emu2, purity gate INT21h=0): `fopen`/`fclose`,
