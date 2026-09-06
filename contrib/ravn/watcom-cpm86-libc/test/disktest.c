@@ -250,6 +250,107 @@ int main( void )
         VERIFY( remove( "LOWB.DAT" ) == 0 );
     }
 
+    /* --- seeking OUTSIDE the file: position vs. length vs. content.
+       ravn/open-watcom-v2-ccpm86#46 asks what happens when you seek past the
+       end -- on UNIX that makes a sparse file, on CP/M it is far less obvious,
+       and many runtimes let you keep READING past the "EOF" into the tail of
+       the final 128-byte record. This pins the three things that ARE defined
+       here and deliberately leaves the one that is NOT.
+
+       DEFINED (asserted below):
+         a) seeking past the end SUCCEEDS and reports the requested offset --
+            the position is just a number, it is not clamped to the length;
+         b) a seek ALONE never extends the file (filelength stays put) -- only
+            a write does;
+         c) a read at or after the end returns 0 bytes, ALWAYS. __qread clamps
+            against the exact tracked length, so the Ctrl-Z padding in the last
+            record and the post-LRBC tail can NEVER leak out as data. This is
+            the strict answer to #46: you cannot read past EOF here;
+         d) writing at a far offset extends the length to cover the gap, and
+            the bytes actually written read back intact.
+
+       NOT DEFINED (deliberately NOT asserted): what the GAP between the old
+       end and the far write contains. It is not a UNIX sparse hole. Measured
+       under emu2 on this exact case (10-byte file, then write "XY" at 500) the
+       gap is inconsistent WITHIN ONE FILE: records touched by the seam's
+       read-modify-write come back 0x1A (the Ctrl-Z fill load_record puts in a
+       fresh record), while records CP/M never allocated come back 0x00 --
+       on-disk bytes 10..127 are 1a, bytes 128..383 are 00. On real hardware an
+       allocated-but-unwritten block may hold whatever was there before. So gap
+       content is emulator- and filesystem-dependent: undefined, and a test
+       that pinned it would be pinning an accident. --- */
+    {
+        char rbuf[16];
+        int  h;
+        long far_off = 500L;
+
+        h = open( "SPARSE.DAT", O_RDWR | O_CREAT | O_TRUNC | O_BINARY );
+        VERIFY( h >= 0 );
+        if( h >= 0 ) {
+            VERIFY( write( h, "0123456789", 10 ) == 10 );
+            VERIFY( filelength( h ) == 10L );
+
+            /* (a) seek far past the end: accepted, position is exact */
+            VERIFY( lseek( h, far_off, SEEK_SET ) == far_off );
+            VERIFY( tell( h ) == far_off );
+            VERIFY( eof( h ) == 1 );             /* at/after end reads as EOF */
+            /* (b) the seek did NOT grow the file */
+            VERIFY( filelength( h ) == 10L );
+
+            /* (c) reads at/after the end yield nothing, at three positions:
+               far beyond the last record, exactly ON the end, and inside the
+               final record's Ctrl-Z padding (offset 100 is still record 0, so
+               a naive record-granular read WOULD hand back padding here). */
+            VERIFY( read( h, rbuf, 10 ) == 0 );          /* at 500 */
+            VERIFY( lseek( h, 10L, SEEK_SET ) == 10L );
+            VERIFY( read( h, rbuf, 10 ) == 0 );          /* exactly at end */
+            VERIFY( lseek( h, 100L, SEEK_SET ) == 100L );
+            VERIFY( read( h, rbuf, 10 ) == 0 );          /* inside padding */
+
+            /* seeking before the start is an error, not a clamp to 0 */
+            VERIFY( lseek( h, -1L, SEEK_SET ) == -1L );
+
+            /* (d) a write at the far offset extends the length over the gap */
+            VERIFY( lseek( h, far_off, SEEK_SET ) == far_off );
+            VERIFY( write( h, "XY", 2 ) == 2 );
+            VERIFY( filelength( h ) == far_off + 2 );
+
+            /* the written bytes survive; the gap in between is NOT checked */
+            VERIFY( lseek( h, far_off, SEEK_SET ) == far_off );
+            VERIFY( read( h, rbuf, 2 ) == 2 );
+            VERIFY( memcmp( rbuf, "XY", 2 ) == 0 );
+
+            VERIFY( close( h ) == 0 );
+        }
+        VERIFY( remove( "SPARSE.DAT" ) == 0 );
+    }
+
+    /* --- same question one layer up: fseek past the end on a FILE*. stdio
+       buffers, so this is not implied by the POSIX case above -- the read has
+       to come back empty through __filbuf as well, not just through __qread. */
+    {
+        fp = fopen( "SPARSE2.DAT", "wb" );
+        VERIFY( fp != NULL );
+        if( fp != NULL ) {
+            VERIFY( fwrite( "0123456789", 1, 10, fp ) == 10 );
+            VERIFY( fclose( fp ) == 0 );
+        }
+        fp = fopen( "SPARSE2.DAT", "rb" );
+        VERIFY( fp != NULL );
+        if( fp != NULL ) {
+            VERIFY( fseek( fp, 500L, SEEK_SET ) == 0 );  /* accepted */
+            VERIFY( ftell( fp ) == 500L );
+            VERIFY( fgetc( fp ) == EOF );                /* nothing out there */
+            VERIFY( feof( fp ) != 0 );
+            /* and inside the last record's Ctrl-Z padding, still nothing */
+            rewind( fp );
+            VERIFY( fseek( fp, 100L, SEEK_SET ) == 0 );
+            VERIFY( fgetc( fp ) == EOF );
+            VERIFY( fclose( fp ) == 0 );
+        }
+        VERIFY( remove( "SPARSE2.DAT" ) == 0 );
+    }
+
     /* --- chmod: on CP/M-86 the ONLY writability attribute is the read-only
        (R/O) bit, so chmod maps ONLY S_IWRITE -> clear R/O, !S_IWRITE -> set R/O;
        all other mode bits are ignored. This checks the seam is wired to F_ATTRIB
