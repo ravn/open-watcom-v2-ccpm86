@@ -113,6 +113,13 @@ closes, reopens cold, asserts `SEEK_END == 100`. PASS under emu2 and — the
 authority — **PASS on the real RC759 under MAME (Concurrent CP/M-86 3.1):
 `DISKIO: PASS (650 tests, 0 failures)`** via `mame-tests/disk-mame.sh`.
 
+> The "650 tests" figures in this document are historical: they record the
+> suite size at the time each MAME run was made. Re-running that same August
+> artifact on 2026-09-07 reports `686 tests, 0 failures` — the binary on disk
+> has been rebuilt since those notes were written. The counts differ because
+> the suite grew, not because results changed. Note also that no *rebuilt*
+> binary passes on hardware today; see **ravn/open-watcom-v2-ccpm86#47**.
+
 ### 3. Gold-standard `clibtest` disk oracle — streamio LANDED
 
 Watcom ships its own self-checking regression tests
@@ -229,13 +236,22 @@ Verified under emu2 against the first-class clib (`bld/clib/_cpm/c/diskio.c`):
 (flipping the expected read count makes the run report `***FAIL***`), so they
 are observably falsifiable rather than vacuous.
 
-**Not yet run against `port/diskio.c`** (the copy `build-diskio.sh` compiles):
-`wasm` segfaults under qemu on `port/crt0sm.asm` in both Docker images, so that
-path needs the native `osxa64` toolchain or the MAME harness. The functions the
-test exercises — `__lseek`, the `__qread` end-of-file clamp, `filelength`,
-`eof`, and the write-side length extension — were diffed and are **byte
--identical** between the two copies, so the behaviour is expected to match; that
-expectation is reasoned, not yet executed.
+**Run against `port/diskio.c` too** (the copy `build-diskio.sh` compiles): the
+earlier `wasm` segfault was a bad `OUTDIR`, not a toolchain fault, so that path
+builds fine. Result under emu2: `DISKIO: PASS (719 tests, 0 failures)`, matching
+the clib copy exactly. The functions the test exercises — `__lseek`, the
+`__qread` end-of-file clamp, `filelength`, `eof`, and the write-side length
+extension — are byte-identical between the two copies.
+
+**On real MAME hardware these 33 checks are still unverified, and not because
+of anything in this test.** Any `disktest.cmd` built today fails on the RC759 in
+`chmod`/`access`/`stat`/`utime` long before reaching them — see
+**ravn/open-watcom-v2-ccpm86#47**. That failure was proven pre-existing: the
+*baseline* test (without this block) fails identically, `54 tests / 41
+failures`, and so does the Aug-15 `diskio.c` source rebuilt through the same
+path. Both `port/` and the first-class clib copy are affected. The only binary
+that passes `686 / 0` on hardware is the August artifact built with the native
+`osxa64` toolchain, which is no longer present in the tree.
 
 ### 4. Currently implemented seam surface — for reference
 
