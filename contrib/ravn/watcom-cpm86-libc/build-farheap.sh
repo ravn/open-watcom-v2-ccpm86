@@ -137,7 +137,7 @@ assert bdos>0, "FAIL: no BDOS call in image!"
 PY
 
 echo "--- run under emu2 ---"
-OUT="$("$EMU2" farheaptest.cmd | tr -d '\r')"; echo "$OUT"
+OUT="$("$EMU2" -P 255 farheaptest.cmd | tr -d '\r')"; echo "$OUT"
 case "$OUT" in
   *"PASS (0 blocks corrupted)"*)
     echo "PASS: Stage A far heap (_fmalloc/_ffree, multi-slab) on CP/M-86" ;;

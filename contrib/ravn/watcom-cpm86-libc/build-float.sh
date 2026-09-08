@@ -169,7 +169,7 @@ assert traps==0, "FAIL: 8087 emulator trap present -- this must be pure soft-flo
 PY
 
 # --- run under emu2 + hand-computed oracle gate ---
-OUT="$("$EMU2" floattest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 floattest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 EXP="pi6=3141592 mul=40115 add=468 sub=242"
 if [ "$OUT" = "$EXP" ]; then
   echo "PASS: Watcom OWN double soft-float (-fpc, __FDxemu) on CP/M-86, no 8087"

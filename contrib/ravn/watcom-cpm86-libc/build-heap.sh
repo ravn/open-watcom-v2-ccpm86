@@ -91,7 +91,7 @@ assert bdos>0, "FAIL: no BDOS call in image!"
 PY
 
 # --- run under emu2 + hand-computed oracle gate ---
-OUT="$("$EMU2" heaptest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 heaptest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 EXP=$'sorted : 0 1 2 3 4 5 6 7 8 9\ncalloc : 0\nrealloc: 0 40\nreuse  : ok'
 if [ "$OUT" = "$EXP" ]; then
   echo "PASS: Watcom near-heap (malloc/free/calloc/realloc) + qsort on CP/M-86"

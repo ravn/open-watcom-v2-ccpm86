@@ -261,7 +261,7 @@ if [ "${WHET_NORUN:-0}" = "1" ]; then
   echo "WHET_NORUN=1: skipping emu2 oracle (built whetstone.cmd for MAME rc759)"
   exit 0
 fi
-OUT="$("$EMU2" whetstone.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 whetstone.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 EXP="$(cat <<'ORACLE'
       0       0       0   1.0000e+00  -1.0000e+00  -1.0000e+00  -1.0000e+00
     120     140     120  -6.8342e-02  -4.6264e-01  -7.2972e-01  -1.1240e+00

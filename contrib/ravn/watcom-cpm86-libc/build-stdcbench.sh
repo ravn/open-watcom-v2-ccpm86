@@ -193,7 +193,7 @@ echo "built scb.cmd ($(stat -f%z scb.cmd) bytes)"
 # --- optional emu2 functional run (host-speed score; proves execution) ---
 if [ -n "$SCB_NORUN" ]; then echo "SCB_NORUN set -- skipping emu2 run"; exit 0; fi
 echo "=== running stdcbench (emu2 functional run; score reflects HOST speed) ==="
-OUT="$("$EMU2" scb.cmd 2>&1 | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 scb.cmd 2>&1 | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "final score:"; then
   echo "PASS: stdcbench (c90base+c90lib) runs end-to-end on Watcom clib + our shim"
 else

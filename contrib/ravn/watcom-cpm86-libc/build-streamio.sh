@@ -216,7 +216,7 @@ if [ "${STREAMIO_NORUN:-0}" = "1" ]; then
   exit 0
 fi
 rm -f TMP?????.\$\$\$ *.TMP
-OUT="$("$EMU2" iotest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 iotest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "Tests completed"; then
   echo "PASS: Watcom UNCHANGED streamio/iotest.c on CP/M-86 (disk + console)"
 else

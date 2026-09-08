@@ -179,7 +179,7 @@ if [ "${FSCANF_NORUN:-0}" = "1" ]; then
   exit 0
 fi
 rm -f TEST.TXT SCAN.DAT
-OUT="$("$EMU2" disktest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 disktest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "DISKIO: PASS"; then
   echo "PASS: Watcom GENUINE fscanf read-path formatter on CP/M-86 disk files"
 else

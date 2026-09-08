@@ -35,5 +35,5 @@ echo "built $OUTDIR/STKGUARD.CMD (stack=$STK, fill=0xA5): $(stat -f%z STKGUARD.C
 if [ "${STKG_NORUN:-0}" != "1" ]; then
     EMU2="${EMU2:-/Users/ravn/z80/emu2-cpm86/emu2}"
     echo "--- run (stack=$STK) ---"
-    ( printf '\n'; sleep 1 ) | "$EMU2" STKGUARD.CMD 2>&1 | sed -n '1,12p'
+    ( printf '\n'; sleep 1 ) | "$EMU2" -P 255 STKGUARD.CMD 2>&1 | sed -n '1,12p'
 fi

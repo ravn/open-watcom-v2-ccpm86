@@ -194,5 +194,5 @@ echo "built $OUTBASE ($(wc -c < "$OUTBASE") bytes, EH=$EH)"
 
 if [ "${NORUN:-0}" = "1" ]; then popd >/dev/null; exit 0; fi
 echo "--- emu2 run ---"
-"$EMU2" "$OUTBASE" | tr -d '\r' || true
+"$EMU2" -P 255 "$OUTBASE" | tr -d '\r' || true
 popd >/dev/null

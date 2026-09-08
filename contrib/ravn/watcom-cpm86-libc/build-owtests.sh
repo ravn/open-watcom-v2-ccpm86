@@ -199,7 +199,7 @@ PY
   if [ "${OWT_NORUN:-0}" = "1" ]; then echo "OWT_NORUN=1: built $t.cmd (skipping run)"; continue; fi
 
   if [ "$RUNNER" = "emu2" ]; then
-    OUT="$("$EMU2" "$t.cmd" | tr -d '\r')"
+    OUT="$("$EMU2" -P 255 "$t.cmd" | tr -d '\r')"
   else
     OUT="$("$CPM86RUN_VENV" "$CPM86RUN_PY" "$t.cmd" | tr -d '\r')"
   fi

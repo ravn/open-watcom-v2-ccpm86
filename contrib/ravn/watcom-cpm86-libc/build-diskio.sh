@@ -140,7 +140,7 @@ if [ "${DISKIO_NORUN:-0}" = "1" ]; then
   exit 0
 fi
 rm -f TEST.TXT
-OUT="$("$EMU2" disktest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 disktest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "DISKIO: PASS"; then
   echo "PASS: Watcom GENUINE stdio FILE* disk read/write path on CP/M-86"
 else

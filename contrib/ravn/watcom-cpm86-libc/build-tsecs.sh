@@ -66,7 +66,7 @@ assert dos==0, "FAIL: DOS INT 21h present in image!"
 assert bdos>0, "FAIL: no BDOS call in image!"
 PY
 
-emu2_elapsed() { "$EMU2" tsecs.cmd 2>/dev/null | tr -d '\r' | awk '/^ELAPSED/{print $2}'; }
+emu2_elapsed() { "$EMU2" -P 255 tsecs.cmd 2>/dev/null | tr -d '\r' | awk '/^ELAPSED/{print $2}'; }
 uni_elapsed()  { python3 "$RUNNER" --count tsecs.cmd 2>/dev/null | tr -d '\r\000' | awk '/^ELAPSED/{print $2}'; }
 
 echo "== emu2 =="

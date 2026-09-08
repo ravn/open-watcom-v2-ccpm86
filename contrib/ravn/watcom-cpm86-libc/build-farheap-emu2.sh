@@ -45,7 +45,7 @@ echo "== 1. build FHEMU2.CMD =="
 
 echo "== 2. run under emu2 (grab up to ~1 MB, analyse what we got) =="
 rm -f "$DUMP"
-OUT=$(EMU2_RAMDUMP="$LIBC/$DUMP" "$EMU2" "$OUTDIR/FHEMU2.CMD" 2>/dev/null | tr -d '\r\000')
+OUT=$(EMU2_RAMDUMP="$LIBC/$DUMP" "$EMU2" -P 255 "$OUTDIR/FHEMU2.CMD" 2>/dev/null | tr -d '\r\000')
 echo "$OUT"
 N=$(printf '%s' "$OUT" | grep -oE 'n=[0-9]+' | head -1 | cut -d= -f2)
 case "$OUT" in PASS*) : ;; *) echo "FAIL: guest did not report PASS"; exit 1 ;; esac
