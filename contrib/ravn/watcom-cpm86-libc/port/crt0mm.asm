@@ -34,11 +34,13 @@
         extrn   __CommonInit_ : far
         extrn   __CommonRedirect_ : far
         extrn   __CommonRedirectClose_ : far
+        extrn   _edata : byte           ; wlink/dosseg: start of BSS class
+        extrn   _end   : byte           ; wlink/dosseg: end of BSS class
         public  _cstart_
         public  _big_code_
         public  __STK
 
-DGROUP  group   BEGDATA, _DATA, STACK
+DGROUP  group   BEGDATA, _DATA, _BSS, STACK
 
 BEGTEXT segment word public 'CODE'
         assume  cs:BEGTEXT, ds:DGROUP, ss:DGROUP
@@ -51,6 +53,17 @@ _cstart_:
         mov     ax, ds
         mov     ss, ax
         mov     sp, offset DGROUP:stktop
+; Zero-fill BSS: the CP/M-86 loader allocates G-Min but only writes G-Length
+; from the file image; the gap is uninitialised BSS.  _edata/_end are the
+; 'BSS'-class bounds wlink emits under `option dosseg` (see wlink loadfile.c
+; GetBSSSize).  ES must point at DGROUP for stosb (AX already = DS here).
+        mov     es, ax
+        cld
+        mov     di, offset DGROUP:_edata
+        mov     cx, offset DGROUP:_end
+        sub     cx, di
+        xor     al, al
+        rep     stosb
         call    far ptr wc_heap_init_
 ; Run the C runtime initializers (must be AFTER wc_heap_init -- __InitFiles
 ; allocates the stdout FILE buffer from the near heap). __CommonInit is
@@ -125,6 +138,9 @@ BEGTEXT ends
 BEGDATA segment word public 'BEGDATA'
         db      100h dup(0)             ; base page area DS:0000-00FF
 BEGDATA ends
+
+_BSS    segment word public 'BSS'
+_BSS    ends
 
 _DATA   segment word public 'DATA'
         public  __argc

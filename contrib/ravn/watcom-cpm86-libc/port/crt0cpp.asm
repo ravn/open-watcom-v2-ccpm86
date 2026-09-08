@@ -2,6 +2,8 @@
         extrn   main_ : near
         extrn   wc_heap_init_ : near
         extrn   __CommonInit_ : near
+        extrn   _edata : byte           ; wlink/dosseg: start of BSS class
+        extrn   _end   : byte           ; wlink/dosseg: end of BSS class
         public  _cstart_
         public  _small_code_
 _small_code_    equ     0
@@ -21,7 +23,7 @@ _small_code_    equ     0
 ; C++ runtime). Pure-C programs have an EMPTY XI (_Start_XI == _End_XI), so the
 ; walk is a no-op there -- but this crt0 is used ONLY by build-cpp.sh; the seven
 ; C targets keep the leaner port/crt0sm.asm.
-DGROUP  group   BEGDATA, _DATA, XIB, XI, XIE, YIB, YI, YIE, STACK
+DGROUP  group   BEGDATA, _DATA, XIB, XI, XIE, YIB, YI, YIE, _BSS, STACK
 
 _TEXT   segment word public 'CODE'
         assume  cs:_TEXT, ds:DGROUP, ss:DGROUP
@@ -31,6 +33,17 @@ _cstart_:
         mov     ax, ds
         mov     ss, ax
         mov     sp, offset DGROUP:stktop
+; Zero-fill BSS: the CP/M-86 loader allocates G-Min but only writes G-Length
+; from the file image; the gap is uninitialised BSS.  _edata/_end are the
+; 'BSS'-class bounds wlink emits under `option dosseg` (see wlink loadfile.c
+; GetBSSSize).  ES must point at DGROUP for stosb (AX already = DS here).
+        mov     es, ax
+        cld
+        mov     di, offset DGROUP:_edata
+        mov     cx, offset DGROUP:_end
+        sub     cx, di
+        xor     al, al
+        rep     stosb
         call    wc_heap_init_           ; seed near heap FIRST (ctors + __InitFiles
                                         ; both allocate from it)
         call    __CommonInit_           ; __InitFiles: attach std FILE buffers so
@@ -156,6 +169,9 @@ YI      ends
 YIE     segment word public 'DATA'
 _End_YI label byte
 YIE     ends
+
+_BSS    segment word public 'BSS'
+_BSS    ends
 
 STACK   segment word public 'STACK'
         db      512 dup(0)

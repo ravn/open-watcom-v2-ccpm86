@@ -253,36 +253,33 @@ path. Both `port/` and the first-class clib copy are affected. The only binary
 that passes `686 / 0` on hardware is the August artifact built with the native
 `osxa64` toolchain, which is no longer present in the tree.
 
-### 3c. BSS is never zeroed — statics start dirty on real hardware
+### 3c. ~~BSS is never zeroed — statics start dirty on real hardware~~ FIXED
 
-**ravn/open-watcom-v2-ccpm86#47.** A `.CMD` data group descriptor carries both
+**ravn/open-watcom-v2-ccpm86#47. RESOLVED** — `port/crt0{sm,cm,mm,lm,cpp}.asm`
+now zero-fill BSS before `wc_heap_init_` using wlink's own `_edata`/`_end`
+bounds (emitted by `GetBSSSize()` under `option dosseg`). Verified under
+`emu2 -P 255`: `bss_assert` → PASS (0 failures), `bssprobe` → 0 of 16384
+bytes non-zero. See `BSS_FIX_PLAN.md` for full analysis.
+
+**Historical record (pre-fix):** A `.CMD` data group descriptor carries both
 G-Length (paragraphs of initialised data actually in the file) and G-Min
-(paragraphs the loader must allocate); the difference is BSS. Nothing clears
-it — `port/crt0sm.asm` has no zero-fill loop — so on the RC759 every C
-`static`/global without an initialiser starts as garbage, violating the C
+(paragraphs the loader must allocate); the difference is BSS. Nothing cleared
+it — `port/crt0sm.asm` had no zero-fill loop — so on the RC759 every C
+`static`/global without an initialiser started as garbage, violating the C
 guarantee for static storage duration.
 
-Measured with `test/bssprobe.c`, which counts non-zero bytes in a 16 KB
-uninitialised static array before writing anything:
+Pre-fix measurement with `test/bssprobe.c`:
 
 | host | result |
 | --- | --- |
-| emu2 | `0 of 16384 bytes non-zero` — ZEROED |
+| emu2 | `0 of 16384 bytes non-zero` — ZEROED (emulator hid bug) |
 | real RC759 (MAME) | `16128 of 16384 bytes non-zero` — **DIRTY** |
+| emu2 -P 255 (post-fix) | `0 of 16384 bytes non-zero` — ZEROED |
 
-That split is why emu2 cannot detect this class at all. The August artifact
-that still passes `686 / 0` on hardware is immune only by accident: its
-toolchain wrote the whole BSS out as literal zeros in the file image, so
-G-Length == G-Min and no uninitialised tail existed. That also accounts for its
-size — 45776 bytes, against 23–26 KB for every binary built today.
-
-Correlation is exact: every binary with a zero-length BSS tail passes on
-hardware, every binary with a large one fails. Check any `.CMD` with the header
-decoder in #47.
-
-**Scope: this is not confined to the disk seam.** Any CP/M-86 program built
-through the current toolchain that relies on a zero-initialised static is
-affected; the disk oracle is simply the test that happens to exercise it.
+The August artifact that passed `686 / 0` on hardware was immune only by
+accident: its toolchain wrote whole BSS as literal zeros in the file image
+(G-Length == G-Min). Scope was not confined to the disk seam — any CP/M-86
+program relying on zero-initialised statics was affected.
 
 ### 4. Currently implemented seam surface — for reference
 
