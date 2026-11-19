@@ -66,12 +66,14 @@ void InitGlobs( void )
     SemanticInitStaticsWIN();
     SemanticInitStaticsOS2();
     SharedIOInitStatics();
+    ScanInitStaticsW16();
     ScanInitStaticsWIN();
     ScanInitStaticsOS2();
     AutoDepInitStatics();
     DbtableInitStatics();
     LoadstrInitStatics();
     WriteInitStatics();
+    ParseInitStaticsW16();
     ParseInitStaticsWIN();
     ParseInitStaticsOS2();
 }
@@ -90,12 +92,12 @@ static bool CreatePreprocFile( void )
     error = false;
     fh = fopen( CmdLineParms.OutResFileName, "wt" );
     if( fh == NULL ) {
-        RcError( ERR_CANT_OPEN_FILE, CmdLineParms.OutResFileName, strerror( errno ) );
+        RcError( RCMSG_CANT_OPEN_FILE, CmdLineParms.OutResFileName, strerror( errno ) );
         error = true;
     } else {
         while( (ch = RcIoGetChar()) != EOF ) {
             if( fputc( ch, fh ) == EOF ) {
-                RcError( ERR_WRITTING_FILE, CmdLineParms.OutResFileName, strerror( errno ) );
+                RcError( RCMSG_WRITTING_FILE, CmdLineParms.OutResFileName, strerror( errno ) );
                 error = true;
             }
         }
@@ -116,9 +118,15 @@ static bool Pass1( void )
             if( CmdLineParms.TargetOS == RC_TARGET_OS_OS2 ) {
                 ParseInitOS2();
                 ParseOS2();
+                ParseFiniOS2();
+            } else if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN16 ) {
+                ParseInitW16();
+                ParseW16();
+                ParseFiniW16();
             } else {
                 ParseInitWIN();
                 ParseWIN();
+                ParseFiniWIN();
             }
             WriteDependencyRes();
         } else {
@@ -156,7 +164,7 @@ static bool Pass2( void )
             noerror = MergeResExeLX( &Pass2Info.OldFile, &Pass2Info.TmpFile, Pass2Info.ResFile );
             break;
         default: /* EXE_TYPE_UNKNOWN */
-            RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
+            RcError( RCMSG_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
             noerror = false;
             break;
         }

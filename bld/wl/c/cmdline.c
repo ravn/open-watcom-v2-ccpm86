@@ -34,7 +34,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "linkstd.h"
-#include "exeos2.h"
 #include "cmdutils.h"
 #include "cmdall.h"
 #include "cmdos2.h"
@@ -151,7 +150,7 @@ static void ResetCmdFile( void )
     FmtData.base = NO_BASE_SPEC;
     FmtData.objalign = NO_BASE_SPEC;
     FmtData.type = MK_ALL;
-    FmtData.def_seg_flags = SEG_LEVEL_3;
+    SET_SEG_PMODE_DPL( FmtData.def_seg_flags, 3 );
     FmtData.Hshift = 12;    /* May want different value for some 32 bit segmented modes */
     FmtData.FillChar = 0;   /* Default fillchar for segment alignment */
     SetSegMask();
@@ -332,7 +331,7 @@ void DoCmdFile( const char *fname )
 #elif defined( __BSD__ )
 #define LAST_CHANCE ( MK_OS2 | MK_ELF )
 #elif defined( __NT__ )
-#define LAST_CHANCE ( MK_OS2_LX | MK_OS2_NE | MK_WIN_NE | MK_PE | MK_DOS_EXE | MK_WIN_VXD )
+#define LAST_CHANCE ( MK_OS2_LX | MK_NE | MK_PE | MK_DOS_EXE | MK_WIN_VXD )
 #elif defined( __RDOS__ )
 #define LAST_CHANCE ( MK_RDOS | MK_PE | MK_DOS_EXE)
 #else
@@ -390,8 +389,8 @@ void DoCmdFile( const char *fname )
           && (LinkFlags & LF_ANY_DBI_FLAG) ) ) {
             SymFileName = FileName( Name, namelen, E_SYM, true );
         }
-        if( FmtData.implibname == NULL
-          && FmtData.make_implib ) {
+        if( FmtData.make_implib
+          && FmtData.implibname == NULL ) {
             if( FmtData.make_impfile ) {
                 extension = E_LBC;
             } else {
@@ -500,7 +499,7 @@ bool HintFormat( exe_format hint )
     }
     if( possible == 0 ) {
 #ifdef _OS2
-        if( (~(MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) & FmtData.type) == 0 ) {
+        if( (~(MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) & FmtData.type) == 0 ) {
             /* Windows, OS/2 V1.x, OS/2 V2.x, PE, VxD all
                 want the same structure */
             InitFmt( SetOS2Fmt );

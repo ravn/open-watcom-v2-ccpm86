@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "bool.h"
 #include "hashtab.h"
 
 #include "clibext.h"
@@ -55,24 +56,25 @@ static unsigned int hashpjw( const char *s )
     return( h % HASH_TABLE_SIZE );
 }
 
-void AddSymbol( sym_table sym_tbl, const char *name, const void *value, size_t len )
+bool AddSymbol( sym_table sym_tbl, const char *name, const void *value, size_t len )
 /**********************************************************************************/
 {
     symbol      **sym_ptr;
     symbol      *sym;
 
     sym_ptr = &sym_tbl[hashpjw( name )];
-    for( sym = *sym_ptr; sym; sym = sym->next ) {
+    for( sym = *sym_ptr; sym != NULL; sym = sym->next ) {
         if( stricmp( name, sym->name ) == 0 ) {
-            return;
+            return( true );
         }
     }
     if( sym == NULL ) {
-        sym = malloc( sizeof( symbol ) );
-        sym->name = malloc( strlen( name ) + 1 );
+        sym = malloc( sizeof( symbol ) + strlen( name ) + 1 + len );
+        if( sym == NULL )
+            return( false );
         strcpy( sym->name, name );
         if( value != NULL ) {
-            sym->value = malloc( len );
+            sym->value = sym->name + strlen( name ) + 1;
             memcpy( sym->value, value, len );
         } else {
             sym->value = NULL;
@@ -80,6 +82,7 @@ void AddSymbol( sym_table sym_tbl, const char *name, const void *value, size_t l
         sym->next = *sym_ptr;
         *sym_ptr = sym;
     }
+    return( true );
 }
 
 void *SymbolExists( sym_table sym_tbl, const char *name )
@@ -113,14 +116,11 @@ void SymbolFini( sym_table sym_tbl )
 /**********************************/
 {
     struct symbol      *sym;
-    struct symbol      *next;
     unsigned            i;
 
     for( i = 0; i < HASH_TABLE_SIZE; i++ ) {
-        for( sym = sym_tbl[i]; sym != NULL; sym = next ) {
-            next = sym->next;
-            free( sym->name );
-            free( sym->value );
+        while( (sym = sym_tbl[i]) != NULL ) {
+            sym_tbl[i] = sym->next;
             free( sym );
         }
     }

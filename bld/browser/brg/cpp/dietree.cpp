@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,13 +31,13 @@
 ****************************************************************************/
 
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 
 #include "assure.h"
 #include "brmerge.h"
 #include "dietree.h"
-#include "brmem.h"
+#include "memfuncs.h"
 #include "mrdie.h"          // comment this out for DEBUG_DIETREE
 
 const int   SearchPoolSize = 16;   // 16 elements per hunk
@@ -61,7 +61,7 @@ DIETree::DIETree()
 
     ASSERTION( Stack == NULL );     // ensure only one copy running
 
-    Stack = (DIETreeSearchP *) WBRAlloc( StackSize * sizeof(DIETreeSearchP) );
+    Stack = (DIETreeSearchP *)MemAlloc( StackSize * sizeof(DIETreeSearchP) );
 
     _root = allocSearch();
     rhs = allocBucket( NULL );
@@ -80,7 +80,7 @@ DIETree::~DIETree()
 {
     _searchPool.ragnarok();
     _bucketPool.ragnarok();
-    WBRFree( Stack );
+    MemFree( Stack );
     Stack = NULL;       // for following executions
 }
 
@@ -179,7 +179,7 @@ void DIETree::insert( MergeDIE * die )
         Stack[ depth++ ] = search;
         if( depth >= StackSize ) {
             StackSize += StackGuess;
-            Stack = (DIETreeSearchP *) WBRRealloc( Stack,
+            Stack = (DIETreeSearchP *)MemRealloc( Stack,
                                     StackSize * sizeof(DIETreeSearchP) );
         }
         lower = 0;
@@ -234,7 +234,7 @@ void DIETree::insert( MergeDIE * die )
 
     if( lhn->_degree < (BUCKETORDER * 2 + 1) ) {
         lhn->_degree++;
-        memcpy( lhn->_nodes, nodes, sizeof( lhn->_nodes ) );
+        std::memcpy( lhn->_nodes, nodes, sizeof( lhn->_nodes ) );
         return;
     } else {
         rhn = allocBucket( lhn->_next );
@@ -242,10 +242,10 @@ void DIETree::insert( MergeDIE * die )
         lhn->_degree = BUCKETORDER + 1;
         rhn->_degree = BUCKETORDER + 1;
 
-        memcpy( lhn->_nodes, nodes,
+        std::memcpy( lhn->_nodes, nodes,
                 sizeof( lhn->_nodes[ 0 ] ) * (BUCKETORDER + 1) );
 
-        memcpy( rhn->_nodes, nodes + BUCKETORDER + 1,
+        std::memcpy( rhn->_nodes, nodes + BUCKETORDER + 1,
                 sizeof( lhn->_nodes[ 0 ] ) * (BUCKETORDER + 1) );
 
         split = true;
@@ -299,8 +299,8 @@ bool DIETree::doSplit( DIETreeSearch * search, DIETreeNode *& add,
     if( search->_degree < (2 * SEARCHORDER + 1) ) {
         split = false;  // don't need to split this node
         search->_degree++;
-        memcpy( search->_separators, seps, sizeof( search->_separators ) );
-        memcpy( search->_nodes, nodes, sizeof( search->_nodes ) );
+        std::memcpy( search->_separators, seps, sizeof( search->_separators ) );
+        std::memcpy( search->_nodes, nodes, sizeof( search->_nodes ) );
     } else {
         split = true;   // split propagates
         rhn = allocSearch();
@@ -308,14 +308,14 @@ bool DIETree::doSplit( DIETreeSearch * search, DIETreeNode *& add,
         search->_degree = SEARCHORDER + 1;
         rhn->_degree = SEARCHORDER + 1;
 
-        memcpy( search->_separators, seps,
+        std::memcpy( search->_separators, seps,
                 sizeof( seps[ 0 ] ) * SEARCHORDER );
-        memcpy( search->_nodes, nodes,
+        std::memcpy( search->_nodes, nodes,
                 sizeof( nodes[ 0 ] ) * (SEARCHORDER + 1) );
 
-        memcpy( rhn->_separators, seps + SEARCHORDER + 1,
+        std::memcpy( rhn->_separators, seps + SEARCHORDER + 1,
                 sizeof( seps[ 0 ] ) * SEARCHORDER );
-        memcpy( rhn->_nodes, nodes + SEARCHORDER + 1,
+        std::memcpy( rhn->_nodes, nodes + SEARCHORDER + 1,
                 sizeof( nodes[ 0 ] ) * (SEARCHORDER + 1) );
     }
 
@@ -399,30 +399,30 @@ void main() {
     DIETree     tree;
     MergeDIE *  die;
 
-    printf( "Ready\n" );
+    std::printf( "Ready\n" );
 
-    while( fgets( buf, sizeof( buf ), stdin ) != NULL ) {
-        buf[ strlen( buf ) - 1 ] = '\0';
+    while( std::fgets( buf, sizeof( buf ), stdin ) != NULL ) {
+        buf[ std::strlen( buf ) - 1 ] = '\0';
         die = tree.find( buf );
-        printf( "%s -- %s:%s\n", buf, (die) ? "found" : "not found",
+        std::printf( "%s -- %s:%s\n", buf, (die) ? "found" : "not found",
                 (die) ? die->name() : "" );
 
         while( (die = tree.next()) ) {
-            printf( "    next = %s\n", die->name() );
+            std::printf( "    next = %s\n", die->name() );
         }
 
-        printf( "Inserting...\n" );
+        std::printf( "Inserting...\n" );
         tree.insert( new MergeDIE( buf ) );
 
-        printf( "Whole Tree:\n" );
+        std::printf( "Whole Tree:\n" );
         tree.setToStart();
         while( (die = tree.next()) ) {
-            printf( "    next = %s\n", die->name() );
+            std::printf( "    next = %s\n", die->name() );
         }
 
         tree.print( NULL, 0 );
 
-        printf( "Ready\n" );
+        std::printf( "Ready\n" );
     }
 }
 #endif

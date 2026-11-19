@@ -37,13 +37,13 @@
 #include "wresrtns.h"
 
 
-MResResourceHeader *MResReadResourceHeader( FILE *fp, bool iswin32 )
-/******************************************************************/
+MSResResourceHeader *MSResReadResourceHeader( FILE *fp, bool iswin32 )
+/********************************************************************/
 {
-    MResResourceHeader      *msheader;
+    MSResResourceHeader     *msheader;
     bool                    error;
 
-    msheader = WRESALLOC( sizeof( MResResourceHeader ) );
+    msheader = WRESALLOC( sizeof( MSResResourceHeader ) );
     if( msheader == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
         return( NULL );
@@ -57,11 +57,11 @@ MResResourceHeader *MResReadResourceHeader( FILE *fp, bool iswin32 )
             msheader->HdrSize = ResReadUint32( &error, fp );
         }
         if( !error ) {
-            msheader->Type = ResRead32NameOrOrdinal( fp );
+            msheader->Type = ResReadNameOrOrdinal32( fp );
             error = ( msheader->Type == NULL );
         }
         if( !error ) {
-            msheader->Name = ResRead32NameOrOrdinal( fp );
+            msheader->Name = ResReadNameOrOrdinal32( fp );
             error = ( msheader->Name == NULL );
         }
         if( !error ) {
@@ -71,7 +71,7 @@ MResResourceHeader *MResReadResourceHeader( FILE *fp, bool iswin32 )
             msheader->DataVersion = ResReadUint32( &error, fp );
         }
         if( !error ) {
-            msheader->MemoryFlags = ResReadUint16( &error, fp );
+            msheader->res_flags = ResReadUint16( &error, fp );
         }
         if( !error ) {
             msheader->LanguageId = ResReadUint16( &error, fp );
@@ -90,7 +90,7 @@ MResResourceHeader *MResReadResourceHeader( FILE *fp, bool iswin32 )
             error = ( msheader->Name == NULL );
         }
         if( !error ) {
-            msheader->MemoryFlags = ResReadUint16( &error, fp );
+            msheader->res_flags = ResReadUint16( &error, fp );
         }
         if( !error ) {
             msheader->Size = ResReadUint32( &error, fp );

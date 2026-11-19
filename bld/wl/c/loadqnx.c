@@ -70,7 +70,7 @@ static void WriteLoadRec( void )
         record.data_nbytes = CurrGroup->size - AmountWritten + sizeof( lmf_data );
     }
     WriteLoad( &record, sizeof( lmf_record ) );
-    data.segment = QNX_SEL_NUM( CurrGroup->grp_addr.seg );
+    data.segment = QNX_SEL_NUM( CurrGroup->addr.seg );
     data.offset = AmountWritten;
     WriteLoad( &data, sizeof( lmf_data ) );
 }
@@ -194,7 +194,7 @@ static void WriteQNXGroup( group_entry *group, unsigned_32 *segments )
 {
     segment     seg;
 
-    seg = QNX_SEL_NUM( group->grp_addr.seg );
+    seg = QNX_SEL_NUM( group->addr.seg );
     segments[seg] = group->totalsize | ((unsigned_32)group->u.qnxflags << 28);
     if( StackSegPtr != NULL && group == StackSegPtr->group ) {
         segments[seg] -= StackSize;      // stack size gets
@@ -207,8 +207,8 @@ static void WriteQNXGroup( group_entry *group, unsigned_32 *segments )
     Ring2Walk( group->leaders, DoGroupLeader );
 }
 
-static void WriteQNXRelocs( RELOC_INFO *head, unsigned lmf_type, unsigned_16 seg )
-/********************************************************************************/
+static void WriteQNXRelocs( reloc_info reloclist, unsigned lmf_type, unsigned_16 seg )
+/************************************************************************************/
 {
     lmf_record          record;
     unsigned_32         pos;
@@ -224,12 +224,12 @@ static void WriteQNXRelocs( RELOC_INFO *head, unsigned lmf_type, unsigned_16 seg
         adjust = 2;
     }
     pos = PosLoad();    /* get current position */
-    while( head != NULL ) {
+    while( reloclist != NULL ) {
         SeekLoad( pos + sizeof( lmf_record ) );
         if( islinear ) {
             WriteLoad( &seg, sizeof( unsigned_16 ) );
         }
-        size = DumpMaxRelocList( &head, QNX_MAX_FIXUPS - adjust ) + adjust;
+        size = DumpMaxRelocList( &reloclist, QNX_MAX_FIXUPS - adjust ) + adjust;
         SeekLoad( pos );
         record.data_nbytes = size;
         WriteLoad( &record, sizeof( lmf_record ) );
@@ -272,8 +272,7 @@ static void WriteQNXData( unsigned_32 * segments )
         if( group->u.qnxflags != QNX_READ_WRITE && group->totalsize != 0 ) {
             WriteQNXGroup( group, segments );
         }
-        WriteQNXRelocs( group->g.grp_relocs, LMF_LINEAR_FIXUP_REC,
-                        QNX_SEL_NUM( group->grp_addr.seg ) );
+        WriteQNXRelocs( group->g.reloclist, LMF_LINEAR_FIXUP_REC, QNX_SEL_NUM( group->addr.seg ) );
     }
 }
 
@@ -281,27 +280,27 @@ static void WriteQNXData( unsigned_32 * segments )
 static bool checkGroupFlags( void *_seg, void *_group )
 /*****************************************************/
 {
-    seg_leader     *seg = _seg;
-    group_entry    *group = _group;
-    unsigned_16     sflags;
+    seg_leader      *seg = _seg;
+    group_entry     *group = _group;
+    seg_flags_type  sflags;
 
     sflags = seg->segflags;
 
-    // the default value for segflags is set to SEG_LEVEL_3 (0xC00) for OS/2
+    // the default value for segflags is set to SEG_PMODE_DPL_3 (0x0C00) for OS/2
     // and SEG_MOVABLE (0x10) for windows. Since the highest value that can be
     // specified for a QNX seg flag is 4, if sflags >= 0x10, there was no QNX value
     // specified.
 
     if( sflags < 0x10 ) {
-        if( (sflags & 1) == 0 ) {       // if can read/write or exec/read
-            group->u.qnxflags &= ~1;      // can for all segments.
-            return( true );                // no need to check others
+        if( (sflags & QNX_READ_ONLY) == 0 ) {       // if can read/write or exec/read
+            group->u.qnxflags &= ~QNX_READ_ONLY;    // can for all segments.
+            return( true );                         // no need to check others
         }
     } else {
         // make segments read/write or exec/read unless every segment is specifically
         // set otherwise.
 
-        group->u.qnxflags &= ~1;
+        group->u.qnxflags &= ~QNX_READ_ONLY;
         return( true );
     }
     return( false );
@@ -327,8 +326,8 @@ void SetQNXGroupFlags( void )
 void SetQNXSegFlags( void )
 /*************************/
 {
-    SetSegFlags( (xxx_seg_flags *)FmtData.u.qnx.seg_flags );
-    FmtData.u.qnx.seg_flags = NULL;        // segsegflags frees the list.
+    SetSegFlags( FmtData.u.qnx.seg_flags );
+    FmtData.u.qnx.seg_flags = NULL;         // segsegflags frees the list.
 }
 
 static void WriteQNXResource( void )
@@ -434,7 +433,7 @@ void FiniQNXLoadFile( void )
     header.stack_index = QNX_SEL_NUM( StackAddr.seg );
     adseg = header.stack_index;
     if( DataGroup != NULL ) {
-        adseg = QNX_SEL_NUM( DataGroup->grp_addr.seg );
+        adseg = QNX_SEL_NUM( DataGroup->addr.seg );
     }
     header.heap_index = adseg;  // all in DGROUP.
     header.argv_index = adseg;

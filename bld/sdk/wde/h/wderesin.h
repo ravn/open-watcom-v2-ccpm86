@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,86 +41,79 @@
 /****************************************************************************/
 /* macro definitions                                                        */
 /****************************************************************************/
-#define GETHDR_STYLE( ph )              ((ph)->Style)
-#define GETHDR_NUMITEMS( ph )           ((ph)->NumOfItems)
-#define GETHDR_SIZE( ph )               ((ph)->SizeInfo)
-#define GETHDR_PSIZE( ph )              (&(ph)->SizeInfo)
-#define GETHDR_SIZEX( ph )              ((ph)->SizeInfo.x)
-#define GETHDR_SIZEY( ph )              ((ph)->SizeInfo.y)
-#define GETHDR_SIZEW( ph )              ((ph)->SizeInfo.width)
-#define GETHDR_SIZEH( ph )              ((ph)->SizeInfo.height)
-#define GETHDR_MENUNAME( ph )           ((ph)->MenuName)
-#define GETHDR_CLASSNAME( ph )          ((ph)->ClassName)
-#define GETHDR_CAPTION( ph )            ((ph)->Caption)
-#define GETHDR_FONTPOINTSIZE( ph )      ((ph)->PointSize)
-#define GETHDR_FONTFACENAME( ph )       ((ph)->FontName)
-#define GETHDR_FONTWEIGHT( ph )         ((ph)->FontWeight)
-#define GETHDR_FONTITALIC( ph )         ((ph)->FontItalic)
-#define GETHDR_FONTCHARSET( ph )        ((ph)->FontCharset)
-#define GETHDR_HELPID( ph )             ((ph)->HelpId)
-#define GETHDR_EXSTYLE( ph )            ((ph)->ExtendedStyle)
+#define GETHDR_STYLE(ph)            ((ph)->head.Style)
+#define GETHDR_NUMITEMS(ph)         ((ph)->head.NumOfItems)
+#define GETHDR_SIZE(ph)             ((ph)->head.SizeInfo)
+#define GETHDR_PSIZE(ph)            (&((ph)->head.SizeInfo))
+#define GETHDR_SIZEX(ph)            ((ph)->head.SizeInfo.x)
+#define GETHDR_SIZEY(ph)            ((ph)->head.SizeInfo.y)
+#define GETHDR_SIZEW(ph)            ((ph)->head.SizeInfo.width)
+#define GETHDR_SIZEH(ph)            ((ph)->head.SizeInfo.height)
+#define GETHDR_MENUNAME(ph)         ((ph)->head.MenuName)
+#define GETHDR_CLASSNAME(ph)        ((ph)->head.ClassName)
+#define GETHDR_CAPTION(ph)          ((ph)->head.Caption)
+#define GETHDR_FONTPOINTSIZE(ph)    ((ph)->head.PointSize)
+#define GETHDR_FONTFACENAME(ph)     ((ph)->head.FontName)
+#define GETHDR_FONTWEIGHT(ph)       ((ph)->head.FontWeight)
+#define GETHDR_FONTITALIC(ph)       ((ph)->head.FontItalic)
+#define GETHDR_FONTCHARSET(ph)      ((ph)->head.FontCharset)
+#define GETHDR_HELPID(ph)           ((ph)->head.HelpId)
+#define GETHDR_EXSTYLE(ph)          ((ph)->head.ExtendedStyle)
 
-#define SETHDR_STYLE( ph, s )           ((ph)->Style = (s))
-#define SETHDR_NUMITEMS( ph, s )        ((ph)->NumOfItems = (s))
-#define SETHDR_SIZE( ph, s )            ((ph)->SizeInfo = (s))
-#define SETHDR_SIZEX( ph, s )           ((ph)->SizeInfo.x = (s))
-#define SETHDR_SIZEY( ph, s )           ((ph)->SizeInfo.y = (s))
-#define SETHDR_SIZEW( ph, s )           ((ph)->SizeInfo.width = (s))
-#define SETHDR_SIZEH( ph, s )           ((ph)->SizeInfo.height = (s))
-#define SETHDR_MENUNAME( ph, s )        ((ph)->MenuName = (s))
-#define SETHDR_CLASSNAME( ph, s )       ((ph)->ClassName = (s))
-#define SETHDR_CAPTION( ph, s )         ((ph)->Caption = (s))
-#define SETHDR_FONTPOINTSIZE( ph, s )   ((ph)->PointSize = (s))
-#define SETHDR_FONTFACENAME( ph, s )    ((ph)->FontName = (s))
-#define SETHDR_FONTWEIGHT( ph, s )      ((ph)->FontWeight = (s))
-#define SETHDR_FONTITALIC( ph, s )      ((ph)->FontItalic = (s))
-#define SETHDR_FONTCHARSET( ph, s )     ((ph)->FontCharset = (s))
-#define SETHDR_HELPID( ph, s )          ((ph)->HelpId = (s))
-#define SETHDR_EXSTYLE( ph, s )         ((ph)->ExtendedStyle = (s))
+#define SETHDR_STYLE(ph,s)          ((ph)->head.Style = (s))
+#define SETHDR_NUMITEMS(ph,s)       ((ph)->head.NumOfItems = (s))
+#define SETHDR_SIZE(ph,s)           ((ph)->head.SizeInfo = (s))
+#define SETHDR_SIZEX(ph,s)          ((ph)->head.SizeInfo.x = (s))
+#define SETHDR_SIZEY(ph,s)          ((ph)->head.SizeInfo.y = (s))
+#define SETHDR_SIZEW(ph,s)          ((ph)->head.SizeInfo.width = (s))
+#define SETHDR_SIZEH(ph,s)          ((ph)->head.SizeInfo.height = (s))
+#define SETHDR_MENUNAME(ph,s)       ((ph)->head.MenuName = (s))
+#define SETHDR_CLASSNAME(ph,s)      ((ph)->head.ClassName = (s))
+#define SETHDR_CAPTION(ph,s)        ((ph)->head.Caption = (s))
+#define SETHDR_FONTPOINTSIZE(ph,s)  ((ph)->head.PointSize = (s))
+#define SETHDR_FONTFACENAME(ph,s)   ((ph)->head.FontName = (s))
+#define SETHDR_FONTWEIGHT(ph,s)     ((ph)->head.FontWeight = (s))
+#define SETHDR_FONTITALIC(ph,s)     ((ph)->head.FontItalic = (s))
+#define SETHDR_FONTCHARSET(ph,s)    ((ph)->head.FontCharset = (s))
+#define SETHDR_HELPID(ph,s)         ((ph)->head.HelpId = (s))
+#define SETHDR_EXSTYLE(ph,s)        ((ph)->head.ExtendedStyle = (s))
 
-#define GETCTL_SIZE( pc )           ((pc)->SizeInfo)
-#define GETCTL_PSIZE( pc )          (&(pc)->SizeInfo)
-#define GETCTL_SIZEX( pc )          ((pc)->SizeInfo.x)
-#define GETCTL_SIZEY( pc )          ((pc)->SizeInfo.y)
-#define GETCTL_SIZEW( pc )          ((pc)->SizeInfo.width)
-#define GETCTL_SIZEH( pc )          ((pc)->SizeInfo.height)
-#define GETCTL_ID( pc )             ((pc)->ID)
-#define GETCTL_STYLE( pc )          ((pc)->Style)
-#define GETCTL_CLASSID( pc )        ((pc)->ClassID)
-#define GETCTL_TEXT( pc )           ((pc)->Text)
-#define GETCTL_EXTRABYTES( pc )     ((pc)->ExtraBytes)
-#define GETCTL_HELPID( pc )         ((pc)->HelpId)
-#define GETCTL_EXSTYLE( pc )        ((pc)->ExtendedStyle)
+#define GETCTL_SIZE(pc)             ((pc)->ctrl.SizeInfo)
+#define GETCTL_PSIZE(pc)            (&((pc)->ctrl.SizeInfo))
+#define GETCTL_SIZEX(pc)            ((pc)->ctrl.SizeInfo.x)
+#define GETCTL_SIZEY(pc)            ((pc)->ctrl.SizeInfo.y)
+#define GETCTL_SIZEW(pc)            ((pc)->ctrl.SizeInfo.width)
+#define GETCTL_SIZEH(pc)            ((pc)->ctrl.SizeInfo.height)
+#define GETCTL_ID(pc)               ((pc)->ctrl.ID)
+#define GETCTL_STYLE(pc)            ((pc)->ctrl.Style)
+#define GETCTL_CLASSID(pc)          ((pc)->ctrl.ClassID)
+#define GETCTL_TEXT(pc)             ((pc)->ctrl.Text)
+#define GETCTL_EXTRABYTES(pc)       ((pc)->ctrl.ExtraBytes)
+#define GETCTL_HELPID(pc)           ((pc)->ctrl.HelpId)
+#define GETCTL_EXSTYLE(pc)          ((pc)->ctrl.ExtendedStyle)
 
-#define SETCTL_SIZE( pc, s )        ((pc)->SizeInfo = (s))
-#define SETCTL_SIZEX( pc, s )       ((pc)->SizeInfo.x = (s))
-#define SETCTL_SIZEY( pc, s )       ((pc)->SizeInfo.y = (s))
-#define SETCTL_SIZEW( pc, s )       ((pc)->SizeInfo.width = (s))
-#define SETCTL_SIZEH( pc, s )       ((pc)->SizeInfo.height = (s))
-#define SETCTL_ID( pc, s )          ((pc)->ID = (s))
-#define SETCTL_STYLE( pc, s )       ((pc)->Style = (s))
-#define SETCTL_CLASSID( pc, s )     ((pc)->ClassID = (s))
-#define SETCTL_TEXT( pc, s )        ((pc)->Text = (s))
-#define SETCTL_EXTRABYTES( pc, s )  ((pc)->ExtraBytes = (s))
-#define SETCTL_HELPID( pc, s )      ((pc)->HelpId = (s))
-#define SETCTL_EXSTYLE( pc, s )     ((pc)->ExtendedStyle = (s))
+#define SETCTL_SIZE(pc,s)           ((pc)->ctrl.SizeInfo = (s))
+#define SETCTL_SIZEX(pc,s)          ((pc)->ctrl.SizeInfo.x = (s))
+#define SETCTL_SIZEY(pc,s)          ((pc)->ctrl.SizeInfo.y = (s))
+#define SETCTL_SIZEW(pc,s)          ((pc)->ctrl.SizeInfo.width = (s))
+#define SETCTL_SIZEH(pc,s)          ((pc)->ctrl.SizeInfo.height = (s))
+#define SETCTL_ID(pc,s)             ((pc)->ctrl.ID = (s))
+#define SETCTL_STYLE(pc,s)          ((pc)->ctrl.Style = (s))
+#define SETCTL_CLASSID(pc,s)        ((pc)->ctrl.ClassID = (s))
+#define SETCTL_TEXT(pc,s)           ((pc)->ctrl.Text = (s))
+#define SETCTL_EXTRABYTES(pc,s)     ((pc)->ctrl.ExtraBytes = (s))
+#define SETCTL_HELPID(pc,s)         ((pc)->ctrl.HelpId = (s))
+#define SETCTL_EXSTYLE(pc,s)        ((pc)->ctrl.ExtendedStyle = (s))
 
 /****************************************************************************/
 /* type definitions                                                         */
 /****************************************************************************/
 
-typedef struct {
-    int             x;
-    int             y;
-    int             width;
-    int             height;
-} WdeDialogSizeInfo;
-
 typedef struct WdeResInfoStruct {
     WRInfo              *info;
     char                *sym_name;
     WResTypeNode        *dlg_entry;         /* type node for dialogs           */
-    LIST                *dlg_item_list;     /* list of WdeResDlgItem's         */
+    LIST                *ditem_list;        /* list of WdeResDlgItem's         */
     OBJPTR              next_current;
     WRHashTable         *hash_table;
     HWND                res_win;
@@ -134,70 +127,45 @@ typedef struct WdeResInfoStruct {
 } WdeResInfo;
 
 typedef struct WdeDialogBoxHeader {
-    uint_32             HelpId;
-    uint_32             ExtendedStyle;
-    DialogStyle         Style;
-    uint_16             NumOfItems;
-    WdeDialogSizeInfo   SizeInfo;
-    ResNameOrOrdinal    *MenuName;          // NameOrOrdinal
-    ResNameOrOrdinal    *ClassName;         // NameOrOrdinal
-    char                *Caption;           // String
-    uint_16             PointSize;          // only here if (Style & DS_SETFONT)
-    uint_16             FontWeight;         // only here if (Style & DS_SETFONT)
-    uint_8              FontItalic;         // only here if (Style & DS_SETFONT)
-    uint_8              FontCharset;        // only here if (Style & DS_SETFONT)
-    char                *FontName;          // only here if (Style & DS_SETFONT)
-
+    DialogBoxHeader     head;
     char                *symbol;
     char                *helpsymbol;
-
-    bool                FontWeightDefined;
-    bool                FontItalicDefined;
-    bool                FontCharsetDefined;
     bool                is32bit;
     bool                is32bitEx;
 } WdeDialogBoxHeader;
 
 
 typedef struct WdeDialogBoxControl {
-    uint_32             HelpId;
-    uint_32             ExtendedStyle;
-    uint_32             Style;
-    WdeDialogSizeInfo   SizeInfo;
-    uint_16             ID;
-    ControlClass        *ClassID;
-    ResNameOrOrdinal    *Text;
-    uint_16             ExtraBytes;         /* should be 0 */
-
+    DialogBoxControl    ctrl;
     char                *symbol;
     char                *helpsymbol;
 } WdeDialogBoxControl;
 
 typedef struct WdeDialogBoxInfoStruct {
-    WdeDialogBoxHeader  *dialog_header;
+    WdeDialogBoxHeader  *header;
     LIST                *control_list;      /* list of DialogBoxControl's      */
-    uint_16             MemoryFlags;
+    ResMemFlags         res_flags;
 } WdeDialogBoxInfo;
 
 typedef struct WdeResDlgItem {
-    WdeDialogBoxInfo    *dialog_info;
+    WdeDialogBoxInfo    *dlg_info;
     OBJPTR              object;
     WResID              *dialog_name;
     bool                modified;
-    WResResNode         *rnode;
-    WResLangNode        *lnode;
+    WResResNode         *resnode;
+    WResLangNode        *langnode;
     bool                is32bit;
 } WdeResDlgItem;
 
 /****************************************************************************/
 /* function prototypes                                                      */
 /****************************************************************************/
-extern bool             WdeFreeResInfo( WdeResInfo * );
-extern bool             WdeFreeDialogBoxInfo( WdeDialogBoxInfo * );
-extern void             WdeFreeResDlgItem( WdeResDlgItem **, bool );
+extern bool             WdeFreeResInfo( WdeResInfo *res_info );
+extern bool             WdeFreeDialogBoxInfo( WdeDialogBoxInfo *dlg_info );
+extern void             WdeFreeResDlgItem( WdeResDlgItem **pditem, bool );
 extern WdeResDlgItem    *WdeAllocResDlgItem( void );
 extern WdeResInfo       *WdeAllocResInfo( void );
-extern bool             WdeIsResModified( WdeResInfo * );
-extern void             WdeSetResModified( WdeResInfo *, bool );
+extern bool             WdeIsResModified( WdeResInfo *res_info );
+extern void             WdeSetResModified( WdeResInfo *res_info, bool modified );
 
 #endif

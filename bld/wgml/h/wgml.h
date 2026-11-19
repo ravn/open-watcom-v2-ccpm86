@@ -63,7 +63,7 @@ extern "C" {    /* Use "C" linkage when in C++ mode */
 //================= Function Prototypes ========================
 
 /* copfiles.c                           */
-extern char         cop_in_trans( char in_char, font_number font );
+extern int          cop_in_trans( int in_char, font_number font );
 extern void         cop_setup( void );
 extern void         cop_teardown( void );
 extern unsigned     cop_text_width( const char *text, unsigned count, font_number font );
@@ -90,6 +90,7 @@ extern void         set_oc_pos( void );
 
 
 /* gargutil.c                           */
+extern int          get_char_hexval( const char *str );
 extern condcode     getarg( void );
 extern condcode     getqst( void );
 extern bool         is_quote_char( char c );
@@ -105,7 +106,7 @@ extern bool         is_macro_char( char c );
 extern bool         is_space_tab_char( char c );
 extern bool         is_stop_char( char c );
 extern bool         is_symbol_char( char c );
-extern char         parse_char( const char *pa, unsigned len );
+extern int          parse_char( const char *pa, unsigned len );
 extern int          unquote_arg( tok_type *arg );
 extern char         *get_tagname( const char *p, char *tagname );
 extern char         *check_tagname( const char *p, char *tagname );

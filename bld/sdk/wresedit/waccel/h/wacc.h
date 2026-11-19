@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,28 +49,25 @@
 /* data types                                                               */
 /****************************************************************************/
 typedef struct WAccelEntry {
-    bool  is32bit;
-    union {
-        AccelTableEntry     entry;
-        AccelTableEntry32   entry32;
-    } u;
-    struct WAccelEntry *next;
-    struct WAccelEntry *prev;
-    char  *symbol;
+    bool                is32bit;
+    AccelTableEntry     entry;
+    struct WAccelEntry  *next;
+    struct WAccelEntry  *prev;
+    char                *symbol;
 } WAccelEntry;
 
 typedef struct WAccelTable {
-    bool        is32bit;
-    size_t      num;
-    WAccelEntry *first_entry;
+    bool                is32bit;
+    size_t              num;
+    WAccelEntry         *head;
 } WAccelTable;
 
 typedef struct WGetKeyInfo {
-    HWND        text_win;
-    uint_16     key;
-    bool        extended;
-    bool        ignore_first_key;
-    char        last[4];
+    HWND                text_win;
+    uint_16             key;
+    bool                extended;
+    bool                ignore_first_key;
+    char                last[4];
 } WGetKeyInfo;
 
 typedef struct WAccelEditInfo {

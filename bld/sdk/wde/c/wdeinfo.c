@@ -169,7 +169,7 @@ int WdeGetInfoWindowDepth( void )
 bool WdeCreateInfoWindow( HWND main_window, HINSTANCE inst )
 {
     if( !WdeInitInfoText() ) {
-        return( FALSE );
+        return( false );
     }
 
 #ifdef __WINDOWS__
@@ -186,14 +186,14 @@ bool WdeCreateInfoWindow( HWND main_window, HINSTANCE inst )
     /* if the window could not be created return FALSE */
     if ( WdeInfoWindow == NULL ) {
         WdeWriteTrail( "WdeCreateInfoWindow: Could not create info window!" );
-        return( FALSE );
+        return( false );
     }
 
     WdeInfoWindowDepth = 0;
 
     WdeResizeWindows();
 
-    return( TRUE );
+    return( true );
 }
 
 void WdeInfoFini( void )
@@ -241,7 +241,7 @@ void WdeShowInfoWindow( bool show )
 void WdeEnableInfoWindowInput( bool enable )
 {
     HWND        win;
-    static bool last = TRUE;
+    static bool last = true;
 
     if( WdeInfoWindowDepth != 0 && last != enable ) {
         win = GetDlgItem( WdeInfoWindow, IDB_INFO_CAPTION );
@@ -297,7 +297,7 @@ void WdeWriteSymInfo( WdeInfoStruct *is, bool same_as_last, char *s )
 void WdeWriteInfo( WdeInfoStruct *is )
 {
     static WRHashTable  *last_table = NULL;
-    static WdeResInfo   *last_res = NULL;
+    static WdeResInfo   *last_res_info = NULL;
     static OBJ_ID       last_obj = 0;
     char                *cap_text, *id;
     bool                same_hash;
@@ -318,22 +318,22 @@ void WdeWriteInfo( WdeInfoStruct *is )
 
     WdeCurrentInfo = *is;
 
-    same_hash = (last_res == is->res_info && last_table == is->res_info->hash_table);
+    same_hash = (last_res_info == is->res_info && last_table == is->res_info->hash_table);
 
     WdeWriteSymInfo( is, same_hash, NULL );
 
     last_table = is->res_info->hash_table;
-    last_res = is->res_info;
+    last_res_info = is->res_info;
 
     if( is->obj_id == BASE_OBJ ) {
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_SIZE );
-        WdeEnableInfoWindowInput( FALSE );
+        WdeEnableInfoWindowInput( false );
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_CAPTION );
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_IDSTR );
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_IDNUM );
     } else {
-        WdeWriteObjectDimensions( &(is->sizeinfo) );
-        WdeEnableInfoWindowInput( TRUE );
+        WdeWriteObjectDimensions( &(is->SizeInfo) );
+        WdeEnableInfoWindowInput( true );
         if( is->obj_id == DIALOG_OBJ ) {
             WdeDisplayDialogInfo( is );
         } else if( is->obj_id == CONTROL_OBJ ) {
@@ -460,7 +460,7 @@ void WdeChangeDialogInfo( WdeInfoStruct *is )
     char                *cp;
     bool                quoted_str;
     bool                str_is_ordinal;
-    uint_16             ord;
+    uint_16             ordinal;
     bool                found;
     WRHashValue         value;
 
@@ -508,7 +508,7 @@ void WdeChangeDialogInfo( WdeInfoStruct *is )
         return;
     }
 
-    ord = (uint_16)strtoul( str, &cp, 0 );
+    ordinal = (uint_16)strtoul( str, &cp, 0 );
     str_is_ordinal = ( *cp == '\0' );
 
     c_is.symbol = NULL;
@@ -517,7 +517,7 @@ void WdeChangeDialogInfo( WdeInfoStruct *is )
         c_is.u.dlg.name = WResIDFromStr( str );
         MemFree( str );
     } else if( str_is_ordinal ) {
-        c_is.u.dlg.name = WResIDFromNum( ord );
+        c_is.u.dlg.name = WResIDFromNum( ordinal );
         MemFree( str );
     } else {
         if( !WRIsValidSymbol( str ) ) {
@@ -540,7 +540,7 @@ void WdeChangeDialogInfo( WdeInfoStruct *is )
             WdeSetEditWithSINT32( (int_32)value, 10, WdeInfoWindow, IDB_INFO_IDNUM );
         }
     } else if( str_is_ordinal ) {
-        WdeSetEditWithSINT32( (int_32)ord, 10, WdeInfoWindow, IDB_INFO_IDNUM );
+        WdeSetEditWithSINT32( (int_32)ordinal, 10, WdeInfoWindow, IDB_INFO_IDNUM );
     } else {
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_IDNUM );
     }
@@ -554,7 +554,7 @@ void WdeChangeControlInfo( WdeInfoStruct *is )
     char                *cp;
     WdeInfoStruct       c_is;
     bool                str_is_ordinal;
-    uint_16             ord;
+    uint_16             ordinal;
     bool                found;
     WRHashValue         value;
 
@@ -590,13 +590,13 @@ void WdeChangeControlInfo( WdeInfoStruct *is )
         return;
     }
 
-    ord = (uint_16)strtoul( str, &cp, 0 );
+    ordinal = (uint_16)strtoul( str, &cp, 0 );
     str_is_ordinal = ( *cp == '\0' );
 
     c_is.symbol = NULL;
 
     if( str_is_ordinal ) {
-        c_is.u.ctl.id = ord;
+        c_is.u.ctl.id = ordinal;
         MemFree( str );
     } else {
         if( !WRIsValidSymbol( str ) ) {
@@ -618,7 +618,7 @@ void WdeChangeControlInfo( WdeInfoStruct *is )
             WdeSetEditWithSINT32( (int_32)value, 10, WdeInfoWindow, IDB_INFO_IDNUM );
         }
     } else if( str_is_ordinal ) {
-        WdeSetEditWithSINT32( (int_32)ord, 10, WdeInfoWindow, IDB_INFO_IDNUM );
+        WdeSetEditWithSINT32( (int_32)ordinal, 10, WdeInfoWindow, IDB_INFO_IDNUM );
     } else {
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_IDNUM );
     }
@@ -626,14 +626,14 @@ void WdeChangeControlInfo( WdeInfoStruct *is )
     *is = c_is;
 }
 
-void WdeWriteObjectDimensions( WdeDialogSizeInfo *sizeinfo )
+void WdeWriteObjectDimensions( DialogSizeInfo *SizeInfo )
 {
     char str[56];
 
     sprintf( str, "(%d,%d) (%d,%d) %dx%d",
-             sizeinfo->x, sizeinfo->y,
-             sizeinfo->x + sizeinfo->width, sizeinfo->y + sizeinfo->height,
-             sizeinfo->width, sizeinfo->height );
+             SizeInfo->x, SizeInfo->y,
+             SizeInfo->x + SizeInfo->width, SizeInfo->y + SizeInfo->height,
+             SizeInfo->width, SizeInfo->height );
 
     WdeSetEditWithStr( str, WdeInfoWindow, IDB_INFO_SIZE );
 }

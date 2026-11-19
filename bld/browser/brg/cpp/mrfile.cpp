@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,9 +31,9 @@
 ****************************************************************************/
 
 
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstring>
+#include <cerrno>
 #include <io.h>
 
 #include "watcom.h"
@@ -185,7 +185,7 @@ void MergeFile::skipForm( dr_section sect, uint_32& off, uint_32 form,
         break;
     default:
 #ifdef DEBUG
-        printf( "ACK -- form %#x\n", form );
+        std::printf( "ACK -- form %#x\n", form );
 #endif
         InternalAssert( 0 );
     }
@@ -273,7 +273,7 @@ void MergeFile::copyFormTo( MergeFile& out, dr_section sect,
         break;
     default:
 #ifdef DEBUG
-        printf( "ACK -- form %#x\n", form );
+        std::printf( "ACK -- form %#x\n", form );
 #endif
         InternalAssert( 0 );
     }
@@ -378,7 +378,7 @@ static uint MergeFile::SLEB128Len( int_32 sleb )
 void MergeFile::writeString( const char * str )
 //---------------------------------------------
 {
-    uint_32 len = strlen( str ) + 1;
+    uint_32 len = std::strlen( str ) + 1;
     writeBlock( (const void *) str, len );
 }
 

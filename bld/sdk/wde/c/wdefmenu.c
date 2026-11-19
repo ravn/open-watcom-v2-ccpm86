@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2016 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -148,12 +148,12 @@ static void WdeCheckModeMenu( HMENU hmenu, WdeOrderMode mode, UINT flags )
 
 static void WdeEnableSelectDialogItem( HMENU hmenu )
 {
-    WdeResInfo  *info;
+    WdeResInfo  *res_info;
     UINT        cmd;
 
-    info = WdeGetCurrentRes();
+    res_info = WdeGetCurrentRes();
 
-    if( WdeResInfoHasDialogs( info ) ) {
+    if( WdeResInfoHasDialogs( res_info ) ) {
         cmd = MF_ENABLED;
     } else {
         cmd = MF_GRAYED;
@@ -204,7 +204,7 @@ static void WdeSetDialogObjectDialogMenu( HMENU hmenu, int offset,
                                           bool restorable, bool res_has_hash,
                                           WdeOrderMode mode )
 {
-    WdeEnableAllMenuItems( GetSubMenu( hmenu, DIALOG_MENU + offset ), TRUE );
+    WdeEnableAllMenuItems( GetSubMenu( hmenu, DIALOG_MENU + offset ), true );
 
     if( restorable ) {
         EnableMenuItem( hmenu, IDM_DIALOG_RESTORE, MF_ENABLED | MF_BYCOMMAND );
@@ -284,11 +284,11 @@ void WdeSetControlObjectMenu ( bool dlg_is_parent, bool dlg_restorable,
                 WdeCheckModeMenu( hmenu, mode, MF_CHECKED );
                 WdeLastOrderMode = mode;
             }
-            WdeEnableAllMenuItems( GetSubMenu( hmenu, DIALOG_MENU + i ), FALSE );
+            WdeEnableAllMenuItems( GetSubMenu( hmenu, DIALOG_MENU + i ), false );
             EnableMenuItem( hmenu, IDM_DIALOG_NEW, MF_ENABLED );
         }
 
-        WdeEnableAllMenuItems( GetSubMenu( hmenu, EDIT_MENU + i ), TRUE );
+        WdeEnableAllMenuItems( GetSubMenu( hmenu, EDIT_MENU + i ), true );
 
         WdeLastObject = CONTROL;
         WdeLastDlgIsParent = dlg_is_parent;
@@ -317,7 +317,7 @@ void WdeSetDialogObjectMenu ( bool restorable, bool res_has_hash, WdeOrderMode m
         mode != WdeLastOrderMode ) {
 
         WdeSetDialogObjectDialogMenu( hmenu, i, restorable, res_has_hash, mode );
-        WdeEnableAllMenuItems( GetSubMenu( hmenu, EDIT_MENU + i ), TRUE );
+        WdeEnableAllMenuItems( GetSubMenu( hmenu, EDIT_MENU + i ), true );
         WdeLastObject = DIALOG;
         WdeLastDlgRestorable = restorable;
     }
@@ -342,10 +342,10 @@ void WdeSetBaseObjectMenu( bool has_hash )
     hmenu = WdeGetMenuHandle();
 
     if( WdeLastObject != BASE ) {
-        WdeEnableAllMenuItems( GetSubMenu( hmenu, EDIT_MENU + i ), FALSE );
+        WdeEnableAllMenuItems( GetSubMenu( hmenu, EDIT_MENU + i ), false );
         EnableMenuItem( hmenu, IDM_OPTIONS, MF_ENABLED | MF_BYCOMMAND );
 
-        WdeEnableAllMenuItems( GetSubMenu( hmenu, DIALOG_MENU + i ), FALSE );
+        WdeEnableAllMenuItems( GetSubMenu( hmenu, DIALOG_MENU + i ), false );
         EnableMenuItem( hmenu, IDM_DIALOG_NEW, MF_ENABLED | MF_BYCOMMAND );
 
         if( has_hash ) {
@@ -371,12 +371,12 @@ void WdeSetBaseObjectMenu( bool has_hash )
 void WdeEnablePasteItem( HMENU hmenu )
 {
     UINT        cmd;
-    WdeResInfo  *rinfo;
+    WdeResInfo  *res_info;
 
     cmd = MF_GRAYED;
-    rinfo = WdeGetCurrentRes();
-    if( rinfo != NULL && rinfo->editting ) {
-        InitState( rinfo->forms_win );
+    res_info = WdeGetCurrentRes();
+    if( res_info != NULL && res_info->editting ) {
+        InitState( res_info->forms_win );
         if( FMPasteValid() ) {
             cmd = MF_ENABLED;
         }
@@ -387,13 +387,13 @@ void WdeEnablePasteItem( HMENU hmenu )
 
 bool WdeIsCurrentMDIWindowZoomed( void )
 {
-    WdeResInfo *info;
+    WdeResInfo *res_info;
 
-    info = WdeGetCurrentRes();
+    res_info = WdeGetCurrentRes();
 
-    if( info != NULL && info->res_win != NULL ) {
-        return( IsZoomed( info->res_win ) != 0 );
+    if( res_info != NULL && res_info->res_win != NULL ) {
+        return( IsZoomed( res_info->res_win ) != 0 );
     } else {
-        return( FALSE );
+        return( false );
     }
 }

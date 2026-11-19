@@ -71,14 +71,6 @@ struct PopupMenuExItem {
 #include "rccore.h"
 
 
-static void SemFreeSubMenu( FullMenu *submenu );
-
-MenuFlags SemWINAddFirstMenuOption( YYTOKENTYPE token )
-/*****************************************************/
-{
-    return( SemWINAddMenuOption( 0, token ) );
-}
-
 MenuFlags SemWINAddMenuOption( MenuFlags oldflags, YYTOKENTYPE token )
 /********************************************************************/
 {
@@ -95,9 +87,6 @@ MenuFlags SemWINAddMenuOption( MenuFlags oldflags, YYTOKENTYPE token )
     case Y_CHECKED:
         oldflags |= MENU_CHECKED;
         break;
-    case Y_POPUP:
-        oldflags |= MENU_POPUP;
-        break;
     case Y_MENUBARBREAK:
         oldflags |= MENU_MENUBARBREAK;
         break;
@@ -105,13 +94,8 @@ MenuFlags SemWINAddMenuOption( MenuFlags oldflags, YYTOKENTYPE token )
         oldflags |= MENU_MENUBREAK;
         break;
     case Y_OWNERDRAW:
-        switch( CmdLineParms.Win16VerStamp ) {
-        case VERSION_10_STAMP:
-        case VERSION_20_STAMP:
-            break;
-        default:
+        if( CmdLineParms.winver > 20 ) {
             oldflags |= MENU_OWNERDRAWN;
-            break;
         }
         break;
     case Y_HELP:
@@ -122,133 +106,55 @@ MenuFlags SemWINAddMenuOption( MenuFlags oldflags, YYTOKENTYPE token )
     return( oldflags );
 }
 
-FullMenu *SemWINNewMenu( FullMenuItem firstitem )
-/***********************************************/
+FullMenuWIN *SemWINAddMenuItem( FullMenuWIN *menu, FullMenuItemWIN menuitem )
+/***************************************************************************/
 {
-    FullMenu       *newmenu;
-    FullMenuItem   *newitem;
+    FullMenuItemWIN *new_menuitem;
 
-    newmenu = MemAllocSafe( sizeof( FullMenu ) );
-    newitem = MemAllocSafe( sizeof( FullMenuItem ) );
-
-    *newitem = firstitem;
-    newmenu->head = NULL;
-    newmenu->tail = NULL;
-
-    ResAddLLItemAtEnd( (void **)&(newmenu->head), (void **)&(newmenu->tail), newitem );
-
-    return( newmenu );
-}
-
-FullMenu *SemWINAddMenuItem( FullMenu *currmenu, FullMenuItem curritem )
-/**********************************************************************/
-{
-    FullMenuItem     *newitem;
-
-
-    newitem = MemAllocSafe( sizeof( FullMenuItem ) );
-
-    *newitem = curritem;
-
-    ResAddLLItemAtEnd( (void **)&(currmenu->head), (void **)&(currmenu->tail), newitem );
-
-    return( currmenu );
-}
-
-static void SemCheckMenuItemPopup( FullMenuItem *item, YYTOKENTYPE tokentype )
-/****************************************************************************/
-{
-    if( tokentype == Y_MENU ) {
-        if( item->item.popup.item.type == MT_MENUEX ) {
-            RcError( ERR_MENUEX_POPUP_OPTIONS );
-        }
-    } else if( tokentype == Y_MENU_EX ) {
-        item->item.popup.item.menuData.ItemFlags = MENUEX_POPUP;
-        if( item->item.popup.item.type == MT_MENU ) {
-            RcError( ERR_MENU_POPUP_OPTIONS );
-        }
+    if( menu == NULL ) {
+        menu = MemAllocSafe( sizeof( FullMenuWIN ) );
+        menu->head = NULL;
+        menu->tail = NULL;
     }
+
+    new_menuitem = MemAllocSafe( sizeof( FullMenuItemWIN ) );
+
+    *new_menuitem = menuitem;
+
+    ResAddLLItemAtEnd( (void **)&(menu->head), (void **)&(menu->tail), new_menuitem );
+
+    return( menu );
 }
 
-static void SemCheckMenuItemNormal( FullMenuItem *item, YYTOKENTYPE tokentype )
-/*****************************************************************************/
-{
-    if( tokentype == Y_MENU ) {
-        if( item->item.normal.type == MT_MENUEX ) {
-            RcError( ERR_MENUEX_NORMAL_OPTIONS );
-        } else if( item->item.normal.type == MT_MENUEX_NO_ID ) {
-            RcError( ERR_MISSING_MENUITEM_ID );
-        }
-
-    } else if( tokentype == Y_MENU_EX ) {
-        if( item->item.normal.type == MT_MENU ) {
-            RcError( ERR_MENU_NORMAL_OPTIONS );
-        }
-    }
-}
-
-static bool SemWriteMenuItem( FullMenuItem *item, int islastitem,
-                          int *err_code, YYTOKENTYPE tokentype )
-/**************************************************************/
+static bool SemWINWriteMenuItem( FullMenuItemWIN *menuitem, int islastitem, int *err_code, bool is_menuex )
+/*********************************************************************************************************/
 {
     bool    error;
 
     error = false;
-    if( item->IsPopup ) {
-        SemCheckMenuItemPopup( item, tokentype );
-        if( islastitem ) {
-            item->item.popup.item.menuData.ItemFlags |= MENU_ENDMENU;
+    if( islastitem ) {
+        if( is_menuex ) {
+            menuitem->item.u.ExFlags |= MENU_LAST_ITEM;
+        } else {
+            menuitem->item.u.ItemFlags |= MENU_LAST_ITEM;
         }
-        if( tokentype == Y_MENU ) {
-            switch( CmdLineParms.Win16VerStamp ) {
-            case VERSION_10_STAMP:
-            case VERSION_20_STAMP:
-                error = ResWriteMenuItemPopupOldWin( &(item->item.popup.item.menuData),
-                            item->iswin32, CurrResFile.fp );
-                break;
-            default:
-                error = ResWriteMenuItemPopup( &(item->item.popup.item.menuData),
-                            item->iswin32, CurrResFile.fp );
-                break;
-            }
-        } else if( tokentype == Y_MENU_EX ) {
-            error = ResWriteMenuExItemPopup( &(item->item.popup.item.menuData),
-                      &(item->item.popup.item.menuExData), item->iswin32,
-                      CurrResFile.fp );
-        }
+    }
+    if( is_menuex ) {
+        error = ResWriteMenuItemEx( &(menuitem->item), CurrResFile.fp );
+    } else if( CmdLineParms.iswin32 ) {
+        error = ResWriteMenuItem32( &(menuitem->item), CurrResFile.fp );
     } else {
-        SemCheckMenuItemNormal( item, tokentype );
-        if( islastitem ) {
-            item->item.normal.menuData.ItemFlags |= MENU_ENDMENU;
-        }
-        if( tokentype == Y_MENU ) {
-            switch( CmdLineParms.Win16VerStamp ) {
-            case VERSION_10_STAMP:
-            case VERSION_20_STAMP:
-                error = ResWriteMenuItemNormalOldWin( &(item->item.normal.menuData),
-                            item->iswin32, CurrResFile.fp );
-                break;
-            default:
-                error = ResWriteMenuItemNormal( &(item->item.normal.menuData),
-                            item->iswin32, CurrResFile.fp );
-                break;
-            }
-        } else if( tokentype == Y_MENU_EX ) {
-            error = ResWriteMenuExItemNormal( &(item->item.normal.menuData),
-                         &(item->item.normal.menuExData), item->iswin32,
-                         CurrResFile.fp );
-        }
+        error = ResWriteMenuItem( &(menuitem->item), CurrResFile.fp );
     }
     *err_code = LastWresErr();
     return( error );
 }
 
-static bool SemWriteSubMenu( FullMenu *submenu, int *err_code, YYTOKENTYPE tokentype )
-/************************************************************************************/
+static bool SemWINWriteSubMenu( FullMenuWIN *menu, int *err_code, bool is_menuex )
+/********************************************************************************/
 {
     bool            error;
-    int             islastitem;
-    FullMenuItem    *curritem;
+    FullMenuItemWIN *menuitem;
 
     error = false;
 
@@ -256,13 +162,12 @@ static bool SemWriteSubMenu( FullMenu *submenu, int *err_code, YYTOKENTYPE token
         return( false );
     }
 
-    for( curritem = submenu->head; curritem != NULL && !error; curritem = curritem->next ) {
-        islastitem = (curritem == submenu->tail);
+    for( menuitem = menu->head; menuitem != NULL && !error; menuitem = menuitem->next ) {
         if( !ErrorHasOccured ) {
-            error = SemWriteMenuItem( curritem, islastitem, err_code, tokentype );
+            error = SemWINWriteMenuItem( menuitem, ( menuitem == menu->tail ), err_code, is_menuex );
             if( !error
-              && curritem->IsPopup ) {
-                error = SemWriteSubMenu( curritem->item.popup.submenu, err_code, tokentype );
+              && menuitem->submenu != NULL ) {
+                error = SemWINWriteSubMenu( menuitem->submenu, err_code, is_menuex );
             }
         }
     }
@@ -273,102 +178,71 @@ static bool SemWriteSubMenu( FullMenu *submenu, int *err_code, YYTOKENTYPE token
     return( error );
 }
 
-static void SemWarnIfSubmenus( FullMenu *submenu )
+static void SemWarnIfSubmenus( FullMenuWIN *menu )
 /*************************************************
  * Windows 2.x does not support submenus, though submenus are parsed
  * correctly.  So it is valid to have top level MF_POPUP, but MF_POPUP
  * within the menus is ignored.
  */
 {
-    FullMenuItem *curritem,*currsubitem;
+    FullMenuItemWIN *menuitem;
+    FullMenuItemWIN *submenuitem;
 
-    for( curritem = submenu->head; curritem != NULL; curritem = curritem->next ) { // top level menu bar
-        if( curritem->IsPopup ) {
-            for( currsubitem = curritem->item.popup.submenu->head; currsubitem != NULL; currsubitem = currsubitem->next ) { // menu appearing below menu bar
-                if( currsubitem->IsPopup ) {
-                    RcWarning( WARN_SUBMEN_WIN2X );
+    for( menuitem = menu->head; menuitem != NULL; menuitem = menuitem->next ) { // top level menu bar
+        if( menuitem->submenu != NULL ) {
+            for( submenuitem = menuitem->submenu->head; submenuitem != NULL; submenuitem = submenuitem->next ) { // menu appearing below menu bar
+                if( submenuitem->submenu != NULL ) {
+                    RcWarning( RCMSG_SUBMEN_WIN2X );
                 }
             }
         }
     }
 }
 
-static void SemFreeMenuItem( FullMenuItem *curritem )
-/****************************************************/
+static void SemWINFreeSubMenu( FullMenuWIN *menu )
+/************************************************/
 {
-    if( curritem->IsPopup ) {
-        SemFreeSubMenu( curritem->item.popup.submenu );
-        if( curritem->item.popup.item.menuData.ItemText != NULL ) {
-            MemFree( curritem->item.popup.item.menuData.ItemText );
-        }
-    } else {
-        if( curritem->item.normal.menuData.ItemText != NULL ) {
-            MemFree( curritem->item.normal.menuData.ItemText );
-        }
+    FullMenuItemWIN *menuitem;
+
+    while( (menuitem = menu->head) != NULL ) {
+        menu->head = menuitem->next;
+        if( menuitem->submenu != NULL )
+            SemWINFreeSubMenu( menuitem->submenu );
+        if( menuitem->item.ItemText != NULL )
+            MemFree( menuitem->item.ItemText );
+        MemFree( menuitem );
     }
+    MemFree( menu );
 }
 
-static void SemFreeSubMenu( FullMenu *submenu )
-/**********************************************/
-{
-    FullMenuItem   *curritem;
-    FullMenuItem   *nextitem;
-
-    for( curritem = submenu->head; curritem != NULL; curritem = nextitem ) {
-        nextitem = curritem->next;
-        SemFreeMenuItem( curritem );
-        MemFree( curritem );
-    }
-    MemFree( submenu );
-}
-
-void SemWINWriteMenu( WResID *res_id, ResMemFlags flags, FullMenu *menu,
-                   YYTOKENTYPE tokentype )
-/********************************************************************/
+void SemWINWriteMenu( WResID *res_id, ResMemFlags res_flags, FullMenuWIN *menu, bool is_menuex )
+/**********************************************************************************************/
 {
     MenuHeader      head;
     ResLocation     loc;
     bool            error;
     int             err_code;
-    uint_8          headerdata[RES_HEADER_SIZE];
 
     error = false;
     if( !ErrorHasOccured ) {
-        if( tokentype == Y_MENU ) {
-            head.Version = 0;    /* currently these fields are both 0 */
-            head.Size = 0;
-            loc.start = SemStartResource();
-            switch( CmdLineParms.Win16VerStamp ) {
-            case VERSION_10_STAMP:
-            case VERSION_20_STAMP:
-                /* Windows 2.x menus do not have a header */
-                break;
-            default:
-                error = ResWriteMenuHeader( &head, CurrResFile.fp );
-                break;
-            }
-        } else if( tokentype == Y_MENU_EX ) {
-            head.Version = RES_HEADER_VERSION;
-            head.Size = RES_HEADER_SIZE;
-            memset( headerdata, 0, head.Size );
+        memset( &head, 0, sizeof( head ) );
+        if( is_menuex ) {
+            head.Version = MENUEX_VERSION_SIG;
+            head.Size = sizeof( head.ExHelpId );
             ResWritePadDWord( CurrResFile.fp );
-            loc.start = SemStartResource();
-            error = ResWriteMenuExHeader( &head, headerdata, CurrResFile.fp );
-        } else {
-            loc.start = 0;      // Is this valid?
+        }
+        loc.start = SemStartResource();
+        /* Windows 2.x menus do not have a header */
+        if( CmdLineParms.winver > 20 ) {
+            error = ResWriteMenuHeader( &head, CurrResFile.fp );
         }
         if( error ) {
             err_code = LastWresErr();
         } else {
-            switch( CmdLineParms.Win16VerStamp ) {
-            case VERSION_10_STAMP:
-            case VERSION_20_STAMP:
+            if( CmdLineParms.winver < 30 ) {
                 SemWarnIfSubmenus( menu );
-                break;
-            default:
-                break;
             }
-            error = SemWriteSubMenu( menu, &err_code, tokentype );
+            error = SemWINWriteSubMenu( menu, &err_code, is_menuex );
         }
         if( !error
           && CmdLineParms.MSResFormat
@@ -376,14 +250,15 @@ void SemWINWriteMenu( WResID *res_id, ResMemFlags flags, FullMenu *menu,
             error = ResWritePadDWord( CurrResFile.fp );
         }
         if( error ) {
-            RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
+            RcError( RCMSG_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
             ErrorHasOccured = true;
         } else {
             loc.len = SemEndResource( loc.start );
-            SemAddResourceAndFree( res_id, WResIDFromNum( RESOURCE2INT( RT_MENU ) ), flags, loc );
+            SemAddResourceAndFree( res_id, WResIDFromNum( RESOURCE2INT( RT_MENU ) ), res_flags, loc );
         }
     } else {
         MemFree( res_id );
     }
-    SemFreeSubMenu( menu );
+    SemWINFreeSubMenu( menu );
 }
+

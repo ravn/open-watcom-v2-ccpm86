@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,42 +37,36 @@
 #include "wrdll.h"
 #include "wresall.h"
 
-static size_t WdeCalcSizeOfControlClass( ControlClass *name, bool is32bit )
+static size_t WdeCalcSizeOfControlClass( const ResNameOrOrdinal *cclass, bool is32bit )
 {
     size_t size;
 
-    if( name == NULL ) {
+    if( cclass == NULL ) {
         if( is32bit ) {
             size = SIZEU16;
         } else {
             size = SIZEU8;
         }
-    } else {
+    } else if( cclass->ord.fFlag == 0xff ) {
         if( is32bit ) {
-            if( name->Class & 0x80 ) {
-                size = SIZEU16 + SIZEU16;
-            } else {
-                size = WRCalcStrlen( name->ClassName, is32bit );
-            }
+            size = SIZEU16 + SIZEU16;
         } else {
-            if( name->Class & 0x80 ) {
-                size = SIZEU8;
-            } else {
-                size = WRCalcStrlen( name->ClassName, is32bit );
-            }
+            size = SIZEU8;
         }
+    } else {
+        size = WRCalcStrlen( cclass->name, is32bit );
     }
 
     return( size );
 }
 
-static size_t WdeCalcSizeOfDialogBoxControl( ControlClass *ClassID, ResNameOrOrdinal *Text, bool is32bit, bool is32bitEx )
+static size_t WdeCalcSizeOfDialogBoxControl( const ResNameOrOrdinal *ClassID, const ResNameOrOrdinal *Text, bool is32bit, bool is32bitEx )
 {
     size_t size;
 
     if( is32bitEx ) {
         // fix part of DialogBoxExControl32 (up to ClassID)
-        size = 4 * SIZEU16 + 4 * SIZEU32 + /* Extra bytes */ SIZEU16; 
+        size = 4 * SIZEU16 + 4 * SIZEU32 + /* Extra bytes */ SIZEU16;
     } else if( is32bit ) {
         // fix part of DialogBoxControl32 (up to ClassID)
         size = 5 * SIZEU16 + 2 * SIZEU32 + /* Extra bytes */ SIZEU16;
@@ -88,7 +82,7 @@ static size_t WdeCalcSizeOfDialogBoxControl( ControlClass *ClassID, ResNameOrOrd
     return( size );
 }
 
-static size_t WdeCalcSizeOfDialogBoxHeader( ResNameOrOrdinal *MenuName, ResNameOrOrdinal *ClassName, char *Caption, char *FontName, bool is32bit, bool is32bitEx )
+static size_t WdeCalcSizeOfDialogBoxHeader( const ResNameOrOrdinal *MenuName, const ResNameOrOrdinal *ClassName, const char *Caption, const char *FontName, bool is32bit, bool is32bitEx )
 {
     size_t size;
 
@@ -120,26 +114,27 @@ static size_t WdeCalcSizeOfDialogBoxHeader( ResNameOrOrdinal *MenuName, ResNameO
     return( size );
 }
 
-size_t WdeCalcSizeOfWdeDialogBoxInfo( WdeDialogBoxInfo *info )
+size_t WdeCalcSizeOfWdeDialogBoxInfo( const WdeDialogBoxInfo *dlg_info )
 {
     size_t              size;
     size_t              csize;
     LIST                *clist;
     bool                is32bit;
     bool                is32bitEx;
+    WdeDialogBoxHeader  *header;
+    WdeDialogBoxControl *control;
 
-    #define h   (info->dialog_header)
-    #define c   ((WdeDialogBoxControl *)ListElement( clist ))
-
-    if( info == NULL ) {
+    if( dlg_info == NULL ) {
         return( 0 );
     }
-    is32bit = h->is32bit;
-    is32bitEx = h->is32bitEx;
-    size = WdeCalcSizeOfDialogBoxHeader( GETHDR_MENUNAME( h ), GETHDR_CLASSNAME( h ),
-                                        GETHDR_CAPTION( h ), GETHDR_FONTFACENAME( h ), is32bit, is32bitEx );
-    for( clist = info->control_list; clist != NULL; clist = ListNext( clist ) ) {
-        csize = WdeCalcSizeOfDialogBoxControl( GETCTL_CLASSID( c ), GETCTL_TEXT( c ), is32bit, is32bitEx );
+    header = dlg_info->header;
+    is32bit = header->is32bit;
+    is32bitEx = header->is32bitEx;
+    size = WdeCalcSizeOfDialogBoxHeader( GETHDR_MENUNAME( header ), GETHDR_CLASSNAME( header ),
+                                        GETHDR_CAPTION( header ), GETHDR_FONTFACENAME( header ), is32bit, is32bitEx );
+    for( clist = dlg_info->control_list; clist != NULL; clist = ListNext( clist ) ) {
+        control = (WdeDialogBoxControl *)ListElement( clist );
+        csize = WdeCalcSizeOfDialogBoxControl( GETCTL_CLASSID( control ), GETCTL_TEXT( control ), is32bit, is32bitEx );
         if( csize == 0 ) {
             return( 0 );
         }
@@ -155,7 +150,7 @@ size_t WdeCalcSizeOfWdeDialogBoxInfo( WdeDialogBoxInfo *info )
     return( size );
 }
 
-size_t WdeCalcSizeOfResNameOrOrdinal( ResNameOrOrdinal *name, bool is32bit )
+size_t WdeCalcSizeOfResNameOrOrdinal( const ResNameOrOrdinal *name, bool is32bit )
 {
     size_t size;
 
@@ -165,20 +160,14 @@ size_t WdeCalcSizeOfResNameOrOrdinal( ResNameOrOrdinal *name, bool is32bit )
         } else {
             size = SIZEU8;
         }
-    } else {
+    } else if( name->ord.fFlag == 0xff ) {
         if( is32bit ) {
-            if( name->ord.fFlag == 0xff ) {
-                size = SIZEU16 + SIZEU16;
-            } else {
-                size = WRCalcStrlen( name->name, is32bit );
-            }
+            size = SIZEU16 + SIZEU16;
         } else {
-            if( name->ord.fFlag == 0xff ) {
-                size = SIZEU8 + SIZEU16;
-            } else {
-                size = WRCalcStrlen( name->name, is32bit );
-            }
+            size = SIZEU8 + SIZEU16;
         }
+    } else {
+        size = WRCalcStrlen( name->name, is32bit );
     }
 
     return( size );

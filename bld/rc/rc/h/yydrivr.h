@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -24,19 +25,43 @@
 *
 *  ========================================================================
 *
-* Description:  Stub routines for bootstrap build of wrc - no OS/2 support. 
+:segment OS2
+* Description:  Public interface to OS/2 specific yydriver module.
+:elsesegment WIN16
+* Description:  Public interface to WIN16 specific yydriver module.
+:elsesegment WIN32
+* Description:  Public interface to WIN32 specific yydriver module.
+:endsegment
 *
 ****************************************************************************/
 
 
-#include "global.h"
-#include "yydriver.h"
+/*
+ * All yydriver interface headers use the same include guard
+ * to ensure that only one of yydrivr2.h, yydrivr6.h, or
+ * yydrivrw.h can be included.
+ */
+#ifndef _YYDRIVRX_H
+#define _YYDRIVRX_H
 
-bool ParseOS2( void )
-{
-    return( 0 );
-}
+:segment OS2
+#include "os2ytab.h"
+:elsesegment WIN16
+#include "winytab.h"
+:elsesegment WIN32
+#include "winytab.h"
+:endsegment
+#include "scan.h"
 
-void ParseInitOS2( void )
-{
-}
+:segment OS2
+extern YYTOKENTYPE  LookupKeywordOS2( ScanString newstring );
+extern YYTOKENTYPE  ScanOS2( ScanValue *value );
+:elsesegment WIN16
+extern YYTOKENTYPE  LookupKeywordW16( ScanString newstring );
+extern YYTOKENTYPE  ScanW16( ScanValue *value );
+:elsesegment WIN32
+extern YYTOKENTYPE  LookupKeywordWIN( ScanString newstring );
+extern YYTOKENTYPE  ScanWIN( ScanValue *value );
+:endsegment
+
+#endif

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,7 +47,7 @@ static  const_string_table os2_exe_msg[] = {
     "2offset of entry table                                = ",
     "2length of entry table                                = ",
     "432-bit chksum                                        = ",
-    "2module flag                                          = ",
+    "2module flags                                         = ",
     "2segment number of auto data segment                  = ",
     "2initial size of local heap added to auto data seg    = ",
     "2initial size of stack to be added to auto data seg   = ",
@@ -154,140 +154,155 @@ static  const_string_table map_flgs[] = {
 
 
 /*
- * dump the NE module flag word
+ * dump the NE module flags word
  */
-static void dmp_mod_flag_ne( unsigned_16 flag, unsigned_8 target )
-/****************************************************************/
+static void dmp_mod_flags_ne( unsigned_16 flags, unsigned_8 target )
+/******************************************************************/
 {
-    Wdputs( "Module Flag Word = " );
-    if( flag & OS2_IS_DLL ) {
-        Wdputs( "LIBRARY" );
-    } else {
-        Wdputs( "PROGRAM" );
+    char            buffer[512];
+    char            *p;
+
+    p = buffer;
+    if( flags & OS2_IS_DLL ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "LIBRARY" );
+    } else if( Options_dmp & ZERO_BITS ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PROGRAM" );
     }
-    if( target != TARGET_OS2 && flag & OS2_IS_DLL ) {
-        if( flag & WIN_PRIVATE_DLL ) {
-            Wdputs( " | PRIVATEDLL" );
+    if( target != TARGET_OS2
+      && (flags & OS2_IS_DLL) ) {
+        if( flags & WIN_PRIVATE_DLL ) {
+            p += sprintf( p, GET_OR_FMT( p == buffer ), "PRIVATEDLL" );
         }
     }
-    if( flag & OS2_LINK_ERROR ) {
-        Wdputs( " | LINKERRORSDETECTED" );
+    if( flags & OS2_LINK_ERROR ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "LINKERRORSDETECTED" );
     }
-    switch( flag & OS2_COMPATIBILITY_MASK ) {
+    switch( flags & OS2_COMPATIBILITY_MASK ) {
     case OS2_NOT_PM_COMPATIBLE:
-        Wdputs( " | NOTWINDOWCOMPAT" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NOTWINDOWCOMPAT" );
         break;
     case OS2_PM_COMPATIBLE:
-        Wdputs( " | WINDOWCOMPAT" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "WINDOWCOMPAT" );
         break;
     case OS2_PM_APP:
-        Wdputs( " | WINDOWAPI" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "WINDOWAPI" );
         break;
     }
-    if( flag & OS2_NEEDS_MATH_CO ) {
-        Wdputs( " | NEEDFPU" );
+    if( flags & OS2_NEEDS_MATH_CO ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NEEDFPU" );
     }
-    if( target == TARGET_OS2 && flag & OS2_NEEDS_80386 ) {
-        Wdputs( " | NEED386" );
+    if( target == TARGET_OS2
+      && flags & OS2_NEEDS_80386 ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NEED386" );
     }
-    if( target != TARGET_OS2 && flag & WIN_EMS_GLOBAL_MEM ) {
-        Wdputs( " | EMSGLOBAL" );
+    if( target != TARGET_OS2
+      && flags & WIN_EMS_GLOBAL_MEM ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "EMSGLOBAL" );
     }
-    if( target == TARGET_OS2 && flag & OS2_NEEDS_80286 ) {
-        Wdputs( " | NEED286" );
+    if( target == TARGET_OS2
+      && flags & OS2_NEEDS_80286 ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NEED286" );
     }
-    if( target != TARGET_OS2 && flag & WIN_EMS_BANK_INSTANCE ) {
-        Wdputs( " | EMSBANK" );
+    if( target != TARGET_OS2
+      && flags & WIN_EMS_BANK_INSTANCE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "EMSBANK" );
     }
-    if( target == TARGET_OS2 && flag & WIN_USES_EMS_DIRECT ) {
-        Wdputs( " | NONCONFORMING" );
+    if( target == TARGET_OS2
+      && flags & WIN_USES_EMS_DIRECT ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NONCONFORMING" );
     }
-    if( target != TARGET_OS2 && flag & WIN_USES_EMS_DIRECT ) {
-        Wdputs( " | EMSDIRECT" );
+    if( target != TARGET_OS2
+      && flags & WIN_USES_EMS_DIRECT ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "EMSDIRECT" );
     }
-    if( flag & OS2_PROT_MODE_ONLY ) {
-        Wdputs( " | PROTMODEONLY" );
+    if( flags & OS2_PROT_MODE_ONLY ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PROTMODEONLY" );
     }
-    if( target == TARGET_OS2 && flag & OS2_INIT_INSTANCE ) {
-        Wdputs( " | INITINSTANCE" );
+    if( target == TARGET_OS2
+      && flags & OS2_INIT_INSTANCE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "INITINSTANCE" );
     }
-    if( target != TARGET_OS2 && flag & OS2_INIT_INSTANCE ) {
-        Wdputs( " | REALMODE" );
+    if( target != TARGET_OS2
+      && flags & OS2_INIT_INSTANCE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "REALMODE" );
     }
-    if( target == TARGET_OS2 && flag & OS2_IS_DLL ) {
-        if( flag & WIN_PRIVATE_DLL ) {
-            Wdputs( " | PRIVATEDLL" );
+    if( target == TARGET_OS2
+      && flags & OS2_IS_DLL ) {
+        if( flags & WIN_PRIVATE_DLL ) {
+            p += sprintf( p, GET_OR_FMT( p == buffer ), "PRIVATEDLL" );
         }
     }
-    if( flag & OS2_MULT_AUTO ) {
-        Wdputs( " | MULTIPLEDATA" );
+    if( flags & OS2_MULT_AUTO ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "MULTIPLEDATA" );
     }
-    if( flag & OS2_SINGLE_AUTO ) {
-        Wdputs( " | SINGLEDATA" );
+    if( flags & OS2_SINGLE_AUTO ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "SINGLEDATA" );
     }
-    Wdputslc( "\n" );
-    Wdputslc( "\n" );
+    *p = '\0';
+    Wdputs( buffer );
 }
 
 
 #define OSF_MODTYPE_MASK    0x38000UL
 /*
- * dump the LE/LX module flag word
+ * dump the LE/LX module flags word
  */
-static void dmp_mod_flag_lx( unsigned_32 flag, unsigned_16 ostype )
-/*****************************************************************/
+static void dmp_mod_flags_lelx( unsigned_32 flags, unsigned_16 ostype )
+/*********************************************************************/
 {
+    char            buffer[512];
+    char            *p;
+
     /* unused parameters */ (void)ostype;
 
-    Wdputs( "Module Flags = " );
-    if( (flag & OSF_MODTYPE_MASK) == OSF_VIRT_DEVICE ) {
-        Wdputs( "VIRTDEVICE" );
-    } else if( (flag & OSF_MODTYPE_MASK) == OSF_PHYS_DEVICE ) {
-        Wdputs( "PHYSDEVICE" );
-    } else if( (flag & OSF_MODTYPE_MASK) == OSF_IS_DLL ) {
-        Wdputs( "LIBRARY" );
-    } else {
-        Wdputs( "PROGRAM" );
+    p = buffer;
+    if( (flags & OSF_MODTYPE_MASK) == OSF_VIRT_DEVICE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "VIRTDEVICE" );
+    } else if( (flags & OSF_MODTYPE_MASK) == OSF_PHYS_DEVICE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PHYSDEVICE" );
+    } else if( (flags & OSF_MODTYPE_MASK) == OSF_IS_DLL ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "LIBRARY" );
+    } else if( Options_dmp & ZERO_BITS ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PROGRAM" );
     }
-    if( flag & OSF_SINGLE_DATA ) {
-        Wdputs( " | SINGLEDATA" );
+    if( flags & OSF_SINGLE_DATA ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "SINGLEDATA" );
     }
-    if( flag & OSF_INIT_INSTANCE ) {
-        Wdputs( " | INITINSTANCE" );
+    if( flags & OSF_INIT_INSTANCE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "INITINSTANCE" );
     }
-    if( flag & OSF_TERM_INSTANCE ) {
-        Wdputs( " | TERMINSTANCE" );
+    if( flags & OSF_TERM_INSTANCE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "TERMINSTANCE" );
     }
-    if( flag & OSF_IS_PROT_DLL ) {
-        Wdputs( " | PROTDLL" );
+    if( flags & OSF_IS_PROT_DLL ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PROTDLL" );
     }
-    if( flag & OSF_INTERNAL_FIXUPS_DONE ) {
-        Wdputs( " | NO_INT_FIXUPS" );
+    if( flags & OSF_INTERNAL_FIXUPS_DONE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NO_INT_FIXUPS" );
     }
-    if( flag & OSF_EXTERNAL_FIXUPS_DONE ) {
-        Wdputs( " | NO_EXT_FIXUPS" );
+    if( flags & OSF_EXTERNAL_FIXUPS_DONE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NO_EXT_FIXUPS" );
     }
-    if( flag & OSF_LINK_ERROR ) {
-        Wdputs( " | LINKERRORSDETECTED" );
+    if( flags & OSF_LINK_ERROR ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "LINKERRORSDETECTED" );
     }
-    switch( flag & OS2_COMPATIBILITY_MASK ) {
+    switch( flags & OS2_COMPATIBILITY_MASK ) {
     case OSF_NOT_PM_COMPATIBLE:
-        Wdputs( " | NOTWINDOWCOMPAT" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NOTWINDOWCOMPAT" );
         break;
     case OSF_PM_COMPATIBLE:
-        Wdputs( " | WINDOWCOMPAT" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "WINDOWCOMPAT" );
         break;
     case OSF_PM_APP:
-        Wdputs( " | WINDOWAPI" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "WINDOWAPI" );
         break;
     }
-    if( flag & 0x80000 ) {
-        Wdputs( " | MPUNSAFE" );
+    if( flags & 0x80000 ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "MPUNSAFE" );
     }
-    Wdputslc( "\n" );
-    Wdputslc( "\n" );
+    *p = '\0';
+    Wdputs( buffer );
 }
-
 
 /*
  * Dump the New Executable Header, if any.
@@ -296,11 +311,12 @@ bool Dmp_os2_head( void )
 /***********************/
 {
     Wlseek( New_exe_off );
-    Wread( &Os2_head, sizeof( struct os2_exe_header ) );
+    Wread( &Os2_head, sizeof( os2_exe_header ) );
     if( Os2_head.signature != EXESIGN_NE ) {
         return( false );
     }
-    if( IS_OLD_NE( Os2_head ) || Os2_head.align == 0 ) {
+    if( IS_OLD_NE( Os2_head )
+      || Os2_head.align == 0 ) {
         Os2_head.align = 9;
     }
     Banner( "New EXE Header (OS/2 or Windows)" );
@@ -312,10 +328,16 @@ bool Dmp_os2_head( void )
     if( !IS_OLD_NE( Os2_head ) ) {
         Dump_header( (char *)&Os2_head.align, os2_exe_msg_new, 4 );
     }
-    dmp_mod_flag_ne( Os2_head.info, Os2_head.target );
+    Wdputslc( "\n" );
+    Wdputs( "Module Flags = " );
+    Puthex( Os2_head.info, 4 );
+    Wdputs( ": " );
+    dmp_mod_flags_ne( Os2_head.info, Os2_head.target );
+    Wdputslc( "\n" );
+    Wdputslc( "\n" );
     Dmp_seg_tab();
-    Dmp_resrc_tab();
-    Dmp_ne_tbls();
+    Dmp_resrc_tab_ne();
+    Dmp_tables_ne();
     if( Options_dmp & OS2_SEG_DMP ) {
         Dmp_segments();
     }
@@ -337,9 +359,9 @@ static void dmp_obj_page( object_record obj )
     map_entry       map;
 
     if( Form == FORM_LX ) {
-        offset = ( obj.mapidx-1 ) * sizeof( lx_map_entry );
+        offset = ( obj.mapidx - 1 ) * sizeof( lx_map_entry );
     } else {
-        offset = ( obj.mapidx-1 ) * sizeof( le_map_entry );
+        offset = ( obj.mapidx - 1 ) * sizeof( le_map_entry );
     }
     offset += New_exe_off + Os2_386_head.objmap_off;
     for( j = 0; j < obj.mapsize; ++j ) {
@@ -365,7 +387,7 @@ static void dmp_obj_page( object_record obj )
             Wdputs( "H " );
             Wdputs( map_flgs[ map.le.flags ] );
             if( Options_dmp & OS2_SEG_DMP ) {
-                Dmp_le_page_seg();
+                Dmp_page_seg_le();
             }
             break;
         case FORM_LX:
@@ -379,13 +401,13 @@ static void dmp_obj_page( object_record obj )
             Puthex( map.lx.flags, 2 );
             Wdputs( "H " );
             Wdputs( map_flgs[ map.lx.flags ] );
-            if( map.lx.flags < sizeof( map_flgs ) / sizeof( map_flgs[0] ) ) {
+            if( map.lx.flags < ARRAY_SIZE( map_flgs ) ) {
                 Wdputs( map_flgs[map.lx.flags] );
             } else {
                 Wdputs( "Unknown" );
             }
             if( Options_dmp & OS2_SEG_DMP ) {
-                Dmp_lx_page_seg( map );
+                Dmp_page_seg_lx( map );
             }
             break;
         }
@@ -394,64 +416,62 @@ static void dmp_obj_page( object_record obj )
 }
 
 /*
- * dump the object flag word
+ * dump the object flags word
  */
 static void dmp_obj_flags( unsigned_32 flags )
 /********************************************/
 {
-    char    name[256];
+    char            buffer[256];
+    char            *p;
 
-    name[0] = '\0';
-    if( flags & OBJ_READABLE ) {
-        strcat( name, "READABLE|" );
+    p = buffer;
+    if( flags & OSF_OBJ_READABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "READABLE" );
     }
-    if( flags & OBJ_WRITEABLE ) {
-        strcat( name, "WRITABLE|" );
+    if( flags & OSF_OBJ_WRITEABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "WRITABLE" );
     }
-    if( flags & OBJ_EXECUTABLE ) {
-        strcat( name, "EXECUTABLE|" );
+    if( flags & OSF_OBJ_EXECUTABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "EXECUTABLE" );
     }
-    if( flags & OBJ_RESOURCE ) {
-        strcat( name, "RESOURCE|" );
+    if( flags & OSF_OBJ_RESOURCE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "RESOURCE" );
     }
-    if( flags & OBJ_DISCARDABLE ) {
-        strcat( name, "DISCARDABLE|" );
+    if( flags & OSF_OBJ_DISCARDABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "DISCARDABLE" );
     }
-    if( flags & OBJ_SHARABLE ) {
-        strcat( name, "SHARED|" );
+    if( flags & OSF_OBJ_SHARABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "SHARED" );
     }
-    if( flags & OBJ_HAS_PRELOAD ) {
-        strcat( name, "PRELOAD|" );
+    if( flags & OSF_OBJ_HAS_PRELOAD ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PRELOAD" );
     }
-    if( flags & OBJ_HAS_INVALID ) {
-        strcat( name, "INVALID|" );
+    if( flags & OSF_OBJ_HAS_INVALID ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "INVALID" );
     }
-    if( flags & OBJ_PERM_SWAPPABLE ) {
-        strcat( name, "SWAPPABLE|" );
+    if( flags & OSF_OBJ_PERM_SWAPPABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "SWAPPABLE" );
     }
-    if( flags & OBJ_PERM_RESIDENT ) {
-        strcat( name, "RESIDENT|" );
+    if( flags & OSF_OBJ_PERM_RESIDENT ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "RESIDENT" );
     }
-    if( flags & OBJ_PERM_LOCKABLE ) {
-        strcat( name, "PERM_LOCKABLE|" );
+    if( flags & OSF_OBJ_PERM_LOCKABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PERM_LOCKABLE" );
     }
-    if( flags & OBJ_ALIAS_REQUIRED ) {
-        strcat( name, "16:16_ALIAS|" );
+    if( flags & OSF_OBJ_ALIAS_REQUIRED ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "16:16_ALIAS" );
     }
-    if( flags & OBJ_BIG ) {
-        strcat( name, "BIG|" );
+    if( flags & OSF_OBJ_BIG ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "BIG" );
     }
-    if( flags & OBJ_CONFORMING ) {
-        strcat( name, "CONFORMING|" );
+    if( flags & OSF_OBJ_CONFORMING ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "CONFORMING" );
     }
-    if( flags & OBJ_IOPL ) {
-        strcat( name, "IOPL|" );
+    if( flags & OSF_OBJ_IOPL ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "IOPL" );
     }
-    if( name[strlen(name)-1] == '|' ) {
-        name[strlen(name)-1] = '\0';
-    }
-    Wdputs( name );
-    Wdputslc( "\n" );
+    *p = '\0';
+    Wdputs( buffer );
 }
 
 /*
@@ -465,15 +485,17 @@ static void dmp_obj_table( void )
 
     Banner( "Object Table" );
     for( i = 0; i < Os2_386_head.num_objects; i++ ) {
-        Wlseek( New_exe_off + Os2_386_head.objtab_off
-                            + i * sizeof( object_record ) );
+        Wlseek( New_exe_off + Os2_386_head.objtab_off + i * sizeof( object_record ) );
         Wread( &os_obj, sizeof( object_record ) );
         Wdputs( "object " );
         Putdecbz( i + 1, 2 );
         Wdputs( ": " );
         Dump_header( &os_obj.size, os2_obj_msg, 4 );
         Wdputs( "          flags = " );
+        Puthex( os_obj.flags, 8 );
+        Wdputs( ": " );
         dmp_obj_flags( os_obj.flags );
+        Wdputslc( "\n" );
         if( Options_dmp & PAGE_DMP ) {
             dmp_obj_page( os_obj );
         }
@@ -494,7 +516,7 @@ bool Dmp_386_head( void )
     if( signature == EXESIGN_LE ) {
         Form = FORM_LE;
         Banner( "Linear EXE Header (OS/2 V2.x) - LE" );
-    } else if ( signature == EXESIGN_LX ) {
+    } else if( signature == EXESIGN_LX ) {
         Form = FORM_LX;
         Banner( "Linear EXE Header (OS/2 V2.x) - LX" );
     } else {
@@ -507,9 +529,15 @@ bool Dmp_386_head( void )
     Wdputslc( "H\n" );
     Wdputslc( "\n" );
     Dump_header( (char *)&Os2_386_head.byte_order, os2_386_msg, 4 );
-    dmp_mod_flag_lx( Os2_386_head.flags, Os2_386_head.os_type );
+    Wdputslc( "\n" );
+    Wdputs( "Module Flags = " );
+    Puthex( Os2_386_head.flags, 8 );
+    Wdputs( ": " );
+    dmp_mod_flags_lelx( Os2_386_head.flags, Os2_386_head.os_type );
+    Wdputslc( "\n" );
+    Wdputslc( "\n" );
     dmp_obj_table();
-    Dmp_resrc2_tab();
-    Dmp_le_lx_tbls();
+    Dmp_resrc_tab_lelx();
+    Dmp_tables_lelx();
     return( true );
 }

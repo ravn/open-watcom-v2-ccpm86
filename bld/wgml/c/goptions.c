@@ -228,9 +228,6 @@ static void read_indirect_file( FILE *fp )
         ch = *str;
         if( ch == '\r' ) {
             *str = ' ';
-        } else if( ch == 0x1A ) {   // if end of file
-            *str = '\0';            // - mark end of str
-            break;
         }
         ++str;
     }
@@ -1130,7 +1127,7 @@ static void set_optfile( option *opt )
     if( attrwork[0] != '\0' ) {
         xx_warn_cc( WNG_FILEATTR_IGNORED, attrwork, token_buf );
     }
-    fp = search_file_in_dirs( token_buf, OPT_EXT, "", DSEQ_opt_file );
+    fp = search_file_in_dirs( token_buf, FEXT_OPT, "", DSEQ_opt_file );
     if( fp == NULL ) {
         xx_simple_err_exit_c( ERR_FILE_NOT_FOUND, token_buf );
         /* never return */

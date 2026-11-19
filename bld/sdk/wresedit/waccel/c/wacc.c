@@ -88,7 +88,7 @@ void WFreeAccelTableEntries( WAccelEntry *entry )
 static void WFreeAccelTable( WAccelTable *tbl )
 {
     if( tbl != NULL ) {
-        WFreeAccelTableEntries( tbl->first_entry );
+        WFreeAccelTableEntries( tbl->head );
         MemFree( tbl );
     }
 }
@@ -130,15 +130,15 @@ static void WInitDataFromAccelTable( WAccelTable *tbl, char *data )
 
     last = NULL;
     if( tbl->is32bit ) {
-        for( entry = tbl->first_entry; entry != NULL; entry = entry->next ) {
+        for( entry = tbl->head; entry != NULL; entry = entry->next ) {
             last = data;
-            data = ResWriteDataAccelTableEntry32( data, &entry->u.entry32 );
+            data = ResWriteDataAccelTableEntry32( data, &entry->entry );
         }
         SetAccelTableLastEntry32( last );
     } else {
-        for( entry = tbl->first_entry; entry != NULL; entry = entry->next ) {
+        for( entry = tbl->head; entry != NULL; entry = entry->next ) {
             last = data;
-            data = ResWriteDataAccelTableEntry( data, &entry->u.entry );
+            data = ResWriteDataAccelTableEntry( data, &entry->entry );
         }
         SetAccelTableLastEntry( last );
     }
@@ -199,13 +199,13 @@ static WAccelTable *WAllocAccelTable( size_t num )
 
     tbl->num = num;
     tbl->is32bit = false;
-    tbl->first_entry = NULL;
+    tbl->head = NULL;
     if( num != 0 ) {
         prev = NULL;
         for( i = 0; i < num; i++ ) {
             entry = MemAlloc( sizeof( WAccelEntry ) );
             if( prev == NULL ) {
-                tbl->first_entry = entry;
+                tbl->head = entry;
             } else {
                 prev->next = entry;
             }
@@ -254,7 +254,7 @@ static void WInitAccelTable( WAccelInfo *info, WAccelTable *tbl )
     int                 i;
     bool                last;
 
-    entry = tbl->first_entry;
+    entry = tbl->head;
     if( entry == NULL ) {
         return;
     }
@@ -266,14 +266,14 @@ static void WInitAccelTable( WAccelInfo *info, WAccelTable *tbl )
         for( ; entry != NULL && !last; entry = entry->next ) {
             entry->is32bit = true;
             last = IsAccelTableLastEntry32( data );
-            data = ResReadDataAccelTableEntry32( data, &entry->u.entry32 );
+            data = ResReadDataAccelTableEntry32( data, &entry->entry );
             i++;
         }
     } else {
         for( ; entry != NULL && !last; entry = entry->next ) {
             entry->is32bit = false;
             last = IsAccelTableLastEntry( data );
-            data = ResReadDataAccelTableEntry( data, &entry->u.entry );
+            data = ResReadDataAccelTableEntry( data, &entry->entry );
             i++;
         }
     }
@@ -337,9 +337,9 @@ bool WInsertAccelTableEntry( WAccelTable *tbl, WAccelEntry *after, WAccelEntry *
             entry->prev = after;
             after->next = entry;
         } else {
-            entry->next = tbl->first_entry;
+            entry->next = tbl->head;
             entry->prev = NULL;
-            tbl->first_entry = entry;
+            tbl->head = entry;
         }
         tbl->num++;
     }
@@ -360,8 +360,8 @@ bool WFreeAccelTableEntry( WAccelTable *tbl, WAccelEntry *entry )
         if( entry->prev != NULL ) {
             entry->prev->next = entry->next;
         }
-        if( tbl->first_entry == entry ) {
-            tbl->first_entry = entry->next;
+        if( tbl->head == entry ) {
+            tbl->head = entry->next;
         }
         if( entry->symbol != NULL ) {
             MemFree( entry->symbol );
@@ -383,7 +383,7 @@ bool WMakeClipDataFromAccelEntry( WAccelEntry *entry, char **pdata, size_t *dsiz
 
     if( ok ) {
         if( entry->is32bit ) {
-            size = 1 + sizeof( AccelTableEntry32 );
+            size = 1 + sizeof( AccelTableEntry );
         } else {
             size = 1 + sizeof( AccelTableEntry );
         }
@@ -394,7 +394,7 @@ bool WMakeClipDataFromAccelEntry( WAccelEntry *entry, char **pdata, size_t *dsiz
 
     if( ok ) {
         data[0] = entry->is32bit;
-        memcpy( data + 1, &entry->u.entry, size - 1 );
+        memcpy( data + 1, &entry->entry, size - 1 );
     }
 
     return( ok );
@@ -412,14 +412,14 @@ bool WMakeAccelEntryFromClipData( WAccelEntry *entry, const char *data, size_t d
         memset( entry, 0, sizeof( WAccelEntry ) );
         entry->is32bit = data[0];
         if( entry->is32bit ) {
-            len = sizeof( AccelTableEntry32 );
+            len = sizeof( AccelTableEntry );
         } else {
             len = sizeof( AccelTableEntry );
         }
     }
 
     if( ok ) {
-        memcpy( &entry->u.entry, data + 1, len );
+        memcpy( &entry->entry, data + 1, len );
     }
 
     return( ok );
@@ -433,7 +433,7 @@ bool WResolveAllEntrySymbols( WAccelEditInfo *einfo )
         return( false );
     }
 
-    for( entry = einfo->tbl->first_entry; entry != NULL; entry = entry->next ) {
+    for( entry = einfo->tbl->head; entry != NULL; entry = entry->next ) {
         WResolveEntrySymbol( entry, einfo->info->symbol_table );
     }
 
@@ -452,9 +452,9 @@ bool WResolveEntrySymbol( WAccelEntry *entry, WRHashTable *symbol_table )
 
     if( ok ) {
         if( entry->is32bit ) {
-            id = entry->u.entry32.Id;
+            id = entry->entry.Id;
         } else {
-            id = (uint_16)entry->u.entry.Id;
+            id = (uint_16)entry->entry.Id;
         }
         vlist = WRLookupValue( symbol_table, id );
         ok = (vlist != NULL && vlist->next == NULL);
@@ -489,9 +489,9 @@ bool WResolveEntrySymIDs( WAccelEntry *entry, WRHashTable *symbol_table )
 
     if( ok ) {
         if( entry->is32bit ) {
-            entry->u.entry32.Id = (uint_16)hv;
+            entry->entry.Id = (uint_16)hv;
         } else {
-            entry->u.entry.Id = (uint_16)hv;
+            entry->entry.Id = (uint_16)hv;
         }
     }
 
@@ -506,7 +506,7 @@ bool WResolveAllEntrySymIDs( WAccelEditInfo *einfo )
         return( false );
     }
 
-    for( entry = einfo->tbl->first_entry; entry != NULL; entry = entry->next ) {
+    for( entry = einfo->tbl->head; entry != NULL; entry = entry->next ) {
         WResolveEntrySymIDs( entry, einfo->info->symbol_table );
     }
 

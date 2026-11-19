@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -24,22 +25,11 @@
 *
 *  ========================================================================
 *
-* Description:  WHEN YOU FIGURE OUT WHAT THIS FILE DOES, PLEASE
-*               DESCRIBE IT HERE!
+* Description:  variable for active DPMI host for Extended DOS.
 *
 ****************************************************************************/
 
 
-#include "layer0.h"
-#include "filefmt.h"
-#include "reserr.h"
-#include "resraw.h"
-#include "wresrtns.h"
-
-bool ResWrite( const void *buffer, size_t len, FILE *fp )
-/*******************************************************/
-{
-    if( WRESWRITE( fp, buffer, len ) != len )
-        return( WRES_ERROR( WRS_WRITE_FAILED ) );
-    return( false );
-}
+#if defined( __DOS__ )
+    extern unsigned char    _DPMI;
+#endif

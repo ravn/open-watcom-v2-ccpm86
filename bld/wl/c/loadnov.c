@@ -32,6 +32,7 @@
 
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 #include "linkstd.h"
 #include "exenov.h"
 #include "dbginfo.h"
@@ -75,23 +76,24 @@ static unsigned_32 WriteNovRelocs( fixed_header *header )
 static size_t create_sym_extname( symbol *sym, char *ext_name )
 /*************************************************************/
 {
-    size_t  len;
-    size_t  len1;
+    size_t      len;
+    const char  *src;
 
+    len = 0;
     /*
-    //    netware prefix support
-    */
-    *ext_name = '\0';
-    if( sym->prefix != NULL ) {
-        strcpy( ext_name, sym->prefix );    // len < 255
-        strcat( ext_name, "@" );
+     * netware prefix support
+     */
+    src = sym->prefix;
+    if( src != NULL ) {
+        while( len < 255 - 1 ) {
+            ext_name[len++] = *src++;
+        }
+        ext_name[len++] = '@';
     }
-    len = strlen( sym->name.u.ptr );
-    len1 = strlen( ext_name );
-    if( len + len1 > 255 )
-        len = 255 - len1;
-    memcpy( ext_name + len1, sym->name.u.ptr, len );
-    len += len1;
+    src = sym->name.u.ptr;
+    while( len < 255 ) {
+        ext_name[len++] = *src++;
+    }
     ext_name[len] = '\0';
     return( len );
 }
@@ -113,9 +115,9 @@ static unsigned_32 WriteNovImports( fixed_header *header )
         if( !IS_SYM_IMPORTED( sym ) )
             continue;
         /* so SymFini doesn't try to free it */
-        if( sym->p.import == DUMMY_IMPORT_PTR )
-            sym->p.import = NULL;
-        nov_imp = sym->p.import;
+        if( sym->p.import_nov == DUMMY_IMPORT_PTR )
+            sym->p.import_nov = NULL;
+        nov_imp = sym->p.import_nov;
         if( nov_imp != NULL ) {
             char    ext_name[255 + 1];
 
@@ -408,7 +410,7 @@ static unsigned_32 WriteNovImage( unsigned_32 file_pos, bool docode )
     /* write groups.*/
     fnode = Root->outfile;
     for( group = Groups; group != NULL; group = group->next ) {
-        if( group->grp_addr.seg == CODE_SEGMENT ) {
+        if( group->addr.seg == CODE_SEGMENT ) {
             iscode = true;
         } else {
             iscode = false;
@@ -434,7 +436,7 @@ static unsigned_32 WriteNovData( unsigned_32 file_pos, fixed_header *header )
     CurrSect = Root;        // needed for WriteInfo.
     Root->outfile->file_loc = file_pos;
     Root->u.file_loc = file_pos;
-    Root->sect_addr.off = Groups->grp_addr.off;
+    Root->sect_addr.off = Groups->addr.off;
     Root->sect_addr.seg = CODE_SEGMENT;
     codesize = WriteNovImage( file_pos, true );         // true = do code.
     header->codeImageSize = codesize;
@@ -442,7 +444,7 @@ static unsigned_32 WriteNovData( unsigned_32 file_pos, fixed_header *header )
     header->dataImageOffset = file_pos;
     Root->outfile->file_loc = file_pos;
     Root->u.file_loc = file_pos;
-    Root->sect_addr.off = Groups->grp_addr.off;
+    Root->sect_addr.off = Groups->addr.off;
     Root->sect_addr.seg = DATA_SEGMENT;
     header->dataImageSize = WriteNovImage( file_pos, false );   // do data.
     return( codesize + header->dataImageSize );
@@ -472,61 +474,48 @@ void FiniNovellLoadFile( void )
     unsigned_32         temp;
     unsigned_32         image_size;
     const char          *startname;
-    const char          *p;
-    char                ch;
+    const char          *src;
     size_t              len;
     size_t              len1;
     struct tm           *currtime;
     time_t              thetime;
-    const char          *pPeriod = NULL;
+    const char          *pPeriod;
     char                module_name[NOV_MAX_MODNAME_LEN + 1];
     bool                name_trunc;
     const char          *desc;
 
-/* find module name (output file name without the path.) */
-
-    startname = Root->outfile->fname;
-    for( p = startname; (ch = *p) != '\0'; p++ ) {
-        if( '.' == ch ) {
-            pPeriod = p;
-            continue;
-        }
-        if( IS_PATH_SEP( ch ) ) {
-            startname = p + 1;
-            pPeriod = NULL;
-        }
-    }
-
+    memset( &nov_header, 0, sizeof( nov_header ) );
     /*
-    // cull the module name to 8.3 (NOV_MAX_MODNAME_LEN) if necessary
-    */
+     * get module name (output file base name without the path)
+     */
+    startname = GetBaseName( Root->outfile->fname, 0, &len1 );
+    pPeriod = startname + len1;
+    /*
+     * truncate the module name to 8.3 (NOV_MAX_MODNAME_LEN) if necessary
+     */
     name_trunc = false;
-    if( pPeriod != NULL ) {
+    if( len1 > NOV_MAX_NAME_LEN ) {
+        len1 = NOV_MAX_NAME_LEN;
+        name_trunc = true;
+    }
+    len = 0;
+    src = startname;
+    while( len < len1 ) {
+        module_name[len++] = toupper( *(unsigned char *)src++ );
+    }
+    if( pPeriod[0] == '.' ) {
         len1 = strlen( pPeriod );
         if( len1 > NOV_MAX_EXT_LEN + 1 ) {   /* +1 include period */
             len1 = NOV_MAX_EXT_LEN + 1;
             name_trunc = true;
         }
-        len = pPeriod - startname;
-        if( len > NOV_MAX_NAME_LEN ) {
-            len = NOV_MAX_NAME_LEN;
-            name_trunc = true;
+        len1 += len;
+        src = pPeriod;
+        while( len < len1 ) {
+            module_name[len++] = toupper( *(unsigned char *)src++ );
         }
-        memcpy( module_name, startname, len );
-        memcpy( module_name + len, pPeriod, len1 );   /* must include period */
-        len += len1;
-    } else {
-        /* still only copy 8 chars else the module name will be too long */
-        len = strlen( startname );
-        if( len > NOV_MAX_NAME_LEN ) {
-            len = NOV_MAX_NAME_LEN;
-            name_trunc = true;
-        }
-        memcpy( module_name, startname, len );
     }
     module_name[len] = '\0';
-    strupr( module_name );
-
     if( name_trunc ) {
         LnkMsg( WRN+MSG_INTERNAL_MOD_NAME_DIFF_FROM_FILE, "s", module_name );
     }
@@ -605,8 +594,7 @@ void FiniNovellLoadFile( void )
     memcpy( nov_header.signature, NLM_SIGNATURE, NLM_SIGNATURE_LENGTH );
     nov_header.version = NLM_VERSION;
     nov_header.moduleName[0] = (char)len;
-    memcpy( nov_header.moduleName + 1, module_name, len );
-    memset( nov_header.moduleName + 1 + len, 0, NOV_MAX_MODNAME_LEN - len ); // zero rest.
+    strncpy( nov_header.moduleName + 1, module_name, len );
     nov_header.uninitializedDataSize = 0; // MemorySize() - image_size;
     GetProcOffsets( &nov_header );
     nov_header.moduleType = FmtData.u.nov.moduletype;
@@ -662,10 +650,10 @@ void AddNovImpReloc( symbol *sym, unsigned_32 offset, bool isrelative, bool isda
     if( !isdata ) {
         offset |= NOV_IMP_ISCODE;
     }
-    nov_imp = sym->p.import;
+    nov_imp = sym->p.import_nov;
     if( nov_imp == DUMMY_IMPORT_PTR ) {
         nov_imp = MemAllocSafe( sizeof( nov_import ) );
-        sym->p.import = nov_imp;
+        sym->p.import_nov = nov_imp;
         nov_imp->contents = 0;
         nov_imp->u.r.relocs[nov_imp->contents++] = offset;
     } else if( nov_imp->contents < MAX_IMP_INTERNAL ) {
@@ -674,7 +662,7 @@ void AddNovImpReloc( symbol *sym, unsigned_32 offset, bool isrelative, bool isda
             memcpy( tmp, nov_imp, sizeof( nov_import ) );
             MemFree( nov_imp );
             nov_imp = tmp;
-            sym->p.import = nov_imp;
+            sym->p.import_nov = nov_imp;
         }
         nov_imp->u.r.relocs[nov_imp->contents++] = offset;
     } else if( nov_imp->contents == MAX_IMP_INTERNAL ) { // set up virt.mem
@@ -694,7 +682,7 @@ void AddNovImpReloc( symbol *sym, unsigned_32 offset, bool isrelative, bool isda
                 MemFree( nov_imp );
                 nov_imp = tmp;
                 nov_imp->contents++;
-                sym->p.import = nov_imp;
+                sym->p.import_nov = nov_imp;
             }
             nov_imp->u.v.vm_ptr[vblock] = AllocStg( IMP_VIRT_ALLOC_SIZE );
         }

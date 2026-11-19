@@ -42,19 +42,10 @@
 #include "watcom.h"
 #include "builder.h"
 #include "memutils.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
 #include "clibext.h"
 
-
-#if defined( TRMEM ) && defined( _M_IX86 ) && ( __WATCOMC__ > 1290 )
-#define _XSTR(s)    # s
-#define TRMEMAPI(x) _Pragma(_XSTR(aux x __frame))
-#else
-#define TRMEMAPI(x)
-#endif
 
 #ifdef TRMEM
 
@@ -192,39 +183,32 @@ void MemFree( void *p )
 #endif
 }
 
-const char *SkipBlanks( const char *p )
-{
-    while( IS_BLANK( *p ) ) {
-        ++p;
-    }
-    return( p );
-}
-
 char *GetPathOrFile( const char *p, char *buffer )
 {
     char        c;
     char        quotechar;
 
-    p = SkipBlanks( p );
-    if( *p == '\0' )
-        return( NULL );
-    quotechar = ( *p == '"' ) ? *p++ : ' ';
-    while( (c = *p) != '\0' ) {
-        if( c == quotechar ) {
-            p++;
-            break;
-        }
-#ifdef __UNIX__
-        if( c == '\\' ) {
-            c = '/';
-        }
-#else
-        if( c == '/' ) {
-            c = '\\';
-        }
-#endif
-        *buffer++ = c;
+    while( isspace( *(unsigned char *)p ) )
         p++;
+    if( *p != '\0' ) {
+        quotechar = ( *p == '"' ) ? *p++ : ' ';
+        while( (c = *p) != '\0' ) {
+            if( c == quotechar ) {
+                p++;
+                break;
+            }
+#ifdef __UNIX__
+            if( c == '\\' ) {
+                c = '/';
+            }
+#else
+            if( c == '/' ) {
+                c = '\\';
+            }
+#endif
+            *buffer++ = c;
+            p++;
+        }
     }
     *buffer = '\0';
     return( (char *)p );

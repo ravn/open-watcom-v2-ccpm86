@@ -221,7 +221,7 @@ void PrepareToc( void )
     RehashHTable( Toc );
 #if 0
     if( (LinkState & LS_HAVE_PPC_CODE)
-      && (FmtData.type & (MK_OS2 | MK_WIN_NE)) ) {
+      && (FmtData.type & (MK_NE | MK_OS2_FLAT)) ) {
         // Development temporarly on hold
         offset middle = ( TocSize / 2 ) & ~0x3;
         WalkHTableCookie( Toc, AdjustGotEntry, &middle );
@@ -243,7 +243,7 @@ void SetTocAddr( offset off, group_entry *group )
 {
     if( Toc != NULL
       && TocSym != NULL ) {
-        SET_SYM_ADDR( TocSym, off + TocShift, group->grp_addr.seg );
+        SET_SYM_ADDR( TocSym, off + TocShift, group->addr.seg );
     }
 }
 
@@ -325,7 +325,7 @@ void WriteToc( virt_mem buf )
     WalkHTableCookie( Toc, WriteOutTokElem, &buf );
 #if 0
     if( (LinkState & LS_HAVE_PPC_CODE)
-      && (FmtData.type & (MK_OS2 | MK_WIN_NE)) ) {
+      && (FmtData.type & (MK_NE | MK_OS2_FLAT)) ) {
         // Development temporarly on hold
         offset res[GOT_RESERVED_SIZE / sizeof( offset )] = { 0 };
         enum { zero = GOT_RESERVED_NEG_SIZE / sizeof( offset ) };

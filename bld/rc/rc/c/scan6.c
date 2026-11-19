@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -25,18 +25,10 @@
 *
 *  ========================================================================
 *
-* Description:  Public interface to WIN specific yydriver module.
+* Description:  Lexical scanner, WIN16 grammar variant.
 *
 ****************************************************************************/
 
 
-#ifndef _YYDRIVRW_H
-#define _YYDRIVRW_H
-
-#include "winytab.h"
-#include "scan.h"
-
-extern YYTOKENTYPE  LookupKeywordWIN( ScanString newstring );
-extern YYTOKENTYPE  ScanWIN( ScanValue *value );
-
-#endif
+#define GRAMMAR_WIN16
+#include "scan.c"

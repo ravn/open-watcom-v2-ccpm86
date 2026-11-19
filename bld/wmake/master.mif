@@ -21,13 +21,6 @@ wmake_wreslib_incl = 1
 exetarg_res        = $(proj_name).res
 !endif
 
-# DOS code will not fit in 64k with /d2
-#!ifeq host_os dos
-#!ifeq host_cpu i86
-#wmake_debug = 0
-#!endif
-#!endif
-
 additional_clean = *.gh *.grc
 
 !include idedlls.mif
@@ -39,12 +32,19 @@ additional_clean = *.gh *.grc
 
 !include ../wmkobjs.mif                     #   get our objs macro
 
+!ifeq host_cpu i86
+!ifneq debug 0
+# this configuration overflow 64 kB _TEXT segment limit
+skip: .SYMBOLIC
+!endif
+!endif
+
 #
 # cflags
 #
 .c : ../c;$(watcom_dir)/c;$(trmem_dir)
 
-inc_dirs = -I. -I"$(wmake_dir)/h" $(cli_orl_inc_dirs)
+inc_dirs = -I. -I"$(wmake_dir)/h" $(cli_orl_inc_dirs) -I"$(trmem_dir)"
 
 extra_cpp_flags =
 !ifdef DLLS_IMPLEMENTED
@@ -147,12 +147,13 @@ isarray.gh : ./cretype.exe $(__MAKEFILES__)
 ##################
 
 # print a list of unreferenced messages
-chkmsg :
-    sed -f ../msgdef.sed ../h/msg.h | sort -u >chkmsg.1
-    *awk -f ../msgref.awk -v OUTFILE=chkmsg.2 chkmsg.1
-    sed -f chkmsg.2 ../c/*.c | sort -u >chkmsg.3
-    comm -3 chkmsg.1 chkmsg.3 | tee chkmsg
-    rm chkmsg.?
+chkmsg : .SYMBOLIC
+    %create tmp.tmp
+    for %f in (../c/*.c) do %append tmp.tmp %f
+    *awk -f ../chkmsg.awk &
+        -v MSGFILE1=../h/_msg.h &
+        -v MSGFILE2=../h/wmake.msg &
+        -v SRCFILES=tmp.tmp >chkmsg.lst
 
 strip : .SYMBOLIC
     @%make echo_bindres

@@ -371,9 +371,9 @@ static void AllocSeg( void *_snode, void *dummy )
         if( sdata->isidata
           || sdata->iscode ) {
             if( sdata->iscode ) {
-                snode->info |= SEG_CODE;
+                snode->info |= SEGINF_CODE;
             }
-            snode->info |= SEG_DEAD;
+            snode->info |= SEGINF_DEAD;
             snode->entry = NULL;
             FreeSegData( sdata );
             return;
@@ -382,7 +382,7 @@ static void AllocSeg( void *_snode, void *dummy )
     isdbi = false;
     if( strnicmp( CoffDebugPrefix, sdata->u.name.u.ptr, sizeof( CoffDebugPrefix ) - 1 ) == 0 ) {
         if( CurrMod->flags_mod & MOD_IMPORT_LIB ) {
-            snode->info |= SEG_DEAD;
+            snode->info |= SEGINF_DEAD;
             snode->entry = NULL;
             FreeSegData( sdata );
             return;
@@ -421,7 +421,7 @@ static void AllocSeg( void *_snode, void *dummy )
     if( sdata->isuninit ) {
         snode->contents = NULL;
     } else {
-        snode->entry->u.leader->info |= SEG_LXDATA_SEEN;
+        snode->entry->u.leader->info |= SEGINF_LXDATA_SEEN;
         if( !sdata->isdead ) {
             ORLSecGetContents( snode->handle, &snode->contents );
             if( !sdata->iscdat
@@ -442,7 +442,7 @@ static void DefNosymComdats( void *_snode, void *dummy )
 
     sdata = snode->entry;
     if( sdata == NULL
-      || (snode->info & SEG_DEAD) )
+      || (snode->info & SEGINF_DEAD) )
         return;
     if( sdata->iscdat
       && !sdata->hascdatsym
@@ -573,7 +573,7 @@ static void ImpProcSymbol( segnode *snode, orl_symbol_type type, const char *nam
             }
         }
     } else if( snode != NULL
-      && (snode->info & SEG_CODE) ) {
+      && (snode->info & SEGINF_CODE) ) {
         if( FirstCodeSymName == NULL ) {
             FirstCodeSymName = name;
         }
@@ -585,14 +585,14 @@ static void ImpProcSymbol( segnode *snode, orl_symbol_type type, const char *nam
     }
 }
 
-static void DefineComdatSym( segnode *seg, symbol *sym, unsigned_32 value )
-/*************************************************************************/
+static void DefineComdatSym( segnode *snode, symbol *sym, unsigned_32 value )
+/***************************************************************************/
 {
     unsigned    select;
     sym_info    sym_type;
     segdata     *sdata;
 
-    sdata = seg->entry;
+    sdata = snode->entry;
     sdata->hascdatsym = true;
     select = sdata->select;
     if( select == 0 ) {
@@ -600,7 +600,7 @@ static void DefineComdatSym( segnode *seg, symbol *sym, unsigned_32 value )
     } else {
         sym_type = (select - 1) << SYM_CDAT_SEL_SHIFT;
     }
-    DefineComdat( sdata, sym, value, sym_type, seg->contents );
+    DefineComdat( sdata, sym, value, sym_type, snode->contents );
 }
 
 static orl_return ProcSymbol( orl_symbol_handle symhdl )
@@ -698,7 +698,7 @@ static orl_return ProcSymbol( orl_symbol_handle symhdl )
     } else if( (type & ORL_SYM_TYPE_SECTION)
       && (type & ORL_SYM_CDAT_MASK)
       && snode != NULL
-      && (snode->info & SEG_DEAD) == 0 ) {
+      && (snode->info & SEGINF_DEAD) == 0 ) {
         snode->entry->select = (type & ORL_SYM_CDAT_MASK) >> ORL_SYM_CDAT_SHIFT;
     }
     return( ORL_OKAY );
@@ -717,8 +717,8 @@ static orl_return DoReloc( orl_reloc reloc )
     frame_spec  frame;
     target_spec target;
     offset      addend;
-    segnode     *seg;
-    segnode     *symseg;
+    segnode     *snode;
+    segnode     *sym_snode;
     extnode     *ext;
     bool        istoc;
 
@@ -808,28 +808,28 @@ static orl_return DoReloc( orl_reloc reloc )
         LnkMsg( ERR+LOC+MSG_BAD_RELOC_TYPE, NULL );
         break;
     }
-    seg = FindSegNode( reloc->section );
-    if( seg != NULL
-      && (seg->info & SEG_DEAD) == 0
-      && seg->entry != NULL
-      && !seg->entry->isdead ) {
+    snode = FindSegNode( reloc->section );
+    if( snode != NULL
+      && (snode->info & SEGINF_DEAD) == 0
+      && snode->entry != NULL
+      && !snode->entry->isdead ) {
         addend = 0;
-        SetCurrSeg( seg->entry, 0, seg->contents );
+        SetCurrSeg( snode->entry, 0, snode->contents );
         frame.type = FIX_FRAME_TARG;
         ext = FindExtHandle( reloc->symbol );
         if( ext == NULL ) {
-            symseg = FindSegNode( ORLSymbolGetSecHandle( reloc->symbol ) );
-            if( symseg == NULL ) {
+            sym_snode = FindSegNode( ORLSymbolGetSecHandle( reloc->symbol ) );
+            if( sym_snode == NULL ) {
                 return( ORL_OKAY );
             } else {
                 unsigned_64 val64;
 
                 ORLSymbolGetValue( reloc->symbol, &val64 );
                 addend = U64Low( val64 );
-                target.u.sdata = symseg->entry;
+                target.u.sdata = sym_snode->entry;
                 target.type = FIX_TARGET_SEG;
                 if( istoc ) {
-                    AddSdataOffToToc( symseg->entry, addend );
+                    AddSdataOffToToc( sym_snode->entry, addend );
                 }
             }
         } else {
@@ -855,7 +855,6 @@ static void HandleImportSymbol( const char *name )
 {
     length_name intname;
     length_name modname;
-    length_name extname;
 
     intname.name = name;
     intname.len = strlen( name );
@@ -866,15 +865,18 @@ static void HandleImportSymbol( const char *name )
     modname.len = strlen( ImpModName );
     if( ImpExternalName == NULL ) {
         if( ImpOrdinal == 0 ) {
-            ImpOrdinal = NOT_IMP_BY_ORDINAL;
+            ImpOrdinal = IMP_BY_NAME;
+            HandleImport( &intname, &modname, &intname, ImpOrdinal );
         } else {
             ImpOrdinal &= 0x7FFFFFFF;           /* get rid of that high bit */
+            HandleImport( &intname, &modname, NULL, ImpOrdinal );
         }
-        HandleImport( &intname, &modname, &intname, ImpOrdinal );
     } else {
+        length_name     extname;
+
         extname.name = ImpExternalName;
         extname.len = strlen( ImpExternalName );
-        HandleImport( &intname, &modname, &extname, NOT_IMP_BY_ORDINAL );
+        HandleImport( &intname, &modname, &extname, IMP_BY_NAME );
     }
     MemFree( ImpModName );
     ImpModName = NULL;

@@ -58,8 +58,8 @@ static WResTypeNode *newTypeNode( const WResID *type_id )
     id_size = WResIDSize( type_id );
     typenode = WRESALLOC( offsetof( WResTypeNode, Info.TypeName ) + id_size );
     if( typenode != NULL ) {
-        typenode->Next = NULL;
-        typenode->Prev = NULL;
+        typenode->next = NULL;
+        typenode->prev = NULL;
         typenode->Head = NULL;
         typenode->Tail = NULL;
         typenode->Info.NumResources = 0;
@@ -70,7 +70,7 @@ static WResTypeNode *newTypeNode( const WResID *type_id )
     return( typenode );
 }
 
-static WResLangNode *newLangNode( uint_16 memflags, uint_32 offset,
+static WResLangNode *newLangNode( ResMemFlags res_flags, uint_32 offset,
                                   uint_32 length, const WResLangType *lang,
                                   void *fileinfo )
 {
@@ -80,11 +80,11 @@ static WResLangNode *newLangNode( uint_16 memflags, uint_32 offset,
     if( langnode == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
     } else {
-        langnode->Next = NULL;
-        langnode->Prev = NULL;
+        langnode->next = NULL;
+        langnode->prev = NULL;
         langnode->data = NULL;
         langnode->fileInfo = fileinfo;
-        langnode->Info.MemoryFlags = memflags;
+        langnode->Info.res_flags = res_flags;
         langnode->Info.Offset = offset;
         langnode->Info.Length = length;
         if( lang == NULL ) {
@@ -107,8 +107,8 @@ static WResResNode *newResNode( const WResID *res_id )
     if( resnode == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
     } else {
-        resnode->Next = NULL;
-        resnode->Prev = NULL;
+        resnode->next = NULL;
+        resnode->prev = NULL;
         resnode->Head = NULL;
         resnode->Tail = NULL;
         resnode->Info.NumResources = 0;
@@ -126,7 +126,7 @@ static WResResNode *newResNode( const WResID *res_id )
  *                   occured (including duplicate entry)
  */
 bool WResAddResource( const WResID *type_id, const WResID *res_id,
-                    uint_16 memflags, long offset, uint_32 length,
+                    ResMemFlags res_flags, long offset, uint_32 length,
                     WResDir dir, const WResLangType *lang,
                     bool *duplicate )
 /************************************************************/
@@ -134,7 +134,7 @@ bool WResAddResource( const WResID *type_id, const WResID *res_id,
     bool                rc;
     WResDirWindow       wind_dup;
 
-    rc = WResAddResource2( type_id, res_id, memflags, offset, length, dir,
+    rc = WResAddResource2( type_id, res_id, res_flags, offset, length, dir,
                              lang, &wind_dup, NULL );
     if( duplicate != NULL ) {
         *duplicate = !WResIsEmptyWindow( wind_dup );
@@ -143,7 +143,7 @@ bool WResAddResource( const WResID *type_id, const WResID *res_id,
 }
 
 bool WResAddResource2( const WResID *type_id, const WResID *res_id,
-                    uint_16 memflags, long offset, uint_32 length,
+                    ResMemFlags res_flags, long offset, uint_32 length,
                     WResDir dir, const WResLangType *lang,
                     WResDirWindow *wind_dup, void *fileinfo )
 /************************************************************/
@@ -194,7 +194,7 @@ bool WResAddResource2( const WResID *type_id, const WResID *res_id,
         typenode->Info.NumResources += 1;
         dir->NumResources += 1;
     }
-    langnode = newLangNode( memflags, offset, length, lang, fileinfo );
+    langnode = newLangNode( res_flags, offset, length, lang, fileinfo );
     if( langnode == NULL ) {
         return( true );
     }

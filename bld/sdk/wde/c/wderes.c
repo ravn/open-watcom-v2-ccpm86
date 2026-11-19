@@ -73,13 +73,13 @@ void    WdeMouseRtn( HWND, RECT * );
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static void         WdeSetCurrentRes( WdeResInfo * );
-static bool         WdeCreateResourceWindow( WdeResInfo *, size_t, char * );
-static bool         WdeAddDlgItems( WdeResInfo * );
-static bool         WdeRemoveResource( WdeResInfo * );
-static char         *WdeGetQueryName( WdeResInfo * );
-static bool         WdeQuerySaveResOnDeleteRes( WdeResInfo *, bool );
-static bool         WdeQuerySaveSymOnDeleteRes( WdeResInfo *, bool );
+static void         WdeSetCurrentRes( WdeResInfo *res_info );
+static bool         WdeCreateResourceWindow( WdeResInfo *res_info, size_t, char * );
+static bool         WdeAddDlgItems( WdeResInfo *res_info );
+static bool         WdeRemoveResource( WdeResInfo *res_info );
+static char         *WdeGetQueryName( WdeResInfo *res_info );
+static bool         WdeQuerySaveResOnDeleteRes( WdeResInfo *res_info, bool );
+static bool         WdeQuerySaveSymOnDeleteRes( WdeResInfo *res_info, bool );
 static int          WdeIncNumRes( void );
 static int          WdeDecNumRes( void );
 static WdeResInfo   *WdeResInfoFromWin( HWND );
@@ -112,7 +112,7 @@ static LIST         *WdeResList         = NULL;
 static unsigned     WdeResCounter       = 0;
 static int          WdeNumRes           = 0;
 static WdeResInfo   *WdeCurrentRes      = NULL;
-static bool         WdeOldStickyMode    = FALSE;
+static bool         WdeOldStickyMode    = false;
 
 static void WdeMassageFilter( char *filter )
 {
@@ -353,19 +353,19 @@ void WdeShowResourceWindows( int show )
     for( rlist = WdeResList; rlist != NULL; rlist = ListNext( rlist ) ) {
         res_info = (WdeResInfo *)ListElement( rlist );
         if( show == SW_HIDE ) {
-            WdeSetEditMode( res_info, FALSE );
+            WdeSetEditMode( res_info, false );
         }
         ShowWindow( res_info->res_win, show );
         EnableWindow( res_info->res_win, show != SW_HIDE );
         if( show != SW_HIDE ) {
-            WdeSetEditMode( res_info, TRUE );
+            WdeSetEditMode( res_info, true );
         }
     }
 }
 
-void WdeAddResDlgItemToResInfo( WdeResInfo *info, WdeResDlgItem *item )
+void WdeAddResDlgItemToResInfo( WdeResInfo *res_info, WdeResDlgItem *ditem )
 {
-    WdeInsertObject( &info->dlg_item_list, (OBJPTR)item );
+    WdeInsertObject( &res_info->ditem_list, (OBJPTR)ditem );
 }
 
 WdeResInfo *WdeCreateNewResource( char *title )
@@ -393,9 +393,9 @@ WdeResInfo *WdeCreateNewResource( char *title )
 
     if( ok ) {
 #ifdef __NT__
-        res_info->is32bit = TRUE;
+        res_info->is32bit = true;
 #else
-        res_info->is32bit = FALSE;
+        res_info->is32bit = false;
 #endif
         ok = WdeCreateResourceWindow( res_info, 0, title );
     }
@@ -413,7 +413,7 @@ WdeResInfo *WdeCreateNewResource( char *title )
 
     if( res_info ) {
         if( ok ) {
-            WdeSetResModified( res_info, FALSE );
+            WdeSetResModified( res_info, false );
         } else {
             WdeRemoveResource( res_info );
             res_info = NULL;
@@ -425,25 +425,25 @@ WdeResInfo *WdeCreateNewResource( char *title )
 
 bool WdeAddDlgItems( WdeResInfo *res_info )
 {
-    WResResNode         *rnode;
-    WResLangNode        *lnode;
-    WdeResDlgItem       *dlg_item;
+    WResResNode         *resnode;
+    WResLangNode        *langnode;
+    WdeResDlgItem       *ditem;
 
     if( res_info == NULL ) {
         return( false );
     }
 
     if( res_info->dlg_entry != NULL ) {
-        for( rnode = res_info->dlg_entry->Head; rnode != NULL; rnode = rnode->Next ) {
-            for( lnode = rnode->Head; lnode != NULL; lnode = lnode->Next ) {
-                dlg_item = WdeAllocResDlgItem();
-                if( dlg_item == NULL ) {
+        for( resnode = res_info->dlg_entry->Head; resnode != NULL; resnode = resnode->next ) {
+            for( langnode = resnode->Head; langnode != NULL; langnode = langnode->next ) {
+                ditem = WdeAllocResDlgItem();
+                if( ditem == NULL ) {
                     return( false );
                 }
-                dlg_item->is32bit = res_info->is32bit;
-                dlg_item->rnode = rnode;
-                dlg_item->lnode = lnode;
-                WdeAddResDlgItemToResInfo( res_info, dlg_item );
+                ditem->is32bit = res_info->is32bit;
+                ditem->resnode = resnode;
+                ditem->langnode = langnode;
+                WdeAddResDlgItemToResInfo( res_info, ditem );
             }
         }
     }
@@ -462,7 +462,7 @@ bool WdeOpenResource( char *fn )
 
     res_info = NULL;
     name = NULL;
-    got_name = FALSE;
+    got_name = false;
 
     if( fn != NULL ) {
         if( WRFileExists( fn ) ) {
@@ -479,7 +479,7 @@ bool WdeOpenResource( char *fn )
     }
 
     if( ok ) {
-        got_name = TRUE;
+        got_name = true;
         ok = ((res_info = WdeLoadResource( name )) != NULL);
     }
 
@@ -509,7 +509,7 @@ bool WdeOpenResource( char *fn )
             WdeDisplayErrorMsg( WDE_PRJHASNODIALOGS );
         }
         ListAddElt( &WdeResList, (OBJPTR)res_info );
-        WdeSetResModified( res_info, FALSE );
+        WdeSetResModified( res_info, false );
         WdeCheckBaseScrollbars( false );
     }
 
@@ -534,15 +534,15 @@ bool WdeOpenResource( char *fn )
 
 WdeResInfo *WdeResInfoFromWin( HWND win )
 {
-    WdeResInfo  *info;
+    WdeResInfo  *res_info;
     LIST        *rlist;
 
     if( win != NULL ) {
-        info = NULL;
+        res_info = NULL;
         for( rlist = WdeResList; rlist != NULL; rlist = ListNext( rlist ) ) {
-            info = (WdeResInfo *)ListElement( rlist );
-            if( info->res_win == win ) {
-                return( info );
+            res_info = (WdeResInfo *)ListElement( rlist );
+            if( res_info->res_win == win ) {
+                return( res_info );
             }
         }
     }
@@ -552,7 +552,7 @@ WdeResInfo *WdeResInfoFromWin( HWND win )
 
 static void WdeActivateResourceWindow( WdeResInfo *res_info, WPARAM wParam, LPARAM lParam )
 {
-    WdeResInfo  *info;
+    WdeResInfo  *old_res_info;
     OBJPTR      current_obj;
     bool        fActivate;
     HWND        hwndDeact;
@@ -572,9 +572,9 @@ static void WdeActivateResourceWindow( WdeResInfo *res_info, WPARAM wParam, LPAR
 
     if( fActivate ) {
         WdeSetCurrentRes( res_info );
-        info = WdeResInfoFromWin( hwndDeact );
-        if( info != NULL ) {
-            info->active = FALSE;
+        old_res_info = WdeResInfoFromWin( hwndDeact );
+        if( old_res_info != NULL ) {
+            old_res_info->active = false;
         }
     }
 
@@ -637,7 +637,7 @@ bool WdeQuerySaveResOnDeleteRes( WdeResInfo *res_info, bool fatal_exit )
     char        *text;
     HWND        frame;
 
-    if( res_info != NULL && res_info->dlg_item_list != NULL && WdeIsResModified( res_info ) ) {
+    if( res_info != NULL && res_info->ditem_list != NULL && WdeIsResModified( res_info ) ) {
         WdeCheckIfActiveWindow();
         if( fatal_exit ) {
             style = MB_YESNO | MB_APPLMODAL | MB_ICONEXCLAMATION;
@@ -722,8 +722,8 @@ bool WdeDestroyResourceWindow( WdeResInfo *res_info )
 {
     bool        ret;
 
-    ret = (res_info != NULL && WdeQuerySaveResOnDeleteRes( res_info, FALSE ) &&
-           WdeQuerySaveSymOnDeleteRes( res_info, FALSE ));
+    ret = (res_info != NULL && WdeQuerySaveResOnDeleteRes( res_info, false ) &&
+           WdeQuerySaveSymOnDeleteRes( res_info, false ));
 
     WdeHashClearSaveRejected( res_info->hash_table );
 
@@ -756,7 +756,7 @@ bool WdeCreateResourceWindow( WdeResInfo *res_info, size_t fn_offset, char *titl
     style = 0;
 
     if( WdeGetNumRes() == 1 ) {
-        WdeSetAppMenuToRes( TRUE );
+        WdeSetAppMenuToRes( true );
         old = WdeSetStickyMode( WdeOldStickyMode );
         style = WS_MAXIMIZE;
     } else {
@@ -830,7 +830,7 @@ bool WdeCreateResourceWindow( WdeResInfo *res_info, size_t fn_offset, char *titl
 
     if( ok ) {
         OpenFormEdit( res_info->forms_win, WdeGetCreateTable(), MENU_NONE, SCROLL_NONE );
-        WdeSetEditMode( res_info, TRUE );
+        WdeSetEditMode( res_info, true );
         SetHorizontalInc( 1 );
         SetVerticalInc( 1 );
         InitState( res_info->forms_win );
@@ -838,7 +838,7 @@ bool WdeCreateResourceWindow( WdeResInfo *res_info, size_t fn_offset, char *titl
         //MakeObjectCurrent( GetMainObject() );
     } else {
         if( WdeGetNumRes() == 1 ) {
-            WdeSetAppMenuToRes( FALSE );
+            WdeSetAppMenuToRes( false );
             WdeSetStickyMode( old );
         }
         WdeDecNumRes();
@@ -878,7 +878,7 @@ bool WdeSaveResource( WdeResInfo *res_info, bool prompt_name )
     OBJPTR              main_obj;
 
     fn_offset = 0;
-    got_name = FALSE;
+    got_name = false;
 
     ok = (res_info != NULL && res_info->info != NULL);
 
@@ -888,7 +888,7 @@ bool WdeSaveResource( WdeResInfo *res_info, bool prompt_name )
         } else {
             res_info->info->save_type = res_info->info->file_type;
             fn = WdeStrdup( res_info->info->file_name );
-            got_name = TRUE;
+            got_name = true;
         }
 
         if( prompt_name || fn == NULL || *fn == '\0' ) {
@@ -897,7 +897,7 @@ bool WdeSaveResource( WdeResInfo *res_info, bool prompt_name )
             gf.title = WdeResSaveTitle;
             gf.filter = filter;
             fn = WdeGetSaveFileName( &gf );
-            got_name = TRUE;
+            got_name = true;
             res_info->info->save_type = WR_DONT_KNOW;
         }
 
@@ -960,7 +960,7 @@ bool WdeQueryKillApp( bool fatal_exit )
     bool        kill_app;
 
     if( WdeResList != NULL ) {
-        kill_app = TRUE;
+        kill_app = true;
         for( rlist = WdeResList; rlist != NULL && kill_app; rlist = ListNext( rlist ) ) {
             res_info = (WdeResInfo *)ListElement( rlist );
             kill_app = WdeQuerySaveResOnDeleteRes( res_info, fatal_exit ) &&
@@ -1008,14 +1008,14 @@ bool WdeRemoveResource( WdeResInfo *res_info )
     }
 
     if( WdeGetNumRes() == 1 ) {
-        WdeOldStickyMode = WdeSetStickyMode( FALSE );
+        WdeOldStickyMode = WdeSetStickyMode( false );
         WdeSetBaseObject( IDM_SELECT_MODE );
     }
 
     WdeFreeResInfo( res_info );
 
     if( WdeGetNumRes() == 1 ) {
-        WdeSetAppMenuToRes( FALSE );
+        WdeSetAppMenuToRes( false );
     }
 
     WdeDecNumRes();
@@ -1026,8 +1026,8 @@ bool WdeRemoveResource( WdeResInfo *res_info )
 bool WdeRemoveDialogFromResInfo( WdeResInfo *res_info, WdeResDlgItem *ditem,
                                  bool destroy_object )
 {
-    WResResNode   *rnode;
-    WResLangNode  *lnode;
+    WResResNode   *resnode;
+    WResLangNode  *langnode;
 
     if( res_info == NULL || ditem == NULL ) {
         return( false );
@@ -1035,14 +1035,14 @@ bool WdeRemoveDialogFromResInfo( WdeResInfo *res_info, WdeResDlgItem *ditem,
 
     res_info->modified = true;
 
-    rnode = ditem->rnode;
-    lnode = ditem->lnode;
+    resnode = ditem->resnode;
+    langnode = ditem->langnode;
 
-    ListRemoveElt( &res_info->dlg_item_list, (OBJPTR)ditem );
+    ListRemoveElt( &res_info->ditem_list, (OBJPTR)ditem );
     WdeFreeResDlgItem( &ditem, destroy_object );
 
-    if( rnode != NULL || lnode != NULL ) {
-        return( WRRemoveLangNodeFromDir( res_info->info->dir, &res_info->dlg_entry, &rnode, &lnode ) );
+    if( resnode != NULL || langnode != NULL ) {
+        return( WRRemoveLangNodeFromDir( res_info->info->dir, &res_info->dlg_entry, &resnode, &langnode ) );
     }
 
     return( true );
@@ -1054,7 +1054,7 @@ LRESULT CALLBACK WdeResWndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     int         msg_processed;
     LRESULT     ret;
 
-    msg_processed = FALSE;
+    msg_processed = false;
     ret = FALSE;
     res_info = NULL;
 
@@ -1117,21 +1117,21 @@ LRESULT CALLBACK WdeResWndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     return( ret );
 }
 
-bool WdeSetObjectInfo( OBJPTR dlg, WdeResInfo **ri, WdeResDlgItem **di, WResID *id )
+bool WdeSetObjectInfo( OBJPTR dlg, WdeResInfo **pres_info, WdeResDlgItem **pditem, WResID *id )
 {
     WdeResInfo      *res_info;
-    WdeResDlgItem   *item;
+    WdeResDlgItem   *ditem;
     WResID          *name;
     bool            ok;
 
-    ok = (dlg != NULL && id != NULL && ri != NULL && di != NULL);
+    ok = (dlg != NULL && id != NULL && pres_info != NULL && pditem != NULL);
 
     if( ok ) {
         ok = ((res_info = WdeGetCurrentRes()) != NULL);
     }
 
     if( ok ) {
-        ok = ((item = WdeAllocResDlgItem()) != NULL);
+        ok = ((ditem = WdeAllocResDlgItem()) != NULL);
     }
 
     if( ok ) {
@@ -1139,16 +1139,16 @@ bool WdeSetObjectInfo( OBJPTR dlg, WdeResInfo **ri, WdeResDlgItem **di, WResID *
     }
 
     if( ok ) {
-        item->object = dlg;
-        item->dialog_name = name;
-        item->modified = true;
-        item->is32bit = res_info->is32bit;
-        WdeAddResDlgItemToResInfo( res_info, item );
-        *ri = res_info;
-        *di = item;
+        ditem->object = dlg;
+        ditem->dialog_name = name;
+        ditem->modified = true;
+        ditem->is32bit = res_info->is32bit;
+        WdeAddResDlgItemToResInfo( res_info, ditem );
+        *pres_info = res_info;
+        *pditem = ditem;
     } else {
-        if( item != NULL ) {
-            WdeFreeResDlgItem( &item, FALSE );
+        if( ditem != NULL ) {
+            WdeFreeResDlgItem( &ditem, false );
         }
         if( name != NULL ) {
             WResIDFree( name );
@@ -1160,16 +1160,16 @@ bool WdeSetObjectInfo( OBJPTR dlg, WdeResInfo **ri, WdeResDlgItem **di, WResID *
 
 OBJPTR WdeGetCurrentDialog( void )
 {
-    WdeResInfo  *info;
+    WdeResInfo  *res_info;
     OBJPTR      curr_obj;
     OBJPTR      ancestor;
     OBJ_ID      id;
 
-    info = WdeGetCurrentRes();
-    if( info == NULL ) {
+    res_info = WdeGetCurrentRes();
+    if( res_info == NULL ) {
         return( NULL );
     }
-    InitState( info->forms_win );
+    InitState( res_info->forms_win );
 
     curr_obj = GetCurrObject();
     if( curr_obj == NULL ) {
@@ -1227,8 +1227,8 @@ static bool WdeMouseRtnCreate( HWND win, RECT *r )
     bool                adjust;
     POINT               pt;
     WdeResizeRatio      resizer;
-    WdeResInfo          *info;
-    WdeDialogSizeInfo   sizeinfo;
+    WdeResInfo          *res_info;
+    DialogSizeInfo      SizeInfo;
 
     rect = *r;
 
@@ -1245,7 +1245,7 @@ static bool WdeMouseRtnCreate( HWND win, RECT *r )
         if( rect.bottom < rect.top ) {
             rect.bottom = rect.top;
         }
-        adjust = FALSE;
+        adjust = false;
         obj = GetMainObject();
     } else {
         l = NULL;
@@ -1261,9 +1261,9 @@ static bool WdeMouseRtnCreate( HWND win, RECT *r )
         }
 
         if( obj ) {
-            adjust = TRUE;
+            adjust = true;
         } else {
-            adjust = FALSE;
+            adjust = false;
             obj = GetMainObject();
         }
     }
@@ -1278,13 +1278,13 @@ static bool WdeMouseRtnCreate( HWND win, RECT *r )
         }
         GetOffset( &pt );
         OffsetRect( &rect, -pt.x, -pt.y );
-        if( (info = WdeGetCurrentRes()) != NULL ) {
-            MapWindowRect( info->edit_win, win, &rect );
+        if( (res_info = WdeGetCurrentRes()) != NULL ) {
+            MapWindowRect( res_info->edit_win, win, &rect );
         }
     }
 
-    if( WdeScreenToDialog( NULL, &resizer, &rect, &sizeinfo ) ) {
-        WdeWriteObjectDimensions( &sizeinfo );
+    if( WdeScreenToDialog( NULL, &resizer, &rect, &SizeInfo ) ) {
+        WdeWriteObjectDimensions( &SizeInfo );
     }
 
     return( true );
@@ -1302,12 +1302,12 @@ static bool WdeMouseRtnResize( HWND win, RECT *r )
     RECT                nc;
     WdeResizeRatio      resizer;
     bool                adjust;
-    WdeResInfo          *info;
-    WdeDialogSizeInfo   sizeinfo;
+    WdeResInfo          *res_info;
+    DialogSizeInfo      SizeInfo;
     SUBOBJ_REQUEST      req;
 
     rect = *r;
-    adjust = FALSE;
+    adjust = false;
 
     /* try to find the object id of resized object */
     curr_obj = GetCurrObject();
@@ -1343,7 +1343,7 @@ static bool WdeMouseRtnResize( HWND win, RECT *r )
             ListFree( l );
         }
         if( obj != NULL ) {
-            adjust = TRUE;
+            adjust = true;
         } else {
             obj = GetMainObject();
         }
@@ -1358,13 +1358,13 @@ static bool WdeMouseRtnResize( HWND win, RECT *r )
         }
         GetOffset( &pt );
         OffsetRect( &rect, -pt.x, -pt.y );
-        if( (info = WdeGetCurrentRes()) != NULL ) {
-            MapWindowRect( info->edit_win, win, &rect );
+        if( (res_info = WdeGetCurrentRes()) != NULL ) {
+            MapWindowRect( res_info->edit_win, win, &rect );
         }
     }
 
-    if( WdeScreenToDialog( NULL, &resizer, &rect, &sizeinfo ) ) {
-        WdeWriteObjectDimensions( &sizeinfo );
+    if( WdeScreenToDialog( NULL, &resizer, &rect, &SizeInfo ) ) {
+        WdeWriteObjectDimensions( &SizeInfo );
     }
 
     return( true );

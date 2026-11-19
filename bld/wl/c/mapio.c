@@ -234,7 +234,7 @@ static void WriteMapGroups( void )
         for( group = Groups; group != NULL; group = group->next ) {
             if( !group->isautogrp ) { /* if not an autogroup */
                 WriteMapColPrintf( 0, "%s", group->sym->name );
-                WriteMapColPrintf( 32, "%a", &group->grp_addr );
+                WriteMapColPrintf( 32, "%a", &group->addr );
                 WriteMapColPrintf( 53, "%h", group->totalsize );
                 WriteMapNL();
             }
@@ -248,11 +248,11 @@ static void WriteMapAbsSeg( void *_leader )
 {
     seg_leader  *leader = _leader;
 
-    if( leader->info & SEG_ABSOLUTE ) {
+    if( leader->info & SEGINF_ABSOLUTE ) {
         WriteMapColPrintf( 0, "%s", leader->segname );
         WriteMapColPrintf( 24, "%s", leader->class->name );
         if( (FmtData.type & MK_16BIT)
-          && (leader->info & USE_32) ) {
+          && (leader->info & SEGINF_USE_32) ) {
             WriteMapColPrintf( 40, "%A", &leader->seg_addr );
         } else {
             WriteMapColPrintf( 40, "%a", &leader->seg_addr );
@@ -267,7 +267,7 @@ static void WriteMapNonAbsSeg( void *_seg )
 {
     seg_leader  *seg = _seg;
 
-    if( seg->info & SEG_ABSOLUTE ) {
+    if( seg->info & SEGINF_ABSOLUTE ) {
         Absolute_Seg = true;
     } else {
         WriteMapColPrintf( 0, "%s", seg->segname );
@@ -276,7 +276,7 @@ static void WriteMapNonAbsSeg( void *_seg )
             WriteMapColPrintf( 38, "%s", seg->group->sym->name );
         }
         if( (FmtData.type & MK_16BIT)
-          && (seg->info & USE_32) ) {
+          && (seg->info & SEGINF_USE_32) ) {
             WriteMapColPrintf( 53, "%A", &seg->seg_addr );
         } else {
             WriteMapColPrintf( 53, "%a", &seg->seg_addr );
@@ -438,10 +438,10 @@ void WriteMapLnkMsgCallback( unsigned msgnum, const char *str, size_t len )
 void WriteMapOvlVectHead( vect_state *VectState )
 /***********************************************/
 {
-    vecnode             *vectnode;
-    int                 n;
-    targ_addr           addr;
-    symbol              *sym;
+    vecnode         *vectnode;
+    int             n;
+    addr_type       addr;
+    symbol          *sym;
 
     WriteMapNL();
     WriteMapNL();
@@ -489,25 +489,31 @@ static void WriteMapModulesSegmentsHead( void )
 static void WriteMapImports( void )
 /*********************************/
 {
-    symbol *    sym;
+    symbol          *sym;
 
     for( sym = HeadSym; sym != NULL; sym = sym->next ) {
-        if( IS_SYM_IMPORTED( sym )
-          && sym->p.import != NULL ) {
-            if( (FmtData.type & MK_NOVELL) == 0
-              || sym->p.import != DUMMY_IMPORT_PTR ) {
-                if( sym->prefix != NULL
-                  && ( sym->prefix[0] != '\0' ) ) {
-                    WriteMapColPrintf( 0, "%s@%s", sym->prefix, sym->name );
-                } else {
+        if( IS_SYM_IMPORTED( sym ) ) {
+            if( FmtData.type & MK_NOVELL ) {
+                if( sym->p.import_nov != NULL
+                  && sym->p.import_nov != DUMMY_IMPORT_PTR ) {
+                    if( sym->prefix != NULL
+                      && ( sym->prefix[0] != '\0' ) ) {
+                        WriteMapColPrintf( 0, "%s@%s", sym->prefix, sym->name );
+                    } else {
+                        WriteMapColPrintf( 0, "%s", sym->name );
+                    }
+                    WriteMapNL();
+                }
+            } else {
+                if( sym->p.import_dll != NULL ) {
                     WriteMapColPrintf( 0, "%s", sym->name );
-                }
 #ifdef _OS2
-                if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) ) {
-                    WriteMapColPrintf( 36, "%s", ImpModuleName( sym->p.import ) );
-                }
+                    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) ) {
+                        WriteMapColPrintf( 36, "%s", sym->p.import_dll->m.modnum->name.u.ptr );
+                    }
 #endif
-                WriteMapNL();
+                    WriteMapNL();
+                }
             }
         }
     }
@@ -532,12 +538,12 @@ static void WriteMapSegment( void *_seg )
  * NYI: completely broken for absolute segments
  */
 {
-    segdata     *seg = _seg;
-    char        star;
-    char        bang;
-    char        see;
-    targ_addr   addr;
-    seg_leader  *leader;
+    segdata         *seg = _seg;
+    char            star;
+    char            bang;
+    char            see;
+    addr_type       addr;
+    seg_leader      *leader;
 
     if( seg->isdead )
         return;
@@ -546,7 +552,7 @@ static void WriteMapSegment( void *_seg )
         return;
     WriteMapColPrintf( 16, "%s", leader->segname );
     WriteMapColPrintf( 38, "%s", leader->class->name );
-    star = ( leader->info & SEG_ABSOLUTE ) ? '*' : ' ';
+    star = ( leader->info & SEGINF_ABSOLUTE ) ? '*' : ' ';
     bang = ( seg->bits == BITS_32 ) ? '!' : ' ';
     see = ( seg->iscdat ) ? 'c' : ' ';
     addr = leader->seg_addr;
@@ -1001,7 +1007,7 @@ static const char *getStubName( void )
     if( FmtData.u.os2fam.no_stub ) {
         return( "none" );
     }
-    if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) ) {
+    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) ) {
         return( FmtData.u.os2fam.stub_file_name );
     }
 #endif
@@ -1028,7 +1034,7 @@ static void WriteMapSizes( void )
     if( UndefList != NULL ) {
         WriteMapNL();
     }
-    if( FmtData.type & (MK_NOVELL | MK_OS2 | MK_WIN_NE | MK_PE) ) {
+    if( FmtData.type & (MK_NOVELL | MK_NE | MK_OS2_FLAT | MK_PE) ) {
         WriteMapImportsHead();
         WriteMapImports();
     }

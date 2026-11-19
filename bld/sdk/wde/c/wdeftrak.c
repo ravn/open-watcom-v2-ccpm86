@@ -82,7 +82,7 @@ WINEXPORT LRESULT CALLBACK WdeTrakSuperClassProc( HWND, UINT, WPARAM, LPARAM );
 /* static function prototypes                                               */
 /****************************************************************************/
 static OBJPTR   WdeMakeTrak( OBJPTR, RECT *, OBJPTR, DialogStyle, char *, OBJ_ID );
-static OBJPTR   WdeTrackCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl * );
+static OBJPTR   WdeTrackCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl *control );
 static void     WdeTrakSetDefineInfo( WdeDefineObjectInfo *, HWND );
 static void     WdeTrakGetDefineInfo( WdeDefineObjectInfo *, HWND );
 static bool     WdeTrakDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
@@ -145,7 +145,7 @@ OBJPTR WdeMakeTrak( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 }
 
 OBJPTR WdeTrackCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
-                       OBJ_ID id, WdeDialogBoxControl *info )
+                       OBJ_ID id, WdeDialogBoxControl *control )
 {
     WdeTrakObject *new;
 
@@ -183,7 +183,7 @@ OBJPTR WdeTrackCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
+    if( !Forward( new->object_handle, SET_OBJECT_INFO, control, NULL ) ) {
         WdeWriteTrail( "WdeTrakCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
         MemFree( new );
@@ -258,7 +258,7 @@ bool WdeTrakInit( bool first )
     SETCTL_SIZEW( WdeDefaultTrak, 0 );
     SETCTL_SIZEH( WdeDefaultTrak, 0 );
     SETCTL_TEXT( WdeDefaultTrak, NULL );
-    SETCTL_CLASSID( WdeDefaultTrak, WdeStrToControlClass( WTRACKBAR_CLASS ) );
+    SETCTL_CLASSID( WdeDefaultTrak, ResStrToNameOrOrdinal( WTRACKBAR_CLASS ) );
 
 #ifdef __WINDOWS__
     WdeTrakDispatch = MakeProcInstance_DISPATCHER( WdeTrakDispatcher, WdeGetAppInstance() );
@@ -353,7 +353,7 @@ bool WdeTrakGetWndProc( WdeTrakObject *obj, WNDPROC *proc, void *p2 )
     return( true );
 }
 
-bool WdeTrakGetWindowClass( WdeTrakObject *obj, char **class, void *p2 )
+bool WdeTrakGetWindowClass( WdeTrakObject *obj, const char **class, void *p2 )
 {
     /* unused parameters */ (void)obj; (void)p2;
 
@@ -385,7 +385,7 @@ void WdeTrakSetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     DialogStyle mask;
 
     // set the style controls
-    mask = GETCTL_STYLE( o_info->info.c.info ) & 0x000000ff;
+    mask = GETCTL_STYLE( o_info->info.c.control ) & 0x000000ff;
     if( mask & TBS_AUTOTICKS ) {
         CheckDlgButton( hDlg, IDB_TBS_AUTOTICKS, BST_CHECKED );
     }
@@ -478,7 +478,7 @@ void WdeTrakGetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
         mask |= TBS_NOTHUMB;
     }
 
-    SETCTL_STYLE( o_info->info.c.info, (GETCTL_STYLE( o_info->info.c.info ) & 0xffff0000) | mask );
+    SETCTL_STYLE( o_info->info.c.control, (GETCTL_STYLE( o_info->info.c.control ) & 0xffff0000) | mask );
 
     // get the extended control settings
     WdeEXGetDefineInfo( o_info, hDlg );

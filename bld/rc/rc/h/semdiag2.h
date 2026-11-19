@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -60,27 +60,23 @@ typedef struct FullDialogOptions {
     } Opt;
 } FullDialogOptions;
 
-extern FullDiagCtrlListOS2      *SemOS2NewDiagCtrlList( FullDialogBoxControlOS2 *ctrl,
-                                    DataElemList *, PresParamListOS2 * );
-extern FullDiagCtrlListOS2      *SemOS2AddDiagCtrlList( FullDiagCtrlListOS2 *list,
+extern FullDialogCtrlListOS2      *SemOS2AddDialogCtrlList( FullDialogCtrlListOS2 *list,
                                     FullDialogBoxControlOS2 *ctrl, DataElemList *,
                                     PresParamListOS2 * );
-extern FullDialogBoxControlOS2  *SemOS2NewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptionsOS2 opts,
+extern FullDialogBoxControlOS2  *SemOS2NewDialogCtrl( YYTOKENTYPE token, FullDialogCtrlOptionsOS2 opts,
                                     PresParamListOS2 * );
-extern FullDialogBoxControlOS2  *SemOS2SetWndData( ResNameOrOrdinal *name, uint_32 id, DialogSizeInfo sizeinfo,
+extern FullDialogBoxControlOS2  *SemOS2SetWndData( ResNameOrOrdinal *name, uint_32 id, DialogSizeInfo SizeInfo,
                                     ResNameOrOrdinal *ctlclassname, IntMask style, IntMask framectl,
-                                    PresParamListOS2 *presparams, FullDiagCtrlListOS2 *childctls );
-extern FullDialogBoxControlOS2  *SemOS2SetWindowData( FullDiagCtrlOptionsOS2, IntMask,
-                                    PresParamListOS2 *, FullDiagCtrlListOS2 *, YYTOKENTYPE );
+                                    PresParamListOS2 *presparams, FullDialogCtrlListOS2 *childctls );
+extern FullDialogBoxControlOS2  *SemOS2SetWindowData( FullDialogCtrlOptionsOS2, IntMask,
+                                    PresParamListOS2 *, FullDialogCtrlListOS2 *, YYTOKENTYPE );
 extern FullDialogBoxControlOS2  *SemOS2SetControlData( ResNameOrOrdinal *name, uint_16 id,
-                                    DialogSizeInfo sizeinfo, ResNameOrOrdinal *ctlclass,
-                                    IntMask style, FullDiagCtrlListOS2 *, PresParamListOS2 * );
-extern PresParamListOS2         *SemOS2NewPresParamList( PresParamsOS2 presparam );
+                                    DialogSizeInfo SizeInfo, ResNameOrOrdinal *ctlclassname,
+                                    IntMask style, FullDialogCtrlListOS2 *, PresParamListOS2 * );
 extern PresParamListOS2         *SemOS2AppendPresParam( PresParamListOS2 *list,
                                     PresParamsOS2 presparam );
 
-extern void                     SemOS2WriteDialogTemplate( WResID *res_id, ResMemFlags,
-                                    uint_32, FullDiagCtrlListOS2 * );
+extern void                     SemOS2WriteDialogTemplate( WResID *res_id, ResMemFlags res_flags, uint_32, FullDialogCtrlListOS2 * );
 extern void                     SemOS2AddDlgincResource( WResID *res_id, char *filename );
 
 #endif

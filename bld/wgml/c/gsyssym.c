@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -1188,6 +1188,7 @@ static  void    init_predefined_symbols( void )
 void    init_sysparm( char *cmdline, char *banner )
 {
     char            *p;
+    int             c;
 
     p = strchr( cmdline, '(' );         // find parm start
     if( p == NULL ) {
@@ -1205,7 +1206,10 @@ void    init_sysparm( char *cmdline, char *banner )
             *++p = 0;                   // terminate string
         }
     }
-    strupr( sysparm0.value );           // uppercase as wgml4 does
+    p = sysparm0.value;
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = toupper( c );
+    }
 
     syspdev0.value = g_dev_name;
     sysversion0.value = banner;

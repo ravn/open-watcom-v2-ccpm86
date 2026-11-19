@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -104,9 +104,9 @@ static void PreAddrCalcFormatSpec( void )
  */
 {
 #ifdef _OS2
-    if( FmtData.type & (MK_PE | MK_WIN_VXD | MK_OS2 | MK_WIN_NE) ) {
+    if( FmtData.type & (MK_PE | MK_WIN_VXD | MK_NE | MK_OS2_FLAT) ) {
   #if 0
-        if( (FmtData.type & (MK_OS2 | MK_WIN_NE)) && (LinkState & LS_HAVE_PPC_CODE) ) {
+        if( (FmtData.type & (MK_NE | MK_OS2_FLAT)) && (LinkState & LS_HAVE_PPC_CODE) ) {
             // Development temporarly on hold:
             // ChkOS2ElfData();
         } else {
@@ -138,9 +138,9 @@ static void PostAddrCalcFormatSpec( void )
  */
 {
 #ifdef _OS2
-    if( FmtData.type & (MK_PE | MK_WIN_VXD | MK_OS2 | MK_WIN_NE) ) {
+    if( FmtData.type & (MK_PE | MK_WIN_VXD | MK_NE | MK_OS2_FLAT) ) {
   #if 0
-        if( (FmtData.type & (MK_OS2 | MK_WIN_NE)) && (LinkState & LS_HAVE_PPC_CODE) ) {
+        if( (FmtData.type & (MK_NE | MK_OS2_FLAT)) && (LinkState & LS_HAVE_PPC_CODE) ) {
             // Development temporarly on hold:
             //PrepareOS2Elf();
         } else {
@@ -174,7 +174,7 @@ static void ResetMisc( void )
  * Linker support initialization.
  */
 {
-    LinkFlags = LF_REDEFS_OK | LF_CASE_FLAG | LF_FAR_CALLS_FLAG;
+    LinkFlags = LF_REDEFS_OK | LF_FAR_CALLS_FLAG;
     LinkState = LS_MAKE_RELOCS;
     AbsGroups = NULL;
     DataGroup = NULL;
@@ -187,7 +187,6 @@ static void ResetMisc( void )
     CurrMod = NULL;
     StackSize = DEF_STACK_SIZE;
     ResetSym();
-    SetSymCase();
 }
 
 static void DoDefaultSystem( void )

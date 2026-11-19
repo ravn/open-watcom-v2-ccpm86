@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -25,28 +25,20 @@
 *
 *  ========================================================================
 *
-* Description:  WHEN YOU FIGURE OUT WHAT THIS FILE DOES, PLEASE
-*               DESCRIBE IT HERE!
+* Description:  Linux SYS_getdents64 system call.
 *
 ****************************************************************************/
 
 
-#ifndef mem_h_included
-#define mem_h_included
+#include "variety.h"
+#include "seterrno.h"
+#include <fcntl.h>
+#include <dirent.h>
+#include "linuxsys.h"
 
-#include <stddef.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void *  WBRAlloc( size_t );
-char *  WBRStrdup( const char * );
-void *  WBRRealloc( void *, size_t );
-void    WBRFree( void * );
-
-#ifdef __cplusplus
-};
-#endif
-
-#endif
+long sys_getdents64( u_int handle, struct dirent64 *dir, u_int count )
+{
+    syscall_res res = sys_call3( SYS_getdents64, handle, (u_long)dir, count );
+    __syscall_return( int, res );
+}

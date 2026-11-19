@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -45,9 +45,9 @@
 /****************************************************************************/
 /* function prototypes                                                      */
 /****************************************************************************/
-extern bool             WdeSaveResourceToFile( WdeResInfo * );
+extern bool             WdeSaveResourceToFile( WdeResInfo *res_info );
 extern WdeDialogBoxInfo *WdeGetItemDBI( WdeResDlgItem *ditem );
-extern bool             WdeGetItemData( WdeResDlgItem *, char **data, size_t *dsize );
+extern bool             WdeGetItemData( WdeResDlgItem *ditem, char **data, size_t *dsize );
 extern bool             WdeCreateDLGName( const char *filename, char *newname );
 
 #endif

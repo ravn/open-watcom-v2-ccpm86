@@ -36,6 +36,77 @@
  * "documentation". Reverse engineering rules.
  ***************************************************************************/
 
+/*
+ * resource-codepage: design notes
+ * ================================
+ *
+ * Rule: [codepage] is a separate, optional token that follows the
+ * load/memory options. It is never mixed into the options list.
+ *
+ *     STRINGTABLE [load-option] [mem-option] [codepage]
+ *
+ * Why separate: the IBM syntax puts it in a fixed position after the
+ * options. Keeping it a distinct nonterminal makes the semantics
+ * unambiguous: the parser delivers either an explicit codepage or
+ * nothing; no post-hoc search through an options list, no duplicate
+ * checks, and misplaced codepages are reported as syntax errors with
+ * an exact position.
+ *
+ * Sources (IBM):
+ *  - OS/2 Toolkit 4.5 Tools Reference, Resource Compiler chapter
+ *    (statement pages), and the legacy RC16 guide (rc16.inf).
+ *  - RC16 documents the same CODEPAGE statement and the same
+ *    [codepage] slot as the new RC, so one definition serves both.
+ *
+ * Statements with [codepage] in their IBM syntax:
+ *   ACCELTABLE   id [mem-option] [code-page]     (no load-option)
+ *   ASSOCTABLE   id [load] [mem] [code-page]
+ *   BITMAP       id [load] [mem] [codepage] filename
+ *   DLGTEMPLATE  id [load] [mem] [codepage]
+ *   FONT         id [load] [mem] [codepage] filename
+ *   ICON (res.)  id [load] [mem] [codepage] filename
+ *   MENU         id [load] [mem] [codepage]
+ *   MESSAGETABLE     [load] [mem] [codepage]
+ *   POINTER      id [load] [mem] [codepage] filename
+ *   RESOURCE     type-id res-id [load] [mem] [code-page] [filename]
+ *   STRINGTABLE      [load] [mem] [codepage]
+ *
+ * Statements without it: DEFAULTICON, RCDATA, DLGINCLUDE, RCINCLUDE,
+ * HELPTABLE/HELPSUBTABLE/HELPITEM/HELPSUBITEM, DIALOG, CONTROL,
+ * CTLDATA, PRESPARAMS, MENUITEM, SUBMENU, WINDOW, FRAME and the
+ * control statements (CHECKBOX, PUSHBUTTON, ...).
+ *
+ * Semantics: the resource's own codepage, if present, overrides the
+ * default. The default is set by the CODEPAGE statement (valid from
+ * its position to the next CODEPAGE) or by the command line
+ * (-cp / -k, also -cc for country code).
+ * Only text-bearing resources use the value (STRINGTABLE,
+ * MESSAGETABLE, MENU, DLGTEMPLATE, ACCELTABLE, ASSOCTABLE).
+ * For binary resources (ICON, BITMAP, POINTER, FONT, RESOURCE) it is
+ * accepted and ignored.
+ *
+ * Deliberate deviation from the IBM text: the CODEPAGE statement page
+ * says a code page may be placed "in the load-options or
+ * memory-options field of any RC statement". This is NOT implemented
+ * as codepage mixed into the options list. The formal syntax is
+ * identical on every statement page and no example shows mixing, so
+ * the sentence is read as loose wording for the fixed trailing slot.
+ * (Earlier versions of this grammar had options + codepage in one
+ * rule; that forced the semantics to sort the numbers out.)
+ *
+ * Grammar is intentionally more tolerant than IBM syntax in that
+ * all statements share one options rule (load/mem in any order;
+ * ACCELTABLE also accepts load-option).
+ *
+ * Not verified:
+ *  - WINDOWTEMPLATE syntax in the IBM docs (assumed like DLGTEMPLATE).
+ *  - Precedence between -cp and the CODEPAGE statement (assumed:
+ *    -cp is the initial default, CODEPAGE overrides from its place).
+ *  - -cp with DBCS lead-byte pairs (e.g. -cp 140,150) as the default.
+ *  - Whether the original rc.exe accepts codepage inside the options
+ *    list (not documented; if it does, relax here).
+ */
+
 /*** error tokens ***/
 %token Y_SCAN_ERROR
 /*** non-keyword tokens ***/
@@ -140,10 +211,6 @@
 %token Y_PUSHBUTTON
 %token Y_RADIOBUTTON
 %token Y_RCDATA
-%token Y_RCINCLUDE          /* This is an old keyword that should no */
-                            /* longer be used, but is used in the sample files*/
-                            /* so may be used in some old .RC files. */
-                            /* It is intercepted by the scanner */
 %token Y_RESOURCE
 %token Y_RTEXT
 %token Y_SCANCODE
@@ -181,8 +248,11 @@
 %type <resid>           name-id
 %type <resid>           type-id
 %type <integral>        id-value
-%type <fullresflags>    resource-options
-%type <optint>          resource-option
+%type <resmemflags>     resource-options-mdp
+%type <resmemflags>     resource-options-mp
+%type <resmemflags>     resource-options-p
+%type <codepage>        resource-codepage
+%type <token>           resource-option
 %type <string>          file-name
 %type <acceltable>      acc-section
 %type <accevent>        acc-event
@@ -267,7 +337,6 @@
 %type <rawitem>         rc-data-item
 %type <resloc>          user-defined-data
 %type <resloc>          rc-data
-%type <token>           resource-type
 %type <dataelem>        control-data-section
 %type <dataelem>        raw-data-section
 %type <dataelem>        raw-data-items
@@ -319,7 +388,7 @@ name-id
          */
         {
             $$ = WResIDFromNum( 0 );
-            RcError( ERR_SYMBOL_NOT_DEFINED, $1.string );
+            RcError( RCMSG_SYMBOL_NOT_DEFINED, $1.string );
             ErrorHasOccured = true;
         }
     | string-constant
@@ -328,7 +397,7 @@ name-id
          */
         {
             $$ = WResIDFromNum( 0 );
-            RcError( ERR_SYNTAX_STR, $1.string );
+            RcError( RCMSG_SYNTAX_STR, $1.string );
             ErrorHasOccured = true;
         }
     | constant-expression
@@ -336,7 +405,7 @@ name-id
             $$ = WResIDFromNum( $1.Value );
             if( $$ == NULL ) {
                 $$ = WResIDFromNum( 0 );
-                RcError( ERR_BAD_RES_ID, $1.Value );
+                RcError( RCMSG_BAD_RES_ID, $1.Value );
                 ErrorHasOccured = true;
             }
         }
@@ -355,12 +424,12 @@ type-id
 
 pragma-statement
     : Y_POUND_PRAGMA Y_CODEPAGE  Y_LPAREN constant-expression Y_RPAREN
-        { SemOS2SetCodepage( $4.Value ); }
+        { SemOS2SetDefaultCodepage( $4.Value ); }
     ;
 
 codepage-statement
     : Y_CODEPAGE constant-expression
-        { SemOS2SetCodepage( $2.Value ); }
+        { SemOS2SetDefaultCodepage( $2.Value ); }
     ;
 
 keyword-name
@@ -423,7 +492,7 @@ keyword-name
     | Y_FKALONG
         { $$ = Y_FKALONG; }
     | Y_FKAROW
-        { $$ = Y_FKASHORT; }
+        { $$ = Y_FKAROW; }
     | Y_FKASHORT
         { $$ = Y_FKASHORT; }
     | Y_FONT
@@ -484,8 +553,6 @@ keyword-name
         { $$ = Y_RADIOBUTTON; }
     | Y_RCDATA
         { $$ = Y_RCDATA; }
-    | Y_RCINCLUDE
-        { $$ = Y_RCINCLUDE; }
     | Y_RESOURCE
         { $$ = Y_RESOURCE; }
     | Y_RTEXT
@@ -535,42 +602,63 @@ dlginclude-resource
     ;
 
 single-line-resource
-    : resource-type name-id file-name
-        { SemOS2AddSingleLineResource( $2, $1, NULL, $3.string ); }
-    | resource-type name-id resource-options file-name
-        { SemOS2AddSingleLineResource( $2, $1, &($3), $4.string ); }
-    | Y_DEFAULTICON file-name
-        { SemOS2AddSingleLineResource( NULL, Y_DEFAULTICON, NULL, $2.string ); }
-    | Y_DEFAULTICON resource-options file-name
-        { SemOS2AddSingleLineResource( NULL, Y_DEFAULTICON, &($2), $3.string ); }
+    : Y_BITMAP name-id resource-options-mp resource-codepage file-name
+        { SemOS2AddSingleLineResource( $2, Y_BITMAP, $3, $5.string ); }
+    | Y_FONT name-id resource-options-mdp resource-codepage file-name
+        { SemOS2AddSingleLineResource( $2, Y_FONT, $3, $5.string ); }
+    | Y_ICON name-id resource-options-mdp resource-codepage file-name
+        { SemOS2AddSingleLineResource( $2, Y_ICON, $3, $5.string ); }
+    | Y_POINTER name-id resource-options-mdp resource-codepage file-name
+        { SemOS2AddSingleLineResource( $2, Y_POINTER, $3, $5.string ); }
+    | Y_DEFAULTICON resource-options-mdp resource-codepage file-name
+        { SemOS2AddSingleLineResource( NULL, Y_DEFAULTICON, $2, $4.string ); }
     ;
 
-resource-options
-    : resource-option
-        { $$ = SemOS2AddFirstResOption( $1.Option, $1.Value ); }
-    | resource-options resource-option
-        { $$ = SemOS2AddResOption( $1, $2.Option, $2.Value ); }
+resource-codepage
+    : /* nothing */
+        { $$ = SemOS2GetDefaultCodepage(); }
+    | Y_INTEGER
+        { $$ = $1.val; }
+    ;
+
+resource-options-mdp
+    : /* nothing */
+        { $$ = DEFAULT_FLAGS_MDP; }
+    | resource-options-mdp resource-option
+        { $$ = SemOS2AddResOption( $1, $2 ); }
+    ;
+
+resource-options-mp
+    : /* nothing */
+        { $$ = DEFAULT_FLAGS_MP; }
+    | resource-options-mp resource-option
+        { $$ = SemOS2AddResOption( $1, $2 ); }
+    ;
+
+resource-options-p
+    : /* nothing */
+        { $$ = DEFAULT_FLAGS_P; }
+    | resource-options-p resource-option
+        { $$ = SemOS2AddResOption( $1, $2 ); }
     ;
 
 resource-option
     : Y_PRELOAD
-        { $$.Option = Y_PRELOAD; }
+        { $$ = Y_PRELOAD; }
     | Y_LOADONCALL
-        { $$.Option = Y_LOADONCALL; }
+        { $$ = Y_LOADONCALL; }
     | Y_FIXED
-        { $$.Option = Y_FIXED; }
+        { $$ = Y_FIXED; }
     | Y_MOVEABLE
-        { $$.Option = Y_MOVEABLE; }
+        { $$ = Y_MOVEABLE; }
     | Y_PURE
-        { $$.Option = Y_PURE; }
+        { $$ = Y_PURE; }
     | Y_IMPURE
-        { $$.Option = Y_IMPURE; }
+        { $$ = Y_IMPURE; }
     | Y_DISCARDABLE
-        { $$.Option = Y_DISCARDABLE; }
+        { $$ = Y_DISCARDABLE; }
     | Y_SEGALIGN
-        { $$.Option = Y_SEGALIGN; }
-    | Y_INTEGER
-        { $$.Option = Y_INTEGER; $$.Value = $1.val; }
+        { $$ = Y_SEGALIGN; }
     ;
 
 file-name
@@ -579,29 +667,9 @@ file-name
     | string-constant
     ;
 
-resource-type
-    : Y_BITMAP
-        { $$ = Y_BITMAP; }
-    | Y_FONT
-        { $$ = Y_FONT; }
-    | Y_ICON
-        { $$ = Y_ICON; }
-    | Y_POINTER
-        { $$ = Y_POINTER; }
-    ;
-
 user-defined-resource
-    : Y_RESOURCE type-id comma-opt name-id user-defined-data
-        {
-            SemAddResourceAndFree( $4, $2,
-                    MEMFLAG_DISCARDABLE | MEMFLAG_PURE | MEMFLAG_MOVEABLE, $5 );
-        }
-    | Y_RESOURCE type-id comma-opt name-id resource-options user-defined-data
-        {
-            SemOS2CheckResFlags( &($5), 0, MEMFLAG_DISCARDABLE | MEMFLAG_MOVEABLE,
-                    MEMFLAG_PURE );
-            SemAddResourceAndFree( $4, $2, $5.flags, $6 );
-        }
+    : Y_RESOURCE type-id comma-opt name-id resource-options-mdp resource-codepage user-defined-data
+        { SemAddResourceAndFree( $4, $2, $5, $7 ); }
     ;
 
 user-defined-data
@@ -696,26 +764,15 @@ rc-data
     ;
 
 rcdata-resource
-    : Y_RCDATA name-id rc-data
-        {
-            SemAddResourceAndFree( $2, WResIDFromNum( OS2_RT_RCDATA ),
-                    MEMFLAG_PURE | MEMFLAG_MOVEABLE, $3 );
-        }
-    | Y_RCDATA name-id resource-options rc-data
-        {
-            SemOS2CheckResFlags( &($3), 0, MEMFLAG_DISCARDABLE | MEMFLAG_MOVEABLE,
-                    MEMFLAG_PURE );
-            SemAddResourceAndFree( $2, WResIDFromNum( OS2_RT_RCDATA ), $3.flags, $4 );
-        }
+    : Y_RCDATA name-id resource-options-mdp resource-codepage rc-data
+        { SemAddResourceAndFree( $2, WResIDFromNum( OS2_RT_RCDATA ), $3, $5 ); }
     ;
 
 presparam-list
-    : presparam-stmt
-        { $$ = SemOS2NewPresParamList( $1 ); }
+    : /* nothing */
+        { $$ = NULL; }
     | presparam-list presparam-stmt
         { $$ = SemOS2AppendPresParam( $1, $2 ); }
-    | /* nothing */
-        { $$ = NULL; }
     ;
 
 presparam-stmt
@@ -733,32 +790,13 @@ presparam-name
     ;
 
 string-table-resource
-    : Y_STRINGTABLE string-section
-        {
-            SemOS2MergeStrTable( $2,
-                MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                SemOS2DefaultCodepage() );
-        }
-    | Y_STRINGTABLE resource-options string-section
-        {
-            SemOS2CheckResFlags( &($2), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemOS2MergeStrTable( $3, $2.flags, $2.codePage );
-        }
+    : Y_STRINGTABLE resource-options-mdp resource-codepage string-section
+        { SemOS2MergeStrTable( $4, $2, $3 ); }
     ;
 
 message-table-resource
-    : Y_MESSAGETABLE string-section
-        {
-            SemOS2MergeMsgTable( $2,
-                MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE );
-        }
-    | Y_MESSAGETABLE resource-options string-section
-        {
-            SemOS2CheckResFlags( &($2), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemOS2MergeMsgTable( $3, $2.flags );
-        }
+    : Y_MESSAGETABLE resource-options-mdp resource-codepage string-section
+        { SemOS2MergeMsgTable( $4, $2, $3 ); }
     ;
 
 string-section
@@ -771,21 +809,19 @@ string-section
 string-items
     : string-item
         {
-            $$ = SemOS2NewStringTable();
-            SemOS2AddStrToStringTable( $$, $1.ItemID, $1.String );
+            $$ = SemOS2AddStrToStringTable( NULL, $1.ItemId, $1.String );
             MemFree( $1.String );
         }
     | string-items string-item
         {
-            SemOS2AddStrToStringTable( $1, $2.ItemID, $2.String );
-            $$ = $1;
+            $$ = SemOS2AddStrToStringTable( $1, $2.ItemId, $2.String );
             MemFree( $2.String );
         }
     ;
 
 string-item
     : string-id comma-opt string-constant
-        { $$.ItemID = $1; $$.String = $3.string; }
+        { $$.ItemId = $1; $$.String = $3.string; }
     ;
 
 string-id
@@ -800,10 +836,7 @@ id-value
 
 help-table-resource
     : Y_HELPTABLE name-id help-table-section
-        {
-            SemOS2WriteHelpTable( $2,
-                MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, $3 );
-        }
+        { SemOS2WriteHelpTable( $2, DEFAULT_FLAGS_MDP, $3 ); }
     ;
 
 help-table-section
@@ -814,12 +847,10 @@ help-table-section
     ;
 
 help-items
-    : help-item
-        { $$ = SemOS2NewHelpTable( $1 ); }
+    : /* nothing */
+        { $$ = NULL; }
     | help-items help-item
         { $$ = SemOS2AddHelpItem( $2, $1 ); }
-    | /* nothing */
-        { $$ = NULL; }
     ;
 
 help-item
@@ -829,15 +860,9 @@ help-item
 
 help-subtable-resource
     : Y_HELPSUBTABLE name-id help-subtable-section
-        {
-            SemOS2WriteHelpSubTable( $2, 2,
-                MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, $3 );
-        }
+        { SemOS2WriteHelpSubTable( $2, 2, DEFAULT_FLAGS_MDP, $3 ); }
     | Y_HELPSUBTABLE name-id Y_SUBITEMSIZE constant-expression help-subtable-section
-        {
-            SemOS2WriteHelpSubTable( $2, $4.Value,
-                MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, $5 );
-        }
+        { SemOS2WriteHelpSubTable( $2, $4.Value, DEFAULT_FLAGS_MDP, $5 ); }
     ;
 
 help-subtable-section
@@ -848,12 +873,10 @@ help-subtable-section
     ;
 
 help-subitems
-    : help-subitem
-        { $$ = SemOS2NewHelpSubTable( $1 ); }
+    : /* nothing */
+        { $$ = NULL; }
     | help-subitems help-subitem
         { $$ = SemOS2AddHelpSubItem( $2, $1 ); }
-    | /* nothing */
-        { $$ = NULL; }
     ;
 
 help-subitem
@@ -862,16 +885,8 @@ help-subitem
     ;
 
 accel-table-resource
-    : Y_ACCELTABLE name-id acc-section
-        {
-            SemOS2WriteAccelTable( $2, MEMFLAG_PURE | MEMFLAG_MOVEABLE,
-                SemOS2DefaultCodepage(), $3 );
-        }
-    | Y_ACCELTABLE name-id resource-options acc-section
-        {
-            SemOS2CheckResFlags( &($3), 0, MEMFLAG_MOVEABLE, MEMFLAG_PURE );
-            SemOS2WriteAccelTable( $2, $3.flags, $3.codePage, $4 );
-        }
+    : Y_ACCELTABLE name-id resource-options-mp resource-codepage acc-section
+        { SemOS2WriteAccelTable( $2, $3, $4, $5 ); }
     ;
 
 acc-section
@@ -883,7 +898,7 @@ acc-section
 
 acc-items
     : acc-item
-        { $$ = SemOS2NewAccelTable( $1 ); }
+        { $$ = SemOS2AddAccelEntry( $1, NULL ); }
     | acc-items acc-item
         { $$ = SemOS2AddAccelEntry( $2, $1 ); }
     ;
@@ -949,15 +964,8 @@ acc-item-option
     ;
 
 menu-resource
-    : Y_MENU name-id menu-section
-        { SemOS2WriteMenu( $2, MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                    $3, Y_MENU, SemOS2DefaultCodepage() ); }
-    | Y_MENU name-id resource-options menu-section
-        {
-            SemOS2CheckResFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemOS2WriteMenu( $2, $3.flags, $4, Y_MENU, $3.codePage );
-        }
+    : Y_MENU name-id resource-options-mdp resource-codepage menu-section
+        { SemOS2WriteMenu( $2, $3, $5, Y_MENU, $4 ); }
     ;
 
 menu-section
@@ -968,27 +976,25 @@ menu-section
     ;
 
 menu-items
-    : menu-item
-        { $$ = SemOS2NewMenu( $1 ); }
+    : /* nothing */
+        { $$ = NULL; }
     | menu-items menu-item
         { $$ = SemOS2AddMenuItem( $1, $2 ); }
-    | /* nothing */
-        { $$ = NULL; }
     ;
 
 menu-id
     : constant-expression
-      { $$ = (uint_16)$1.Value; }
+        { $$ = (uint_16)$1.Value; }
     ;
 
 menuitem-style
     : constant-expression
-      { $$ = (uint_16)$1.Value; }
+        { $$ = (uint_16)$1.Value; }
     ;
 
 menuitem-attrib
     : constant-expression
-      { $$ = (uint_16)$1.Value; }
+        { $$ = (uint_16)$1.Value; }
     ;
 
 menu-item
@@ -1088,7 +1094,7 @@ menu-text
 
 menu-item-options
     : menu-item-option
-        { $$ = SemOS2AddFirstMenuOption( $1 ); }
+        { $$ = SemOS2AddMenuOption( 0, $1 ); }
     | menu-item-options comma-opt menu-item-option
         { $$ = SemOS2AddMenuOption( $1, $3 ); }
     ;
@@ -1108,18 +1114,8 @@ dialogtemplate
     ;
 
 dlg-template
-    : dialogtemplate name-id diag-control-section
-        {
-            SemOS2WriteDialogTemplate( $2,
-               MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-               SemOS2DefaultCodepage(), $3 );
-        }
-    | dialogtemplate name-id resource-options diag-control-section
-        {
-            SemOS2CheckResFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemOS2WriteDialogTemplate( $2, $3.flags, $3.codePage, $4 );
-        }
+    : dialogtemplate name-id resource-options-mdp resource-codepage diag-control-section
+        { SemOS2WriteDialogTemplate( $2, $3, $4, $5 ); }
     ;
 
 size-info
@@ -1164,16 +1160,8 @@ menu-stmt
 ctl-class-name
     : string-constant
         { $$ = ResStrToNameOrOrdinal( $1.string ); MemFree( $1.string ); }
-    | Y_PUSHBUTTON
-        { $$ = ResStrToNameOrOrdinal( "PUSHBUTTON" ); }
-    | Y_COMBOBOX
-        { $$ = ResStrToNameOrOrdinal( "COMBOBOX" ); }
-    | Y_ENTRYFIELD
-        { $$ = ResStrToNameOrOrdinal( "ENTRYFIELD" ); }
-    | Y_LISTBOX
-        { $$ = ResStrToNameOrOrdinal( "LISTBOX" ); }
     | constant-expression
-        { $$ = ResNumToNameOrOrdinal( (uint_16)$1.Value | 0x80 ); }
+        { $$ = ResNumToNameOrOrdinal( $1.Value ); }
     /*
      * A little hack - OS/2 standard window classes are defined like this:
      * #define WC_BUTTON ((PSZ)0xffff0003L)
@@ -1182,7 +1170,7 @@ ctl-class-name
      * clean but does the job.
      */
     | Y_LPAREN Y_LPAREN Y_PSZ Y_RPAREN constant-expression Y_RPAREN
-        { $$ = ResNumToNameOrOrdinal( (uint_16)$5.Value | 0x80 ); }
+        { $$ = ResNumToNameOrOrdinal( $5.Value ); }
     ;
 
 font-stmt
@@ -1207,14 +1195,14 @@ diag-control-section
 diag-data-elements
     : control-data-section
     | /* Nothing */
-      { $$ = NULL; }
+        { $$ = NULL; }
     ;
 
 diag-control-stmts
     : diag-control-stmt diag-data-elements
-        { $$ = SemOS2NewDiagCtrlList( $1, $2, NULL ); }
+        { $$ = SemOS2AddDialogCtrlList( NULL, $1, $2, NULL ); }
     | diag-control-stmts diag-control-stmt diag-data-elements
-        { $$ = SemOS2AddDiagCtrlList( $1, $2, $3, NULL ); }
+        { $$ = SemOS2AddDialogCtrlList( $1, $2, $3, NULL ); }
     ;
 
 diag-control-stmt
@@ -1272,12 +1260,12 @@ cntl-options
 
 cntl-style
     : constant-expression
-      { $$ = $1; }
+        { $$ = $1; }
     ;
 
 frame-style
     : constant-expression
-      { $$ = $1; }
+        { $$ = $1; }
     ;
 
 cntl-id
@@ -1287,104 +1275,104 @@ cntl-id
 
 autocheckbox-stmt
     : Y_AUTOCHECKBOX cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_AUTOCHECKBOX, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_AUTOCHECKBOX, $2, $3 ); }
     ;
 
 autoradiobutton-stmt
     : Y_AUTORADIOBUTTON cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_AUTORADIOBUTTON, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_AUTORADIOBUTTON, $2, $3 ); }
     ;
 
 checkbox-stmt
     : Y_CHECKBOX cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_CHECKBOX, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_CHECKBOX, $2, $3 ); }
     ;
 
 combobox-stmt
     : Y_COMBOBOX cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_COMBOBOX, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_COMBOBOX, $2, $3 ); }
     ;
 
 container-stmt
     : Y_CONTAINER cntl-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_CONTAINER, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_CONTAINER, $2, $3 ); }
     ;
 
 ctext-stmt
     : Y_CTEXT cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_CTEXT, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_CTEXT, $2, $3 ); }
     ;
 
 defpushbutton-stmt
     : Y_DEFPUSHBUTTON cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_DEFPUSHBUTTON, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_DEFPUSHBUTTON, $2, $3 ); }
     ;
 
 edittext-stmt
     : Y_EDITTEXT cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_EDITTEXT, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_EDITTEXT, $2, $3 ); }
     | Y_ENTRYFIELD cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_EDITTEXT, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_EDITTEXT, $2, $3 ); }
     ;
 
 groupbox-stmt
     : Y_GROUPBOX cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_GROUPBOX, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_GROUPBOX, $2, $3 ); }
     ;
 
 listbox-stmt
     : Y_LISTBOX cntl-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_LISTBOX, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_LISTBOX, $2, $3 ); }
     ;
 
 ltext-stmt
     : Y_LTEXT cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_LTEXT, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_LTEXT, $2, $3 ); }
     ;
 
 mle-stmt
     : Y_MLE cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_MLE, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_MLE, $2, $3 ); }
     ;
 
 notebook-stmt
     : Y_NOTEBOOK cntl-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_NOTEBOOK, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_NOTEBOOK, $2, $3 ); }
     ;
 
 pushbutton-stmt
     : Y_PUSHBUTTON cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_PUSHBUTTON, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_PUSHBUTTON, $2, $3 ); }
     ;
 
 radiobutton-stmt
     : Y_RADIOBUTTON cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_RADIOBUTTON, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_RADIOBUTTON, $2, $3 ); }
     ;
 
 rtext-stmt
     : Y_RTEXT cntl-text-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_RTEXT, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_RTEXT, $2, $3 ); }
     ;
 
 slider-stmt
     : Y_SLIDER cntl-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_SLIDER, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_SLIDER, $2, $3 ); }
     ;
 
 spinbutton-stmt
     : Y_SPINBUTTON cntl-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_SPINBUTTON, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_SPINBUTTON, $2, $3 ); }
     ;
 
 valueset-stmt
     : Y_VALUESET cntl-options presparam-list
-        { $$ = SemOS2NewDiagCtrl( Y_VALUESET, $2, $3 ); }
+        { $$ = SemOS2NewDialogCtrl( Y_VALUESET, $2, $3 ); }
     ;
 
 icon-stmt
     : Y_ICON control-name comma-opt cntl-id comma-opt icon-parms
-        { $6.Text = $2; $6.ID = $4; $$ = SemOS2NewDiagCtrl( Y_ICON, $6, NULL ); }
+        { $6.Text = $2; $6.ID = $4; $$ = SemOS2NewDialogCtrl( Y_ICON, $6, NULL ); }
     ;
 
 icon-parms
@@ -1437,7 +1425,7 @@ cntl-text
     | Y_NAME
         {
             $$ = ResNumToNameOrOrdinal( 0 );
-            RcError( ERR_SYMBOL_NOT_DEFINED, $1.string );
+            RcError( RCMSG_SYMBOL_NOT_DEFINED, $1.string );
             ErrorHasOccured = true;
         }
     ;
@@ -1491,26 +1479,20 @@ dialog-stmt
             $$ = SemOS2SetWindowData( $2, mask, $3, NULL, $1 );
         }
     | dialog-or-frame cntl-text-options Y_COMMA frame-style presparam-list
-        {
-            $$ = SemOS2SetWindowData( $2, $4, $5, NULL, $1 );
-        }
+        { $$ = SemOS2SetWindowData( $2, $4, $5, NULL, $1 ); }
     | dialog-or-frame cntl-text-options presparam-list diag-control-section
         {
             IntMask mask = {0};
             $$ = SemOS2SetWindowData( $2, mask, $3, $4, $1 );
         }
     | dialog-or-frame cntl-text-options Y_COMMA frame-style presparam-list diag-control-section
-        {
-            $$ = SemOS2SetWindowData( $2, $4, $5, $6, $1 );
-        }
+        { $$ = SemOS2SetWindowData( $2, $4, $5, $6, $1 ); }
     ;
 
 string-constant
     : string-group
     | Y_LSQ_BRACKET string-group Y_RSQ_BRACKET
-        {
-            $$ = $2;
-        }
+        { $$ = $2; }
     ;
 
 string-group
@@ -1616,7 +1598,7 @@ multiplicative-exp
 unary-exp
     : primary-exp
     | Y_MINUS unary-exp
-        { $$.Value = (uint_32)( -(int_32)$2.Value ); $$.Mask = $2.Mask; }
+        { $$.Value = - $2.Value; $$.Mask = $2.Mask; }
     | Y_BITNOT unary-exp
         { $$.Value = ~ $2.Value; $$.Mask = $2.Mask; }
     | Y_NOT unary-exp

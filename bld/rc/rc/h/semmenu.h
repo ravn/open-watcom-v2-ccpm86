@@ -37,67 +37,30 @@
 
 /**** Constant Definitions ****/
 
-#define RES_HEADER_VERSION     1
-#define RES_HEADER_SIZE        4
-
 /**** Semantic structures ****/
 
-typedef enum MenuItemType {
-    MT_SEPARATOR,
-    MT_MENU,
-    MT_MENUEX,
-    MT_MENUEX_NO_ID,
-    MT_EITHER
-} MenuItemType;
+#define MenuItemWIN         MenuItem
 
-typedef struct MenuItemNormalData {
-    MenuItemType            type;
-    MenuItemNormal          menuData;
-    MenuExItemNormal        menuExData;
-} MenuItemNormalData;
+typedef struct FullMenuWIN {
+    struct FullMenuItemWIN  *head;
+    struct FullMenuItemWIN  *tail;
+} FullMenuWIN;
 
-typedef struct MenuItemPopupData {
-    MenuItemType            type;
-    MenuItemPopup           menuData;
-    MenuExItemPopup         menuExData;
-} MenuItemPopupData;
-
-typedef struct FullMenu {
-    struct FullMenuItem     *head;
-    struct FullMenuItem     *tail;
-} FullMenu;
-
-typedef FullMenu    *FullMenuPtr;
-
-typedef struct FullMenuItemPopup {
-    MenuItemPopupData       item;
-    FullMenuPtr             submenu;
-} FullMenuItemPopup;
-
-typedef struct FullMenuItem {
-    struct FullMenuItem     *next;
-    struct FullMenuItem     *prev;
-    bool                    iswin32;
-    bool                    IsPopup;
-    union {
-        FullMenuItemPopup   popup;
-        MenuItemNormalData  normal;
-    } item;
-} FullMenuItem;
+typedef struct FullMenuItemWIN {
+    LL_ITEM( struct FullMenuItemWIN );
+    MenuItemWIN             item;
+    FullMenuWIN             *submenu;
+} FullMenuItemWIN;
 
 typedef struct FullMenuOS2 {
     struct FullMenuItemOS2  *head;
     struct FullMenuItemOS2  *tail;
 } FullMenuOS2;
 
-typedef FullMenuOS2     *FullMenuPtrOS2;
-
 typedef struct FullMenuItemOS2 {
-    struct FullMenuItemOS2  *next;
-    struct FullMenuItemOS2  *prev;
-    MenuItemType            type;
+    LL_ITEM( struct FullMenuItemOS2 );
     MenuItemOS2             item;
-    FullMenuPtrOS2          submenu;
+    FullMenuOS2             *submenu;
 } FullMenuItemOS2;
 
 #endif

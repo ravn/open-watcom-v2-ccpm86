@@ -40,19 +40,10 @@
 #include "diskos.h"
 #include "clcommon.h"
 #include "pathgrp2.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
 #include "clibext.h"
 
-
-#if defined( TRMEM ) && defined( _M_IX86 ) && ( __WATCOMC__ > 1290 )
-#define _XSTR(s)    # s
-#define TRMEMAPI(x) _Pragma(_XSTR(aux x __frame))
-#else
-#define TRMEMAPI(x)
-#endif
 
 #ifndef __UNIX__
 #define ATTR_MASK   _A_HIDDEN + _A_SYSTEM + _A_VOLID + _A_SUBDIR
@@ -323,7 +314,7 @@ void  AddNameObj( const char *name )
         /* construct full name of object file from Obj_Name information */
         _splitpath2( Obj_Name, pg1.buffer, &pg1.drive, &pg1.dir, &pg1.fname, &pg1.ext );
         if( pg1.ext[0] == '\0' )
-            pg1.ext = OBJ_EXT;
+            pg1.ext = FEXT_OBJ;
         if( pg1.fname[0] == '\0' || pg1.fname[0] == '*' ) {
             /* there's no usable basename in the -fo= pattern, but there drive and directory
              * and extension should still be applied.

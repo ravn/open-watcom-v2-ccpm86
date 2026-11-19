@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,8 +37,8 @@
 #include "linuxsys.h"
 
 
-long sys_getdents( u_int fd, struct dirent *dirp, u_int count )
+long sys_getdents( u_int handle, struct dirent *dir, u_int count )
 {
-    syscall_res res = sys_call3( SYS_getdents, fd, (u_long)dirp, count );
+    syscall_res res = sys_call3( SYS_getdents, handle, (u_long)dir, count );
     __syscall_return( int, res );
 }

@@ -72,48 +72,35 @@ FullHelpEntryOS2 SemOS2MakeHelpItem( unsigned long winId, unsigned long subId,
     return( entry );
 }
 
-FullHelpTableOS2 *SemOS2NewHelpTable( FullHelpEntryOS2 firstentry )
-/***************************************************************/
-{
-    FullHelpTableOS2   *newtable;
-    FullHelpEntryOS2   *newentry;
-
-    newtable = MemAllocSafe( sizeof( FullHelpTableOS2 ) );
-    newentry = MemAllocSafe( sizeof( FullHelpEntryOS2 ) );
-
-    *newentry = firstentry;
-    newtable->head = NULL;
-    newtable->tail = NULL;
-
-    ResAddLLItemAtEnd( (void **)&(newtable->head), (void **)&(newtable->tail), newentry );
-
-    return( newtable );
-}
-
 FullHelpTableOS2 *SemOS2AddHelpItem( FullHelpEntryOS2 currentry,
-                                    FullHelpTableOS2 *currtable )
+                                    FullHelpTableOS2 *table )
 /***************************************************************/
 {
     FullHelpEntryOS2     *newentry;
+
+    if( table == NULL ) {
+        table = MemAllocSafe( sizeof( FullHelpTableOS2 ) );
+        table->head = NULL;
+        table->tail = NULL;
+    }
 
     newentry = MemAllocSafe( sizeof( FullHelpEntryOS2 ) );
 
     *newentry = currentry;
 
-    ResAddLLItemAtEnd( (void **)&(currtable->head), (void **)&(currtable->tail), newentry );
+    ResAddLLItemAtEnd( (void **)&(table->head), (void **)&(table->tail), newentry );
 
-    return( currtable );
+    return( table );
 }
 
 static void SemOS2FreeHelpTable( FullHelpTableOS2 *helptable )
 /************************************************************/
 {
     FullHelpEntryOS2   *currentry;
-    FullHelpEntryOS2   *nextentry;
 
     if( helptable != NULL ) {
-        for( currentry = helptable->head; currentry != NULL; currentry = nextentry ) {
-            nextentry = currentry->next;
+        while( (currentry = helptable->head) != NULL ) {
+            helptable->head = currentry->next;
             MemFree( currentry );
         }
         MemFree( helptable );
@@ -138,9 +125,9 @@ static bool SemOS2WriteHelpTableEntries( FullHelpTableOS2 *helptable, FILE *fp )
     return( error );
 }
 
-void SemOS2WriteHelpTable( WResID *res_id, ResMemFlags flags,
+void SemOS2WriteHelpTable( WResID *res_id, ResMemFlags res_flags,
                                FullHelpTableOS2 *helptable )
-/**********************************************************/
+/***************************************************************/
 {
     ResLocation     loc;
     bool            error;
@@ -151,11 +138,11 @@ void SemOS2WriteHelpTable( WResID *res_id, ResMemFlags flags,
         error = SemOS2WriteHelpTableEntries( helptable, CurrResFile.fp );
         if( error ) {
             err_code = LastWresErr();
-            RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
+            RcError( RCMSG_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
             ErrorHasOccured = true;
         } else {
             loc.len = SemEndResource( loc.start );
-            SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_HELPTABLE ), flags, loc );
+            SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_HELPTABLE ), res_flags, loc );
         }
     } else {
         MemFree( res_id );
@@ -164,48 +151,35 @@ void SemOS2WriteHelpTable( WResID *res_id, ResMemFlags flags,
 }
 
 
-FullHelpSubTableOS2 *SemOS2NewHelpSubTable( DataElemList *data )
-/**************************************************************/
-{
-    FullHelpSubTableOS2   *newtable;
-    FullHelpSubEntryOS2   *newentry;
-
-    newtable = MemAllocSafe( sizeof( FullHelpSubTableOS2 ) );
-    newentry = MemAllocSafe( sizeof( FullHelpSubEntryOS2 ) );
-
-    newentry->dataListHead = data;
-    newtable->head = NULL;
-    newtable->tail = NULL;
-
-    ResAddLLItemAtEnd( (void **)&(newtable->head), (void **)&(newtable->tail), newentry );
-
-    return( newtable );
-}
-
 FullHelpSubTableOS2 *SemOS2AddHelpSubItem( DataElemList *data,
-                            FullHelpSubTableOS2 *currtable )
+                            FullHelpSubTableOS2 *table )
 /************************************************************/
 {
     FullHelpSubEntryOS2     *newentry;
 
+    if( table == NULL ) {
+        table = MemAllocSafe( sizeof( FullHelpSubTableOS2 ) );
+        table->head = NULL;
+        table->tail = NULL;
+    }
+
     newentry = MemAllocSafe( sizeof( FullHelpSubEntryOS2 ) );
 
     newentry->dataListHead = data;
 
-    ResAddLLItemAtEnd( (void **)&(currtable->head), (void **)&(currtable->tail), newentry );
+    ResAddLLItemAtEnd( (void **)&(table->head), (void **)&(table->tail), newentry );
 
-    return( currtable );
+    return( table );
 }
 
 static void SemOS2FreeHelpSubTable( FullHelpSubTableOS2 *helptable )
 /******************************************************************/
 {
     FullHelpSubEntryOS2   *currentry;
-    FullHelpSubEntryOS2   *nextentry;
 
     if( helptable != NULL ) {
-        for( currentry = helptable->head; currentry != NULL; currentry = nextentry ) {
-            nextentry = currentry->next;
+        while( (currentry = helptable->head) != NULL ) {
+            helptable->head = currentry->next;
             SemFreeDataElemList( currentry->dataListHead );
             MemFree( currentry );
         }
@@ -255,7 +229,7 @@ static bool SemOS2WriteHelpSubTableEntries( FullHelpSubTableOS2 *helptable, FILE
 }
 
 void SemOS2WriteHelpSubTable( WResID *res_id, unsigned numWords,
-                                     ResMemFlags flags,
+                                     ResMemFlags res_flags,
                                      FullHelpSubTableOS2 *helptable )
 /*******************************************************************/
 {
@@ -271,11 +245,11 @@ void SemOS2WriteHelpSubTable( WResID *res_id, unsigned numWords,
         error = SemOS2WriteHelpSubTableEntries( helptable, CurrResFile.fp );
         if( error ) {
             err_code = LastWresErr();
-            RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
+            RcError( RCMSG_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
             ErrorHasOccured = true;
         } else {
             loc.len = SemEndResource( loc.start );
-            SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_HELPSUBTABLE ), flags, loc );
+            SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_HELPSUBTABLE ), res_flags, loc );
         }
     } else {
         MemFree( res_id );

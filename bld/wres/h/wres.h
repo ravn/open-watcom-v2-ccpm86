@@ -37,30 +37,29 @@
 #include "bool.h"
 #include "filefmt.h"
 #include "wressetr.h"
+#include "mem2.h"
+
 
 /***** Private Types *****/
 
 typedef uint_16             WResLen;
 
 typedef struct WResLangNode {
-    struct WResLangNode     *Next;
-    struct WResLangNode     *Prev;
+    LL_ITEM( struct WResLangNode );
     char                    *data; /* pointer for use by resource editors */
     WResLangInfo            Info;
     void                    *fileInfo;
 } WResLangNode;
 
 typedef struct WResResNode {        /* linked list of WResResInfo's */
-    struct WResResNode      *Next;
-    struct WResResNode      *Prev;
+    LL_ITEM( struct WResResNode );
     WResLangNode            *Head;  /* list of resources of this type */
     WResLangNode            *Tail;  /* and name */
     WResResInfo             Info;
 } WResResNode;
 
 typedef struct WResTypeNode {       /* linked list of WResTypeInfo's */
-    struct WResTypeNode     *Next;
-    struct WResTypeNode     *Prev;
+    LL_ITEM( struct WResTypeNode );
     WResResNode             *Head;   /* list of resources of this type */
     WResResNode             *Tail;
     WResTypeInfo            Info;
@@ -99,9 +98,9 @@ extern void             WResFreeDir( WResDir );
 extern bool             WResWriteDir( FILE *fp, WResDir );
 extern bool             WResReadDir( FILE *fp, WResDir *dir, bool * );
 extern bool             WResReadDir2( FILE *fp, WResDir *dir, bool *dup_discarded, void *fileinfo );
-extern bool             WResAddResource( const WResID *type_id, const WResID *res_id, uint_16 memflags, long offset,
+extern bool             WResAddResource( const WResID *type_id, const WResID *res_id, ResMemFlags res_flags, long offset,
                                 uint_32 length, WResDir dir, const WResLangType *lang, bool *duplicate );
-extern bool             WResAddResource2( const WResID *type_id, const WResID *res_id, uint_16 memflags, long offset,
+extern bool             WResAddResource2( const WResID *type_id, const WResID *res_id, ResMemFlags res_flags, long offset,
                                 uint_32 length, WResDir dir, const WResLangType *lang, WResDirWindow *wind_dup,
                                 void *fileinfo );
 extern WResDirWindow    WResFindResource( const WResID *type_id, const WResID *res_id, WResDir, const WResLangType *lang );

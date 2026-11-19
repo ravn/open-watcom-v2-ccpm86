@@ -40,19 +40,19 @@
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static char     *WdeGetClassNameFromClass( uint_8 );
+static const char   *WdeGetClassNameFromOrdinal( uint_16 );
 
 /****************************************************************************/
 /* type definitions                                                         */
 /****************************************************************************/
 typedef struct {
-    uint_8  class;
-    char   *class_name;
+    uint_16     ordinal;
+    const char  *name;
 } WdeControlClassItems;
 
 typedef struct {
-    OBJ_ID  class;
-    char   *class_name;
+    OBJ_ID      id;
+    char        *name;
 } WdeCommonControlItems;
 
 /****************************************************************************/
@@ -65,7 +65,7 @@ static WdeControlClassItems WdeControlClasses[] = {
     { CLASS_LISTBOX,    "LISTBOX"   },
     { CLASS_SCROLLBAR,  "SCROLLBAR" },
     { CLASS_COMBOBOX,   "COMBOBOX"  },
-    { 0x00,             NULL        }
+    { 0,                NULL        }
 };
 
 static WdeCommonControlItems WdeCommonControlClasses[] = {
@@ -83,10 +83,10 @@ static WdeCommonControlItems WdeCommonControlClasses[] = {
 };
 
 
-ResNameOrOrdinal *WdeStrToResNameOrOrdinal( char *str )
+ResNameOrOrdinal *WdeStrToResNameOrOrdinal( const char *str )
 {
     ResNameOrOrdinal    *rp;
-    uint_16             ordID;
+    uint_16             ordinal;
     unsigned long       ul;
     char                *ep;
 
@@ -99,9 +99,9 @@ ResNameOrOrdinal *WdeStrToResNameOrOrdinal( char *str )
     }
 
     ul = strtoul( str, &ep, 0 );
-    if( !*ep && ul <= 0xffff ) {
-        ordID = (uint_16)ul;
-        rp = ResNumToNameOrOrdinal( ordID );
+    if( *ep == '\0' && ul <= 0xffff ) {
+        ordinal = (uint_16)ul;
+        rp = ResNumToNameOrOrdinal( ordinal );
     } else {
         rp = ResStrToNameOrOrdinal( str );
     }
@@ -109,72 +109,68 @@ ResNameOrOrdinal *WdeStrToResNameOrOrdinal( char *str )
     return( rp );
 }
 
-char *WdeResNameOrOrdinalToStr( ResNameOrOrdinal *name, int base )
+char *WdeResNameOrOrdinalToStr( const ResNameOrOrdinal *name, int base )
 {
     char    temp[15];
-    char    *cp;
+    char    *str;
 
-    cp = NULL;
+    str = NULL;
 
     if( name != NULL ) {
         if( name->ord.fFlag == 0xff ) {
             sprintf( temp, ( base == 10 ) ? "%u" : "%x", name->ord.wOrdinalID );
-            cp = WdeStrdup( temp );
+            str = WdeStrdup( temp );
         } else {
-            cp = (char *)WdeStrdup( name->name );
-        }
-        if( cp == NULL ) {
-            return( NULL );
+            str = (char *)WdeStrdup( name->name );
         }
     }
 
-    return( cp );
+    return( str );
 }
 
-ControlClass *WdeStrToControlClass( char *str )
+ResNameOrOrdinal *WdeStrToControlClass( const char *str )
 {
-    ControlClass    *c;
-    size_t          slen;
+    ResNameOrOrdinal    *cclass;
+    size_t              slen;
 
     slen = strlen( str );
 
-    c = MemAlloc( sizeof( ControlClass ) + slen );
+    cclass = MemAlloc( sizeof( ResNameOrOrdinal ) + slen );
 
-    if( c != NULL ) {
-        memcpy( c->ClassName, str, slen + 1 );
+    if( cclass != NULL ) {
+        memcpy( cclass->name, str, slen + 1 );
     }
 
-    return( c );
+    return( cclass );
 }
 
-char *WdeControlClassToStr( ControlClass *name )
+char *WdeControlClassToStr( const ResNameOrOrdinal *cclass )
 {
-    char    *class_name;
-    char    *cp;
-    char    temp[35];
+    const char  *name;
+    char        *str;
+    char        temp[35];
 
-    cp = NULL;
+    str = NULL;
 
-    if( name != NULL ) {
-        if( name->Class & 0x80 ) {
-            class_name = WdeGetClassNameFromClass( name->Class );
-            if( class_name == NULL ) {
-                sprintf( temp, "%lu", name->Class );
-                cp = WdeStrdup( temp );
-                return( cp );
+    if( cclass != NULL ) {
+        if( cclass->ord.fFlag == 0xff ) {
+            name = WdeGetClassNameFromOrdinal( cclass->ord.wOrdinalID );
+            if( name == NULL ) {
+                sprintf( temp, "%lu", cclass->ord.wOrdinalID );
+                name = temp;
             }
         } else {
-            class_name = name->ClassName;
+            name = cclass->name;
         }
-        if( class_name != NULL && class_name[0] != '\0' ) {
-            cp = WdeStrdup( class_name );
+        if( name != NULL && name[0] != '\0' ) {
+            str = WdeStrdup( name );
         }
     }
 
-    return( cp );
+    return( str );
 }
 
-WdeDialogBoxControl *WdeCopyDialogBoxControl( WdeDialogBoxControl *src )
+WdeDialogBoxControl *WdeCopyDialogBoxControl( const WdeDialogBoxControl *src )
 {
     WdeDialogBoxControl *dest;
 
@@ -189,8 +185,8 @@ WdeDialogBoxControl *WdeCopyDialogBoxControl( WdeDialogBoxControl *src )
 
     memcpy( dest, src, sizeof( WdeDialogBoxControl ) );
 
-    SETCTL_CLASSID( dest, WdeCopyControlClass( GETCTL_CLASSID( src ) ) );
-    SETCTL_TEXT( dest, WdeCopyResNameOr( GETCTL_TEXT( src ) ) );
+    SETCTL_CLASSID( dest, WdeCopyResNameOrOrdinal( GETCTL_CLASSID( src ) ) );
+    SETCTL_TEXT( dest, WdeCopyResNameOrOrdinal( GETCTL_TEXT( src ) ) );
 
     dest->symbol = WdeStrdup( src->symbol );
     dest->helpsymbol = WdeStrdup( src->helpsymbol );
@@ -198,7 +194,7 @@ WdeDialogBoxControl *WdeCopyDialogBoxControl( WdeDialogBoxControl *src )
     return( dest );
 }
 
-WdeDialogBoxHeader *WdeCopyDialogBoxHeader( WdeDialogBoxHeader *src )
+WdeDialogBoxHeader *WdeCopyDialogBoxHeader( const WdeDialogBoxHeader *src )
 {
     WdeDialogBoxHeader *dest;
 
@@ -213,8 +209,8 @@ WdeDialogBoxHeader *WdeCopyDialogBoxHeader( WdeDialogBoxHeader *src )
 
     memcpy( dest, src, sizeof( WdeDialogBoxHeader ) );
 
-    SETHDR_MENUNAME( dest, WdeCopyResNameOr( GETHDR_MENUNAME( src ) ) );
-    SETHDR_CLASSNAME( dest, WdeCopyResNameOr( GETHDR_CLASSNAME( src ) ) );
+    SETHDR_MENUNAME( dest, WdeCopyResNameOrOrdinal( GETHDR_MENUNAME( src ) ) );
+    SETHDR_CLASSNAME( dest, WdeCopyResNameOrOrdinal( GETHDR_CLASSNAME( src ) ) );
     SETHDR_CAPTION( dest, WdeStrdup( GETHDR_CAPTION( src ) ) );
     SETHDR_FONTFACENAME( dest,  WdeStrdup( GETHDR_FONTFACENAME( src ) ) );
 
@@ -225,7 +221,7 @@ WdeDialogBoxHeader *WdeCopyDialogBoxHeader( WdeDialogBoxHeader *src )
 }
 
 
-WResID *WdeCopyWResID( WResID *src )
+WResID *WdeCopyWResID( const WResID *src )
 {
     WResID  *dest;
     size_t  len;
@@ -249,7 +245,7 @@ WResID *WdeCopyWResID( WResID *src )
     return( dest );
 }
 
-WResHelpID *WdeCopyWResHelpID( WResHelpID *src )
+WResHelpID *WdeCopyWResHelpID( const WResHelpID *src )
 {
     WResHelpID  *dest;
     size_t      len;
@@ -273,7 +269,7 @@ WResHelpID *WdeCopyWResHelpID( WResHelpID *src )
     return( dest );
 }
 
-ResNameOrOrdinal *WdeCopyResNameOr( ResNameOrOrdinal *src )
+ResNameOrOrdinal *WdeCopyResNameOrOrdinal( const ResNameOrOrdinal *src )
 {
     ResNameOrOrdinal *dest;
 
@@ -290,125 +286,108 @@ ResNameOrOrdinal *WdeCopyResNameOr( ResNameOrOrdinal *src )
     return( dest );
 }
 
-ControlClass *WdeCopyControlClass( ControlClass *src )
+void WdeFreeDialogBoxControl( WdeDialogBoxControl **pcontrol )
 {
-    ControlClass *dest;
-
-    if( src == NULL ) {
-        return( NULL );
-    }
-
-    if( src->Class & 0x80 ) {
-        dest = ResNumToControlClass( src->Class );
-    } else {
-        dest = WdeStrToControlClass( src->ClassName );
-    }
-
-    return( dest );
-}
-
-void WdeFreeDialogBoxControl( WdeDialogBoxControl **c )
-{
-    if( c != NULL && *c != NULL ) {
-        if( GETCTL_CLASSID( *c ) ) {
-            MemFree( GETCTL_CLASSID( *c ) );
+    if( pcontrol != NULL && *pcontrol != NULL ) {
+        if( GETCTL_CLASSID( *pcontrol ) ) {
+            MemFree( GETCTL_CLASSID( *pcontrol ) );
         }
-        if( GETCTL_TEXT( *c ) ) {
-            MemFree( GETCTL_TEXT( *c ) );
+        if( GETCTL_TEXT( *pcontrol ) ) {
+            MemFree( GETCTL_TEXT( *pcontrol ) );
         }
-        if( (*c)->symbol ) {
-            MemFree( (*c)->symbol );
+        if( (*pcontrol)->symbol ) {
+            MemFree( (*pcontrol)->symbol );
         }
-        if( (*c)->helpsymbol ) {
-            MemFree( (*c)->helpsymbol );
+        if( (*pcontrol)->helpsymbol ) {
+            MemFree( (*pcontrol)->helpsymbol );
         }
-        MemFree( *c );
-        *c = NULL;
+        MemFree( *pcontrol );
+        *pcontrol = NULL;
     }
 }
 
 WdeDialogBoxControl *WdeAllocDialogBoxControl( void )
 {
-    WdeDialogBoxControl *c;
+    WdeDialogBoxControl *control;
 
-    c = MemAlloc( sizeof( WdeDialogBoxControl ) );
-    if( c == NULL ) {
+    control = MemAlloc( sizeof( WdeDialogBoxControl ) );
+    if( control == NULL ) {
         return( NULL );
     }
-    memset( c, 0, sizeof( WdeDialogBoxControl ) );
+    memset( control, 0, sizeof( WdeDialogBoxControl ) );
 
-    return( c );
+    return( control );
 }
 
-void WdeFreeDialogBoxHeader( WdeDialogBoxHeader **c )
+void WdeFreeDialogBoxHeader( WdeDialogBoxHeader **pheader )
 {
-    if( c != NULL && *c != NULL ) {
-        if( GETHDR_MENUNAME( *c ) ) {
-            MemFree( GETHDR_MENUNAME( *c ) );
+    if( pheader != NULL && *pheader != NULL ) {
+        if( GETHDR_MENUNAME( *pheader ) ) {
+            MemFree( GETHDR_MENUNAME( *pheader ) );
         }
-        if( GETHDR_CLASSNAME( *c ) ) {
-            MemFree( GETHDR_CLASSNAME( *c ) );
+        if( GETHDR_CLASSNAME( *pheader ) ) {
+            MemFree( GETHDR_CLASSNAME( *pheader ) );
         }
-        if( GETHDR_CAPTION( *c ) ) {
-            MemFree( GETHDR_CAPTION( *c ) );
+        if( GETHDR_CAPTION( *pheader ) ) {
+            MemFree( GETHDR_CAPTION( *pheader ) );
         }
-        if( GETHDR_FONTFACENAME( *c ) ) {
-            MemFree( GETHDR_FONTFACENAME( *c ) );
+        if( GETHDR_FONTFACENAME( *pheader ) ) {
+            MemFree( GETHDR_FONTFACENAME( *pheader ) );
         }
-        if( (*c)->symbol ) {
-            MemFree( (*c)->symbol );
+        if( (*pheader)->symbol ) {
+            MemFree( (*pheader)->symbol );
         }
-        MemFree( *c );
-        *c = NULL;
+        MemFree( *pheader );
+        *pheader = NULL;
     }
 }
 
 WdeDialogBoxHeader *WdeAllocDialogBoxHeader( void )
 {
-    WdeDialogBoxHeader *c;
+    WdeDialogBoxHeader *header;
 
-    c = MemAlloc( sizeof( WdeDialogBoxHeader ) );
-    if( c == NULL ) {
+    header = MemAlloc( sizeof( WdeDialogBoxHeader ) );
+    if( header == NULL ) {
         return( NULL );
     }
 
-    memset( c, 0, sizeof( WdeDialogBoxHeader ) );
+    memset( header, 0, sizeof( WdeDialogBoxHeader ) );
 
-    return( c );
+    return( header );
 }
 
-char *WdeGetClassNameFromClass( uint_8 class )
+const char *WdeGetClassNameFromOrdinal( uint_16 ordinal )
 {
     int i;
 
-    for( i = 0; WdeControlClasses[i].class != 0x00; i++ ) {
-        if( WdeControlClasses[i].class == class ) {
-            return ( WdeControlClasses[i].class_name );
+    for( i = 0; WdeControlClasses[i].ordinal != 0; i++ ) {
+        if( WdeControlClasses[i].ordinal == ordinal ) {
+            return( WdeControlClasses[i].name );
         }
     }
     return ( NULL );
 }
 
-uint_8 WdeGetClassFromClassName( char *class_name )
+uint_16 WdeGetClassOrdinalFromName( const char *name )
 {
     int i;
 
-    for( i = 0; WdeControlClasses[i].class != 0x00; i++ ) {
-        if( stricmp( WdeControlClasses[i].class_name, class_name ) == 0 ) {
-            return ( WdeControlClasses[i].class );
+    for( i = 0; WdeControlClasses[i].ordinal != 0; i++ ) {
+        if( stricmp( WdeControlClasses[i].name, name ) == 0 ) {
+            return( WdeControlClasses[i].ordinal );
         }
     }
 
-    return( 0x00 );
+    return( 0 );
 }
 
-OBJ_ID WdeGetCommonControlClassFromClassName( char *class_name )
+OBJ_ID WdeGetCommonControlClassFromClassName( const char *name )
 {
     int i;
 
-    for( i = 0; WdeCommonControlClasses[i].class != 0x00; i++ ) {
-        if( stricmp( WdeCommonControlClasses[i].class_name, class_name ) == 0 ) {
-            return( WdeCommonControlClasses[i].class );
+    for( i = 0; WdeCommonControlClasses[i].id != 0; i++ ) {
+        if( stricmp( WdeCommonControlClasses[i].name, name ) == 0 ) {
+            return( WdeCommonControlClasses[i].id );
         }
     }
 

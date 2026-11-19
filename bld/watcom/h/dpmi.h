@@ -102,7 +102,8 @@
 #define DPMISavePMStateAddr                     _DPMISavePMStateAddr
 #define DPMISaveStateSize                       _DPMISaveStateSize
 #define DPMIGetVendorSpecificAPI                _DPMIGetVendorSpecificAPI
-#define DPMIGetVersion                          _DPMIGetVersion
+#define DPMIVersionNumber                       _DPMIVersionNumber
+#define DPMIVersionInfo                         _DPMIVersionInfo
 #define DPMIGetFreeMemoryInformation            _DPMIGetFreeMemoryInformation
 
 #define PharlapAllocateDOSMemoryBlock           _PharlapAllocateDOSMemoryBlock
@@ -232,7 +233,7 @@ typedef struct {
     uint_32     physical_pages;
     uint_32     free_linear_addr_space_in_pages;
     uint_32     size_of_page_file_in_pages;
-    uint_32     fill[4];
+    uint_32     fill[3];
 } dpmi_mem;
 
 typedef struct {
@@ -266,11 +267,6 @@ typedef uint_32     dpmi_ret;
 typedef void __far  *intr_addr;
 typedef void __far  *proc_addr;
 
-/*
- * C run-time library flag indicating that DPMI services (host) is available
- */
-extern unsigned char _DPMI;
-
 extern int      _DPMIFreeRealModeCallBackAddress( proc_addr proc );
 extern proc_addr _DPMIAllocateRealModeCallBackAddress( proc_addr proc, dpmi_regs_struct ESDATA *dr );
 extern intr_addr _DPMIGetRealModeInterruptVector( uint_8 iv );
@@ -281,7 +277,8 @@ extern intr_addr _DPMIGetPMInterruptVector( uint_8 iv );
 extern void     _DPMISetRealModeInterruptVector( uint_8 iv, intr_addr intr );
 extern int_16   _DPMIModeDetect( void );
 extern void     _DPMIIdle( void );
-extern void     _DPMIGetVersion( version_info _WCI86FAR * );
+extern uint_16  _DPMIVersionNumber( void );
+extern void     _DPMIVersionInfo( version_info _WCI86FAR * );
 extern int_32   _DPMIAllocateLDTDescriptors( uint_16 );
 extern int_32   _DPMISegmentToDescriptor( uint_16 );
 extern int      _DPMIFreeLDTDescriptor( uint_16 );
@@ -299,9 +296,9 @@ extern int      _DPMIGetDescriptor( uint_16, descriptor ESDATA * );
 extern int      _DPMISetDescriptor( uint_16, descriptor ESDATA * );
 extern dpmi_ret _DPMICreateCodeSegmentAliasDescriptor( uint_16 );
 extern int      _DPMIGetFreeMemoryInformation( dpmi_mem ESDATA * );
-extern int      _DPMISimulateRealModeInterrupt( uint_8 interrupt, uint_8 flags, uint_16 words_to_copy, dpmi_regs_struct ESDATA *dr );
-extern int      _DPMICallRealModeProcedureWithFarReturnFrame( uint_8 flags, uint_16 words_to_copy, dpmi_regs_struct ESDATA *dr );
-extern int      _DPMICallRealModeProcedureWithIRETFrame( uint_8 flags, uint_16 words_to_copy, dpmi_regs_struct ESDATA *dr );
+extern int      _DPMISimulateRealModeInterrupt( uint_8 interrupt, uint_16 words_to_copy, dpmi_regs_struct ESDATA *dr );
+extern int      _DPMICallRealModeProcedureWithFarReturnFrame( uint_16 words_to_copy, dpmi_regs_struct ESDATA *dr );
+extern int      _DPMICallRealModeProcedureWithIRETFrame( uint_16 words_to_copy, dpmi_regs_struct ESDATA *dr );
 extern dpmi_dos_mem_block _DPMIAllocateDOSMemoryBlock( uint_16 para );
 extern int      _DPMIFreeDOSMemoryBlock( uint_16 sel );
 extern proc_addr _DPMIRawPMtoRMAddr( void );
@@ -497,7 +494,7 @@ extern uint_8   _PMIs32bitCPU( void );
 #pragma aux _DPMIGetNextSelectorIncrementValue = \
         _MOV_AX_word DPMI_0003 \
         _INT_31         \
-    __parm __caller [__bx] \
+    __parm __caller [] \
     __value         [__ax] \
     __modify __exact [__ax]
 
@@ -662,19 +659,21 @@ extern uint_8   _PMIs32bitCPU( void );
 
 #pragma aux _DPMISetPMInterruptVector = \
         _MOV_AX_word DPMI_0205 \
+        _XOR_BH_BH      \
         _INT_31         \
         _SBB_AX_AX      \
     __parm __caller [__bl] [__cx _DPMI_DX] \
     __value         [_DPMI_AX] \
-    __modify __exact [_DPMI_AX]
+    __modify __exact [_DPMI_AX __bh]
 
 #pragma aux _DPMISimulateRealModeInterrupt = \
         _MOV_AX_word DPMI_0300 \
+        _XOR_BH_BH      \
         _INT_31         \
         _SBB_AX_AX      \
-    __parm __caller [__bl] [__bh] [__cx] [ESDATAREG _DPMI_DI] \
+    __parm __caller [__bl] [__cx] [ESDATAREG _DPMI_DI] \
     __value         [_DPMI_AX] \
-    __modify __exact [_DPMI_AX]
+    __modify __exact [_DPMI_AX __bh]
 
 /*
  *  DOS/4GW DOS/4GW Pro DOS/4G
@@ -683,11 +682,12 @@ extern uint_8   _PMIs32bitCPU( void );
 #pragma aux _DPMICallRealModeProcedureWithFarReturnFrame = \
         _STC /* for missing service check */\
         _MOV_AX_word DPMI_0301 \
+        _XOR_BH_BH      \
         _INT_31         \
         _SBB_AX_AX      \
-    __parm __caller [__bh] [__cx] [ESDATAREG _DPMI_DI] \
+    __parm __caller [__cx] [ESDATAREG _DPMI_DI] \
     __value         [_DPMI_AX] \
-    __modify __exact [_DPMI_AX]
+    __modify __exact [_DPMI_AX __bh]
 
 /*
  *  DOS/4GW DOS/4GW Pro DOS/4G
@@ -696,11 +696,12 @@ extern uint_8   _PMIs32bitCPU( void );
 #pragma aux _DPMICallRealModeProcedureWithIRETFrame = \
         _STC /* for missing service check */\
         _MOV_AX_word DPMI_0302 \
+        _XOR_BH_BH      \
         _INT_31         \
         _SBB_AX_AX      \
-    __parm __caller [__bh] [__cx] [ESDATAREG _DPMI_DI] \
+    __parm __caller [__cx] [ESDATAREG _DPMI_DI] \
     __value         [_DPMI_AX] \
-    __modify __exact [_DPMI_AX]
+    __modify __exact [_DPMI_AX __bh]
 
 /*
  *  DOS/4GW DOS/4GW Pro DOS/4G
@@ -833,8 +834,15 @@ extern uint_8   _PMIs32bitCPU( void );
     __modify __exact [__eax __ebx __cx __si __edi]
 #endif
 
+#pragma aux _DPMIVersionNumber = \
+        _MOV_AX_word DPMI_0400 \
+        _INT_31         \
+    __parm   [] \
+    __value  [__ax] \
+    __modify __exact [__ax __bx __cx __dx]
+
 #ifdef _M_I86
-#pragma aux _DPMIGetVersion = \
+#pragma aux _DPMIVersionInfo = \
         _MOV_AX_word DPMI_0400 \
         _INT_31         \
         "mov  byte ptr es:[si],ah"      \
@@ -847,7 +855,7 @@ extern uint_8   _PMIs32bitCPU( void );
     __value         \
     __modify __exact [__ax __bx __cx __dx]
 #else
-#pragma aux _DPMIGetVersion = \
+#pragma aux _DPMIVersionInfo = \
         _MOV_AX_word DPMI_0400 \
         _INT_31         \
         "mov  byte ptr [esi],ah"    \
@@ -977,6 +985,9 @@ extern uint_8   _PMIs32bitCPU( void );
         _MOV_AX_word DPMI_0B00 \
         _INT_31         \
         _SBB_CX_CX      \
+        "jz L1"         \
+        _MOV_BX_AX      \
+    "L1: "              \
     __parm __caller [__bx] [__cx] [__dl] [__dh] \
     __value         [__cx __bx] \
     __modify __exact [__ax __bx __cx]
@@ -984,11 +995,14 @@ extern uint_8   _PMIs32bitCPU( void );
 #pragma aux _DPMISetWatch = \
         _MOV_AX_word DPMI_0B00 \
         _INT_31         \
-        _SBB_AX_AX      \
-        _USE16 _MOV_AX_BX \
+        _SBB_CX_CX      \
+        _USE16 _MOV_CX_BX \
+        "jz L1"         \
+        _USE16 _MOV_CX_AX \
+    "L1: "              \
     __parm __caller [__bx] [__cx] [__dl] [__dh] \
-    __value         [__eax] \
-    __modify __exact [__eax __ebx]
+    __value         [__ecx] \
+    __modify __exact [__eax __ebx __ecx]
 #endif
 
 #ifdef _M_I86
@@ -1008,7 +1022,7 @@ extern uint_8   _PMIs32bitCPU( void );
         _USE16 _AND_BX_AX \
     __parm __caller [__bx] \
     __value         [__ebx] \
-    __modify __exact [__eax]
+    __modify __exact [__ax __ebx]
 #endif
 
 #ifdef _M_I86
@@ -1046,8 +1060,8 @@ extern uint_8   _PMIs32bitCPU( void );
         _SBB_BX_BX      \
         _USE16 _AND_BX_AX \
     __parm __caller [__bx] \
-    __value         [__eax] \
-    __modify __exact [__eax]
+    __value         [__ebx] \
+    __modify __exact [__ax __ebx]
 #endif
 
 

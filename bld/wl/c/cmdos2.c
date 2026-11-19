@@ -36,7 +36,6 @@
 #include "linkstd.h"
 #include "cmdutils.h"
 #include "cmdos2.h"
-#include "exeos2.h"
 #include "exepe.h"
 #include "loados2.h"
 #include "loadpe.h"
@@ -83,7 +82,7 @@ void FreeOS2Fmt( void )
     MemFree( FmtData.description );
     FreeImpNameTab();
     FreeExportList();
-    FreeSegFlags( (xxx_seg_flags *)FmtData.u.os2fam.seg_flags );
+    FreeSegFlags( FmtData.u.os2fam.seg_flags );
 }
 
 static entry_export *ProcWlibDLLImportEntry( void )
@@ -375,14 +374,14 @@ static bool ProcMixed1632( void )
 }
 
 static parse_entry  MainOptions[] = {
-    "NOSTUB",               ProcNoStub,                 MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD,    0,
-    "ONEautodata",          ProcSingle,                 MK_OS2 | MK_WIN_NE,                         CF_AUTO_SEG_FLAG,
-    "MANYautodata",         ProcMultiple,               MK_OS2 | MK_WIN_NE,                         CF_AUTO_SEG_FLAG,
-    "NOAutodata",           ProcNone,                   MK_OS2_NE | MK_WIN_NE,                      CF_AUTO_SEG_FLAG,
-    "OLDlibrary",           ProcOldLibrary,             MK_OS2 | MK_WIN_NE | MK_PE,                 0,
-    "MODName",              ProcModName,                MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD,    0,
+    "NOSTUB",               ProcNoStub,                 MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD,   0,
+    "ONEautodata",          ProcSingle,                 MK_NE | MK_OS2_FLAT,                        CF_AUTO_SEG_FLAG,
+    "MANYautodata",         ProcMultiple,               MK_NE | MK_OS2_FLAT,                        CF_AUTO_SEG_FLAG,
+    "NOAutodata",           ProcNone,                   MK_NE,                                      CF_AUTO_SEG_FLAG,
+    "OLDlibrary",           ProcOldLibrary,             MK_NE | MK_OS2_FLAT | MK_PE,                0,
+    "MODName",              ProcModName,                MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD,   0,
     "NEWFiles",             ProcNewFiles,               MK_OS2_NE,                                  0,
-    "PROTmode",             ProcProtMode,               MK_OS2_NE | MK_WIN_NE,                      0,
+    "PROTmode",             ProcProtMode,               MK_NE,                                      0,
     "NOSTDCall",            ProcNoStdCall,              MK_PE,                                      0,
     "RWReloccheck",         ProcRWRelocCheck,           MK_WIN_NE,                                  0,
     "SELFrelative",         ProcSelfRelative,           MK_OS2_LX,                                  0,
@@ -479,7 +478,6 @@ static bool getimport( void )
 {
     length_name         intname;
     length_name         modname;
-    length_name         extname;
     unsigned_16         ordinal;
     ord_state           state;
 
@@ -491,25 +489,21 @@ static bool getimport( void )
     DUPSTR_STACK( modname.name, Token.this, Token.len );
     modname.len = Token.len;
     ordinal = 0;
-    state = ST_INVALID_ORDINAL;   // assume to extname or ordinal.
     if( GetToken( SEP_PERIOD, TOK_INCLUDE_DOT ) ) {
         state =  getatoi( &ordinal );
-        if( state == ST_NOT_ORDINAL ) {
-            DUPSTR_STACK( extname.name, Token.this, Token.len );
-            extname.len = Token.len;
-        } else if( state == ST_INVALID_ORDINAL ) {
+        if( state == ST_INVALID_ORDINAL ) {
             LnkMsg( LOC+LINE+MSG_IMPORT_ORD_INVALID + ERR, NULL );
-            return( true );
+        } else if( state == ST_IS_ORDINAL ) {
+            HandleImport( &intname, &modname, NULL, ordinal );
+        } else if( state == ST_NOT_ORDINAL ) {
+            length_name extname;
+
+            extname.name = Token.this;
+            extname.len = Token.len;
+            HandleImport( &intname, &modname, &extname, IMP_BY_NAME );
         }
-    }
-    if( state == ST_IS_ORDINAL ) {
-        HandleImport( &intname, &modname, &intname, ordinal );
     } else {
-        if( state == ST_NOT_ORDINAL ) {
-            HandleImport( &intname, &modname, &extname, NOT_IMP_BY_ORDINAL );
-        } else {
-            HandleImport( &intname, &modname, &intname, NOT_IMP_BY_ORDINAL );
-        }
+        HandleImport( &intname, &modname, &intname, IMP_BY_NAME );
     }
     return( true );
 }
@@ -540,8 +534,8 @@ static bool ProcPrivate( void )
 }
 
 static parse_entry  Exp_Keywords[] = {
-    "RESident",     ProcExpResident,    MK_OS2 | MK_WIN_NE, 0,
-    "PRIVATE",      ProcPrivate,        MK_OS2 | MK_WIN_NE | MK_PE, 0,
+    "RESident",     ProcExpResident,    MK_NE | MK_OS2_FLAT, 0,
+    "PRIVATE",      ProcPrivate,        MK_NE | MK_OS2_FLAT | MK_PE, 0,
     NULL
 };
 
@@ -658,8 +652,8 @@ static bool ProcSegData( void )
 }
 
 static parse_entry  SegTypeDesc[] = {
-    "CODE",         ProcSegCode,        MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD, 0,
-    "DATA",         ProcSegData,        MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD, 0,
+    "CODE",         ProcSegCode,        MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD, 0,
+    "DATA",         ProcSegData,        MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD, 0,
     NULL
 };
 
@@ -700,8 +694,7 @@ static bool ProcIopl( void )
     if( FmtData.u.os2fam.seg_flags->specified & SEG_IOPL_SPECD ) {
         LnkMsg( WRN+LOC+LINE+MSG_SEG_FLAG_MULT_DEFD, NULL );
     }
-    FmtData.u.os2fam.seg_flags->flags &= ~SEG_LEVEL_3;
-    FmtData.u.os2fam.seg_flags->flags |= SEG_LEVEL_2;
+    SET_SEG_PMODE_DPL( FmtData.u.os2fam.seg_flags->flags, 2 );
     FmtData.u.os2fam.seg_flags->specified |= SEG_IOPL_SPECD;
     return( true );
 }
@@ -712,7 +705,7 @@ static bool ProcNoIopl( void )
     if( FmtData.u.os2fam.seg_flags->specified & SEG_IOPL_SPECD ) {
         LnkMsg( WRN+LOC+LINE+MSG_SEG_FLAG_MULT_DEFD, NULL );
     }
-    FmtData.u.os2fam.seg_flags->flags |= SEG_LEVEL_3;
+    SET_SEG_PMODE_DPL( FmtData.u.os2fam.seg_flags->flags, 3 );
     FmtData.u.os2fam.seg_flags->specified |= SEG_IOPL_SPECD;
     return( true );
 }
@@ -907,25 +900,25 @@ static bool ProcNonPageable( void )
 }
 
 static parse_entry  SegDesc[] = {
-    "Class",            ProcOS2Class,       MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD, 0,
-    "TYpe",             ProcSegType,        MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD, 0,
+    "Class",            ProcOS2Class,       MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD, 0,
+    "TYpe",             ProcSegType,        MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD, 0,
     NULL
 };
 
 static parse_entry  SegModel[] = {
-    "PReload",          ProcPreload,        MK_OS2 | MK_WIN_NE | MK_WIN_VXD, 0,
-    "LOadoncall",       ProcLoadoncall,     MK_OS2 | MK_WIN_NE | MK_WIN_VXD, 0,
+    "PReload",          ProcPreload,        MK_NE | MK_OS2_FLAT | MK_WIN_VXD, 0,
+    "LOadoncall",       ProcLoadoncall,     MK_NE | MK_OS2_FLAT | MK_WIN_VXD, 0,
     "Iopl",             ProcIopl,           MK_OS2 | MK_WIN_VXD, 0,
     "NOIopl",           ProcNoIopl,         MK_OS2 | MK_WIN_VXD, 0,
-    "EXECUTEOnly",      ProcExecuteonly,    MK_OS2 | MK_WIN_NE, 0,
-    "EXECUTERead",      ProcExecuteread,    MK_OS2 | MK_WIN_NE, 0,
-    "SHared",           ProcShared,         MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD, 0,
-    "NONShared",        ProcNonShared,      MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD, 0,
-    "READOnly",         ProcReadOnly,       MK_OS2 | MK_WIN_NE, 0,
-    "READWrite",        ProcReadWrite,      MK_OS2 | MK_WIN_NE, 0,
+    "EXECUTEOnly",      ProcExecuteonly,    MK_NE | MK_OS2_FLAT, 0,
+    "EXECUTERead",      ProcExecuteread,    MK_NE | MK_OS2_FLAT, 0,
+    "SHared",           ProcShared,         MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD, 0,
+    "NONShared",        ProcNonShared,      MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD, 0,
+    "READOnly",         ProcReadOnly,       MK_NE | MK_OS2_FLAT, 0,
+    "READWrite",        ProcReadWrite,      MK_NE | MK_OS2_FLAT, 0,
     "CONforming",       ProcConforming,     MK_OS2 | MK_WIN_VXD, 0,
     "NONConforming",    ProcNonConforming,  MK_OS2 | MK_WIN_VXD, 0,
-    "MOVeable",         ProcMovable,        MK_OS2_NE | MK_WIN_NE, 0,
+    "MOVeable",         ProcMovable,        MK_NE, 0,
     "FIXed",            ProcFixed,          MK_WIN_NE, 0,
     "DIScardable",      ProcDiscardable,    MK_WIN_NE | MK_WIN_VXD, 0,
     "NONDiscardable",   ProcNonDiscardable, MK_WIN_VXD, 0,
@@ -943,25 +936,25 @@ static parse_entry  SegModel[] = {
 static bool getsegflags( void )
 /*****************************/
 {
-    os2_seg_flags   *entry;
+    seg_flags_struct    *seg_flags;
 
     Token.thumb = true;
-    entry = MemAllocSafe( sizeof( os2_seg_flags ) );
-    entry->specified = 0;
-    entry->flags = FmtData.def_seg_flags;   // default value.
-    entry->name = NULL;
-    entry->type = SEGFLAG_SEGMENT;
-    entry->next = FmtData.u.os2fam.seg_flags;
-    FmtData.u.os2fam.seg_flags = entry;
+    seg_flags = MemAllocSafe( sizeof( seg_flags_struct ) );
+    seg_flags->specified = 0;
+    seg_flags->flags = FmtData.def_seg_flags;  // default value.
+    seg_flags->name = NULL;
+    seg_flags->type = SEGFLAG_SEGMENT;
+    seg_flags->next = FmtData.u.os2fam.seg_flags;
+    FmtData.u.os2fam.seg_flags = seg_flags;
     ProcOne( SegDesc, SEP_NO );             // look for an optional segdesc
-    if( entry->type != SEGFLAG_CODE
-      && entry->type != SEGFLAG_DATA ) {
+    if( seg_flags->type != SEGFLAG_CODE
+      && seg_flags->type != SEGFLAG_DATA ) {
         if( !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
-            FmtData.u.os2fam.seg_flags = entry->next;
-            MemFree( entry );
+            FmtData.u.os2fam.seg_flags = seg_flags->next;
+            MemFree( seg_flags );
             return( false );
         }
-        entry->name = getstring();
+        seg_flags->name = getstring();
     }
     while( ProcOne( SegModel, SEP_NO ) )
         /* nothing */;
@@ -1167,8 +1160,8 @@ static bool ProcTermThread( void )
 }
 
 static parse_entry  Init_Keywords[] = {
-    "INITGlobal",   ProcInitGlobal,     MK_OS2 | MK_WIN_NE | MK_PE, 0,
-    "INITInstance", ProcInitInstance,   MK_OS2 | MK_WIN_NE | MK_PE, 0,
+    "INITGlobal",   ProcInitGlobal,     MK_NE | MK_OS2_FLAT | MK_PE, 0,
+    "INITInstance", ProcInitInstance,   MK_NE | MK_OS2_FLAT | MK_PE, 0,
     "INITThread",   ProcInitThread,     MK_PE, 0,
     NULL
 };

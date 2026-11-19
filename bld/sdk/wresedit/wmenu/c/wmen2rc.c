@@ -61,7 +61,7 @@ static bool WSetFlagsText( uint_16 flags, char **text )
     size_t      tlen;
 
     if( text == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     tlen = 0;
@@ -75,13 +75,13 @@ static bool WSetFlagsText( uint_16 flags, char **text )
 
     *text = MemAlloc( tlen + 1 );
     if( *text == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     (*text)[0] = '\0';
 
     if( tlen == 0 ) {
-        return( TRUE );
+        return( true );
     }
 
     for( i = 0; FlagItems[i].flagtext != NULL; i++ ) {
@@ -91,7 +91,7 @@ static bool WSetFlagsText( uint_16 flags, char **text )
         }
     }
 
-    return( TRUE );
+    return( true );
 }
 
 static bool WWriteMenuEntryItem( WMenuEntry *entry, FILE *fp, int depth )
@@ -113,33 +113,29 @@ static bool WWriteMenuEntryItem( WMenuEntry *entry, FILE *fp, int depth )
     }
 
     if( ok ) {
-        if( (entry->item->Item.Normal.ItemFlags & MENU_SEPARATOR) == 0 ) {
+        if( (entry->item->u.ItemFlags & MENU_SEPARATOR) == 0 ) {
             ok = false;
-            itemname = WGETMENUITEMTEXT( entry->item );
+            itemname = entry->item->ItemText;
             if( itemname != NULL ) {
                 text = WConvertStringFrom( itemname, "\t\x8\"\\", "ta\"\\" );
                 ok = (text != NULL);
+            }
+            if( ok ) {
+                ok = WSetFlagsText( entry->item->u.ItemFlags, &flagtext );
             }
         }
     }
 
     if( ok ) {
-        if( (entry->item->Item.Normal.ItemFlags & MENU_SEPARATOR) == 0 ) {
-            ok = WSetFlagsText( entry->item->Item.Normal.ItemFlags, &flagtext );
-        }
-    }
-
-    if( ok ) {
-        if( entry->item->Item.Normal.ItemFlags & MENU_POPUP ) {
+        if( entry->item->u.ItemFlags & MENU_POPUP ) {
             fprintf( fp, "POPUP \"%s\"%s\n", text, flagtext );
-        } else if( entry->item->Item.Normal.ItemFlags & MENU_SEPARATOR ) {
+        } else if( entry->item->u.ItemFlags & MENU_SEPARATOR ) {
             fprintf( fp, "MENUITEM SEPARATOR\n" );
         } else {
             if( entry->symbol != NULL ) {
                 fprintf( fp, "MENUITEM \"%s\"\t%s%s\n", text, entry->symbol, flagtext );
             } else {
-                fprintf( fp, "MENUITEM \"%s\"\t%u%s\n", text,
-                         entry->item->Item.Normal.ItemID, flagtext );
+                fprintf( fp, "MENUITEM \"%s\"\t%u%s\n", text, entry->item->ItemId, flagtext );
             }
         }
     }
@@ -158,7 +154,7 @@ static bool WWriteMenuEntryItem( WMenuEntry *entry, FILE *fp, int depth )
 static bool WWriteDummyItem( FILE *fp, int depth )
 {
     if( fp == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     if( depth != 0 ) {
@@ -172,7 +168,7 @@ static bool WWriteDummyItem( FILE *fp, int depth )
     }
     fwrite( "END\n", sizeof( char ), 4, fp );
 
-    return( TRUE );
+    return( true );
 }
 
 static bool WWriteMenuPopupItem( WMenuEntry *entry, FILE *fp )
@@ -197,7 +193,7 @@ static bool WWriteMenuPopupItem( WMenuEntry *entry, FILE *fp )
     if( ok ) {
         while( entry != NULL && ok ) {
             ok = WWriteMenuEntryItem( entry, fp, depth );
-            if( ok && entry->item->IsPopup ) {
+            if( ok && IS_MENU_POPUP( entry->item ) ) {
                 if( entry->child != NULL ) {
                     ok = WWriteMenuPopupItem( entry->child, fp );
                 } else {
@@ -246,7 +242,7 @@ bool WWriteMenuToRC( WMenuEditInfo *einfo, char *file, bool append )
     }
 
     if( ok ) {
-        ok = WWriteMenuPopupItem( einfo->menu->first_entry, fp );
+        ok = WWriteMenuPopupItem( einfo->menu->head, fp );
     }
 
     if( rname != NULL ) {

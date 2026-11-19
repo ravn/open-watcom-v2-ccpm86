@@ -1,0 +1,51 @@
+/****************************************************************************
+*
+*                            Open Watcom Project
+*
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
+*    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
+*
+*  ========================================================================
+*
+*    This file contains Original Code and/or Modifications of Original
+*    Code as defined in and that are subject to the Sybase Open Watcom
+*    Public License version 1.0 (the 'License'). You may not use this file
+*    except in compliance with the License. BY USING THIS FILE YOU AGREE TO
+*    ALL TERMS AND CONDITIONS OF THE LICENSE. A copy of the License is
+*    provided with the Original Code and Modifications, and is also
+*    available at www.sybase.com/developer/opensource.
+*
+*    The Original Code and all software distributed under the License are
+*    distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+*    EXPRESS OR IMPLIED, AND SYBASE AND ALL CONTRIBUTORS HEREBY DISCLAIM
+*    ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF
+*    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR
+*    NON-INFRINGEMENT. Please see the License for the specific language
+*    governing rights and limitations under the License.
+*
+*  ========================================================================
+*
+* Description:  Resource flag definitions.
+*
+****************************************************************************/
+
+
+#ifndef RESFLAGS_INCLUDED
+#define RESFLAGS_INCLUDED
+
+typedef enum ResMemFlags {
+    RESFLAG_NONE        = 0x0000,
+    RESFLAG_MOVEABLE    = 0x0010,
+    RESFLAG_PURE        = 0x0020,
+    RESFLAG_PRELOAD     = 0x0040,
+    RESFLAG_DISCARDABLE = 0x1000,
+    RESFLAG_SEGALIGN    = 0x8000,
+} ResMemFlags;
+
+#define DEFAULT_FLAGS_NONE  (RESFLAG_NONE)
+#define DEFAULT_FLAGS_MDP   (RESFLAG_PURE | RESFLAG_MOVEABLE | RESFLAG_DISCARDABLE)
+#define DEFAULT_FLAGS_MD    (RESFLAG_MOVEABLE | RESFLAG_DISCARDABLE)
+#define DEFAULT_FLAGS_MP    (RESFLAG_PURE | RESFLAG_MOVEABLE)
+#define DEFAULT_FLAGS_P     (RESFLAG_PURE)
+
+#endif

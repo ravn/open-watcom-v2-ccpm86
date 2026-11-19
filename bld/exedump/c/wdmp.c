@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -79,7 +79,7 @@ static void dmp_exe( void )
             } else {
                 Wdputslc( "No protected mode executable found\n" );
             }
-        } else if( !dos_dmp ) {
+        } else if( dos_dmp == 0 ) {
             if( Dmp_os2_head() ) {
                 /* done */
             } else if( Dmp_386_head() ) {
@@ -146,9 +146,6 @@ static void dmp_exe( void )
             Dmp_seg_data( Hexoff, len );
         }
     }
-    if( WSize ) {
-        write( Lhandle, Write_buff, WSize );
-    }
 }
 
 static bool find_file( const char * file_path )
@@ -166,7 +163,7 @@ static int open_files( void )
 {
     int                 ret;
 
-    Handle = open( Name, O_RDONLY | O_BINARY, 0 );
+    Handle = open( Name, O_RDONLY | O_BINARY );
     if( Handle != -1 ) {
         ret = setjmp( Se_env );
         if( ret == 0 ) {
@@ -226,8 +223,10 @@ static void usage( void )
         "    -p causes LE/LX page map to be dumped" "\n"
         "    -q quiet dump - don't write banner" "\n"
         "    -r causes more resource information to be dumped" "\n"
+        "    -R dump NE resources to files\n"
         "    -s causes segments' data to be dumped" "\n"
         "    -S<segnum> like -s but only applies to segment <segnum>" "\n"
+        "    -t show only active bits" "\n"
         "    -x dump export information for NE/LX DLLs in .DEF format" "\n"
     );
 }
@@ -269,13 +268,13 @@ static bool parse_options( int argc, char * const *argv )
     int     c;
     char    *arg;
 
-    Options_dmp = EXE_INFO;
+    Options_dmp = EXE_INFO | ZERO_BITS;
     Segspec = 0;
     Hexoff = 0;
 
     for( ;; ) {
-        while(optind < argc &&
-              (c = getopt( argc, argv, ":aA:bB:dD:efipqrsS:x" )) != -1 ) {
+        while(optind < argc
+          && (c = getopt( argc, argv, ":aA:bB:dD:efipqrRsS:tx" )) != -1 ) {
             switch( c ) {
             case 'A':
                 Options_dmp |= FIX_DMP | PAGE_DMP | RESRC_DMP | EXE_INFO | DOS_SEG_DMP | OS2_SEG_DMP;
@@ -299,7 +298,8 @@ static bool parse_options( int argc, char * const *argv )
             case 'D':
                 Debug_options = 0;
                 arg = optarg;
-                while( islower( *arg ) || isupper( *arg ) ) {
+                while( islower( *arg )
+                  || isupper( *arg ) ) {
                     debug_opts( *arg++ );
                 }
                 /* fall through */
@@ -328,6 +328,9 @@ static bool parse_options( int argc, char * const *argv )
             case 'r':
                 Options_dmp |= EXE_INFO | RESRC_DMP;
                 break;
+            case 'R':
+                Options_dmp |= EXE_INFO | RSRC_FILE_DMP;
+                break;
             case 'S':
                 Options_dmp |= EXE_INFO | DOS_SEG_DMP | OS2_SEG_DMP;
                 Segspec = (unsigned_16)atoi( optarg );
@@ -339,6 +342,9 @@ static bool parse_options( int argc, char * const *argv )
                 break;
             case 's':
                 Options_dmp |= EXE_INFO | DOS_SEG_DMP | OS2_SEG_DMP;
+                break;
+            case 't':
+                Options_dmp &= ~ZERO_BITS;
                 break;
             case 'x':
                 Options_dmp |= IMPORT_DEF;
@@ -364,7 +370,7 @@ static bool parse_options( int argc, char * const *argv )
             if( Name == NULL ) {
                 Name = argv[optind++];
             } else {
-                Wdputs( "wdump: multiple pathnames not accepted\n" );
+                Wdputslc( "wdump: multiple pathnames not accepted\n" );
                 return( true );
             }
         } else {
@@ -384,15 +390,14 @@ int main( int argc, char * const *argv )
 {
     bool    found_file;
 
-    WSize = 0;
-    Write_buff[WSize] = '\0';
     if( parse_options( argc, argv ) ) {
         return( 1 );
     }
-    if( !(Options_dmp & QUIET) ) {
+    if( (Options_dmp & QUIET) == 0 ) {
         wbanner();
     }
-    if( Name == NULL || *Name == '\0' ) {
+    if( Name == NULL
+      || *Name == '\0' ) {
         usage();
         return( 1 );
     }

@@ -76,14 +76,14 @@ WINEXPORT INT_PTR CALLBACK WdeSelectDialogDlgProc( HWND, UINT, WPARAM, LPARAM );
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static LIST  *WdeSelectDialogs( WdeResInfo *, bool );
+static LIST  *WdeSelectDialogs( WdeResInfo *res_info, bool );
 static bool   WdeSetSelectInfo( HWND, WdeDialogSelectInfo * );
 static bool   WdeGetSelectInfo( HWND, WdeDialogSelectInfo * );
-static bool   WdeInitSelectListBox( WdeResInfo *, HWND );
-static char  *WdeResolveDialogName( WdeResInfo *, WResID * );
-static bool   WdeAddControlToDialog( WdeResInfo *, OBJPTR, WdeDialogBoxControl *, POINT *, HWND );
-static bool   WdeAddControlsToDialog( WdeResInfo *, OBJPTR, WdeDialogBoxInfo * );
-static OBJ_ID WdeGetOBJIDFromControl( WdeDialogBoxControl * );
+static bool   WdeInitSelectListBox( WdeResInfo *res_info, HWND );
+static char  *WdeResolveDialogName( WdeResInfo *res_info, WResID * );
+static bool   WdeAddControlToDialog( WdeResInfo *res_info, OBJPTR, WdeDialogBoxControl *control, POINT *, HWND );
+static bool   WdeAddControlsToDialog( WdeResInfo *res_info, OBJPTR, WdeDialogBoxInfo *dlg_info );
+static OBJ_ID WdeGetOBJIDFromControl( WdeDialogBoxControl *control );
 static OBJ_ID WdeGetOBJIDFromClassNum( uint_8, uint_32 );
 
 /****************************************************************************/
@@ -92,7 +92,7 @@ static OBJ_ID WdeGetOBJIDFromClassNum( uint_8, uint_32 );
 
 bool WdeResInfoHasDialogs( WdeResInfo *res_info )
 {
-    return( res_info->dlg_item_list != NULL );
+    return( res_info->ditem_list != NULL );
 }
 
 bool WdeSelectDialog( WdeResInfo *res_info )
@@ -103,12 +103,12 @@ bool WdeSelectDialog( WdeResInfo *res_info )
     bool            ok;
     bool            last;
 
-    if( ListCount( res_info->dlg_item_list ) == 1 ) {
-        ok = WdeOpenSelectedDialog( res_info, (WdeResDlgItem *)ListElement( res_info->dlg_item_list ), TRUE );
+    if( ListCount( res_info->ditem_list ) == 1 ) {
+        ok = WdeOpenSelectedDialog( res_info, (WdeResDlgItem *)ListElement( res_info->ditem_list ), true );
         return( ok );
     }
 
-    selection = WdeSelectDialogs( res_info, FALSE );
+    selection = WdeSelectDialogs( res_info, false );
     ok = true;
     WdeSetWaitCursor( true );
 
@@ -133,12 +133,12 @@ bool WdeRemoveDialog( WdeResInfo *res_info )
     LIST            *slist;
     bool            ok;
 
-    selection = WdeSelectDialogs( res_info, TRUE );
+    selection = WdeSelectDialogs( res_info, true );
     ok = true;
 
     for( slist = selection; slist != NULL; slist = ListConsume( slist ) ) {
         ditem = (WdeResDlgItem *)ListElement ( slist );
-        ok = WdeRemoveDialogFromResInfo( res_info, ditem, TRUE );
+        ok = WdeRemoveDialogFromResInfo( res_info, ditem, true );
     }
 
     Notify( GetMainObject(), PRIMARY_OBJECT, NULL );
@@ -153,7 +153,7 @@ LIST *WdeSelectDialogs( WdeResInfo *res_info, bool remove )
     WdeDialogSelectInfo si;
 
     if( res_info == NULL ) {
-        return( FALSE );
+        return( NULL );
     }
     inst = WdeGetAppInstance();
     si.res_info = res_info;
@@ -187,7 +187,7 @@ bool WdeSetSelectInfo( HWND hDlg, WdeDialogSelectInfo *si )
     char        *text;
 
     if( si == NULL || si->res_info == NULL || !WdeResInfoHasDialogs( si->res_info ) ) {
-        return( FALSE );
+        return( false );
     }
 
     if( si->remove ) {
@@ -214,19 +214,19 @@ bool WdeGetSelectInfo( HWND hDlg, WdeDialogSelectInfo *si )
     WdeResDlgItem   *ditem;
 
     if( si == NULL || si->res_info == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     win = GetDlgItem( hDlg, IDB_SELECT_LISTBOX );
     count = (int)SendMessage( win, LB_GETSELCOUNT, 0, 0 );
     if( count == 0 ) {
-        return( TRUE );
+        return( true );
     }
 
     sel = MemAlloc( count * sizeof( int ) );
     if( sel == NULL ) {
         WdeWriteTrail( "WdeGetSelectInfo: alloc failed!" );
-        return( FALSE );
+        return( false );
     }
     memset( sel, 0, count * sizeof( int ) );
 
@@ -234,7 +234,7 @@ bool WdeGetSelectInfo( HWND hDlg, WdeDialogSelectInfo *si )
 
     if( selitms == 0 || selitms == LB_ERR ) {
         WdeWriteTrail( "WdeGetSelectInfo: LB_GETSELITEMS failed!" );
-        return( FALSE );
+        return( false );
     }
 
     if( selitms != count ) {
@@ -271,33 +271,33 @@ bool WdeInitSelectListBox( WdeResInfo *res_info, HWND win )
     int             count;
 
     if( win == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     SendMessage( win, WM_SETREDRAW, FALSE, 0 );
     count = 0;
-    for( dlist = res_info->dlg_item_list; dlist != NULL; dlist = ListNext( dlist ) ) {
+    for( dlist = res_info->ditem_list; dlist != NULL; dlist = ListNext( dlist ) ) {
         ditem = (WdeResDlgItem *)ListElement( dlist );
         id = NULL;
 
-        if( ditem->object != NULL || ditem->dialog_info != NULL ) {
+        if( ditem->object != NULL || ditem->dlg_info != NULL ) {
             if( ditem->object != NULL ) {
                 Forward( ditem->object, GET_OBJECT_INFO, NULL, &id );
             } else if( ditem->dialog_name != NULL ) {
                 id = ditem->dialog_name;
             }
-        } else if( ditem->rnode != NULL ) {
-            id = &ditem->rnode->Info.ResName;
+        } else if( ditem->resnode != NULL ) {
+            id = &ditem->resnode->Info.ResName;
         }
 
         if( id == NULL ) {
-            return( FALSE );
+            return( false );
         }
 
         name = WdeResolveDialogName( res_info, id );
 
         if( name == NULL ) {
-            return( FALSE );
+            return( false );
         }
 
         /* add the name to the list box */
@@ -312,7 +312,7 @@ bool WdeInitSelectListBox( WdeResInfo *res_info, HWND win )
     SendMessage( win, WM_SETREDRAW, TRUE, 0 );
     InvalidateRect( win, NULL, TRUE );
 
-    return( TRUE );
+    return( true );
 }
 
 char *WdeResolveDialogName( WdeResInfo *res_info, WResID *id )
@@ -337,7 +337,7 @@ bool WdeOpenSelectedDialog( WdeResInfo *res_info, WdeResDlgItem *ditem, bool mak
     bool        from_id;
 
     if( res_info == NULL || ditem == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     if( ditem->object != NULL ) {
@@ -345,29 +345,29 @@ bool WdeOpenSelectedDialog( WdeResInfo *res_info, WdeResDlgItem *ditem, bool mak
             MakeObjectCurrent( ditem->object );
             WdeHandleGotoCurrentObject();
         }
-        return( TRUE );
+        return( true );
     }
 
-    if( (ditem->rnode == NULL || ditem->lnode == NULL) &&
-        (ditem->dialog_info == NULL || ditem->dialog_name == NULL) ) {
-        return( FALSE );
+    if( (ditem->resnode == NULL || ditem->langnode == NULL) &&
+        (ditem->dlg_info == NULL || ditem->dialog_name == NULL) ) {
+        return( false );
     }
 
-    if( ditem->dialog_info == NULL ) {
-        ditem->dialog_info = WdeLoadDialogFromRes( res_info, ditem->lnode, ditem->is32bit );
+    if( ditem->dlg_info == NULL ) {
+        ditem->dlg_info = WdeLoadDialogFromRes( res_info, ditem->langnode, ditem->is32bit );
         ditem->modified = false;
     }
 
     if( ditem->dialog_name == NULL ) {
-        ditem->dialog_name = WdeCopyWResID( &ditem->rnode->Info.ResName );
+        ditem->dialog_name = WdeCopyWResID( &ditem->resnode->Info.ResName );
         if( ditem->dialog_name == NULL ) {
-            return( FALSE );
+            return( false );
         }
     }
 
     if( !WdeOpenDialogFromResInfo( res_info, ditem ) ) {
         WdeDisplayErrorMsg( WDE_DIALOGNOTOPENED );
-        return( FALSE );
+        return( false );
     }
 
     if( ditem->object != NULL ) {
@@ -381,36 +381,36 @@ bool WdeOpenSelectedDialog( WdeResInfo *res_info, WdeResDlgItem *ditem, bool mak
         WdeHandleGotoCurrentObject();
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WdeOpenDialogFromResInfo ( WdeResInfo *res_info, WdeResDlgItem *ditem )
 {
-    bool    old;
+    bool    modified_save;
     bool    show;
 
-    old = ditem->modified;
+    modified_save = ditem->modified;
 
-    if( res_info != NULL && ditem != NULL && ditem->dialog_info != NULL ) {
+    if( res_info != NULL && ditem != NULL && ditem->dlg_info != NULL ) {
         ditem->object = WdeCreateDialogFromRes( res_info, ditem );
         if( ditem->object == NULL ) {
-            return( FALSE );
+            return( false );
         }
-        if( !WdeAddControlsToDialog( res_info, ditem->object, ditem->dialog_info ) ) {
+        if( !WdeAddControlsToDialog( res_info, ditem->object, ditem->dlg_info ) ) {
             Destroy( ditem->object, false );
             ditem->object = NULL;
-            return( FALSE );
+            return( false );
         }
         show = TRUE;
         Forward( ditem->object, SHOW_WIN, &show, NULL );
-        ditem->modified = old;
-        return( TRUE );
+        ditem->modified = modified_save;
+        return( true );
     }
 
-    return( FALSE );
+    return( false );
 }
 
-bool WdeAddControlsToDialog( WdeResInfo *res_info, OBJPTR dialog, WdeDialogBoxInfo *info )
+bool WdeAddControlsToDialog( WdeResInfo *res_info, OBJPTR dialog, WdeDialogBoxInfo *dlg_info )
 {
     WdeDialogBoxControl *control;
     LIST                *clist;
@@ -419,19 +419,19 @@ bool WdeAddControlsToDialog( WdeResInfo *res_info, OBJPTR dialog, WdeDialogBoxIn
 
     if( !Forward( dialog, GET_WINDOW_HANDLE, &dialog_window, NULL ) ) {
         WdeWriteTrail( "WdeAddControlsToDialog: GET_WINDOW_HANDLE failed!" );
-        return( FALSE );
+        return( false );
     }
 
     GetOffset( &origin );
 
-    for( clist = info->control_list; clist != NULL; clist = ListNext( clist ) ) {
+    for( clist = dlg_info->control_list; clist != NULL; clist = ListNext( clist ) ) {
         control = (WdeDialogBoxControl *)ListElement( clist );
         if( !WdeAddControlToDialog( res_info, dialog, control, &origin, dialog_window ) ) {
             WdeWriteTrail( "WdeAddControlsToDialog: add control failed!" );
         }
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WdeAddControlToDialog( WdeResInfo *res_info, OBJPTR dialog,
@@ -468,7 +468,7 @@ bool WdeAddControlToDialog( WdeResInfo *res_info, OBJPTR dialog,
             if( GETCTL_CLASSID( control ) != NULL ) {
                 MemFree( GETCTL_CLASSID( control ) );
             }
-            SETCTL_CLASSID( control, ResNumToControlClass( CLASS_STATIC ) );
+            SETCTL_CLASSID( control, ResNumToNameOrOrdinal( CLASS_STATIC ) );
             new = Create(object_id, dialog, &control_rect, (OBJPTR)control );
         }
     } else {
@@ -477,20 +477,20 @@ bool WdeAddControlToDialog( WdeResInfo *res_info, OBJPTR dialog,
 
     if( new == NULL ) {
         WdeWriteTrail( "WdeAddControlToDialog: Create failed!" );
-        return( FALSE );
+        return( false );
     }
 
     if( !Register( new ) ) {
         WdeWriteTrail( "WdeAddControlToDialog: Register failed!" );
         Destroy( new, false );
-        return( FALSE );
+        return( false );
     }
 
     if( Forward( new, IS_OBJECT_CLEAR, &clear_int, NULL ) && clear_int ) {
         Forward( new, ON_TOP, NULL, NULL );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 OBJ_ID WdeGetOBJIDFromClassNum( uint_8 class, uint_32 style )
@@ -601,23 +601,23 @@ OBJ_ID WdeGetOBJIDFromClassNum( uint_8 class, uint_32 style )
 
 OBJ_ID WdeGetOBJIDFromControl( WdeDialogBoxControl *control )
 {
-    ControlClass    *class;
-    uint_8          class_id;
-    OBJ_ID          id;
+    ResNameOrOrdinal    *cclass;
+    uint_16             ordinal;
+    OBJ_ID              id;
 
-    class = GETCTL_CLASSID( control );
+    cclass = GETCTL_CLASSID( control );
 
     id = 0;
 
-    if( class->Class & 0x80 ) {
-        id = WdeGetOBJIDFromClassNum( class->Class, GETCTL_STYLE( control ) );
+    if( cclass->ord.fFlag == 0xff ) {
+        id = WdeGetOBJIDFromClassNum( cclass->ord.wOrdinalID, GETCTL_STYLE( control ) );
     } else {
-        id = WdeGetCommonControlClassFromClassName( class->ClassName );
+        id = WdeGetCommonControlClassFromClassName( cclass->name );
         if( id == 0 ) {
-            class_id = WdeGetClassFromClassName( class->ClassName );
+            ordinal = WdeGetClassOrdinalFromName( cclass->name );
             /* assume some sort of custom class if class_id is 0 */
-            if( class_id != 0 ) {
-                id = WdeGetOBJIDFromClassNum( class_id, GETCTL_STYLE( control ) );
+            if( ordinal != 0 ) {
+                id = WdeGetOBJIDFromClassNum( ordinal, GETCTL_STYLE( control ) );
             }
         }
     }

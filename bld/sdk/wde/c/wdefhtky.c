@@ -81,8 +81,8 @@ WINEXPORT LRESULT CALLBACK WdeHtKySuperClassProc( HWND, UINT, WPARAM, LPARAM );
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static OBJPTR   WdeMakeHtKy( OBJPTR, RECT *, OBJPTR, DialogStyle, char *, OBJ_ID );
-static OBJPTR   WdeHKCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl * );
+static OBJPTR   WdeMakeHtKy( OBJPTR, RECT *, OBJPTR, DialogStyle, const char *, OBJ_ID );
+static OBJPTR   WdeHKCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl *control );
 static void     WdeHtKySetDefineInfo( WdeDefineObjectInfo *, HWND );
 static void     WdeHtKyGetDefineInfo( WdeDefineObjectInfo *, HWND );
 static bool     WdeHtKyDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
@@ -122,7 +122,7 @@ OBJPTR CALLBACK WdeHtKyCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle )
     }
 }
 
-OBJPTR WdeMakeHtKy( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle style, char *text, OBJ_ID id )
+OBJPTR WdeMakeHtKy( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle style, const char *text, OBJ_ID id )
 {
     OBJPTR new;
 
@@ -143,7 +143,7 @@ OBJPTR WdeMakeHtKy( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle st
 }
 
 OBJPTR WdeHKCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
-                    OBJ_ID id, WdeDialogBoxControl *info )
+                    OBJ_ID id, WdeDialogBoxControl *control )
 {
     WdeHtKyObject *new;
 
@@ -182,7 +182,7 @@ OBJPTR WdeHKCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
+    if( !Forward( new->object_handle, SET_OBJECT_INFO, control, NULL ) ) {
         WdeWriteTrail( "WdeHtKyCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
         MemFree( new );
@@ -257,7 +257,7 @@ bool WdeHtKyInit( bool first )
     SETCTL_SIZEW( WdeDefaultHtKy, 0 );
     SETCTL_SIZEH( WdeDefaultHtKy, 0 );
     SETCTL_TEXT( WdeDefaultHtKy, NULL );
-    SETCTL_CLASSID( WdeDefaultHtKy, WdeStrToControlClass( WHOTKEY_CLASS ) );
+    SETCTL_CLASSID( WdeDefaultHtKy, ResStrToNameOrOrdinal( WHOTKEY_CLASS ) );
 
 #ifdef __WINDOWS__
     WdeHtKyDispatch = MakeProcInstance_DISPATCHER( WdeHtKyDispatcher, WdeGetAppInstance() );
@@ -352,7 +352,7 @@ bool WdeHtKyGetWndProc( WdeHtKyObject *obj, WNDPROC *proc, void *p2 )
     return( true );
 }
 
-bool WdeHtKyGetWindowClass( WdeHtKyObject *obj, char **class, void *p2 )
+bool WdeHtKyGetWindowClass( WdeHtKyObject *obj, const char **class, void *p2 )
 {
     /* unused parameters */ (void)obj; (void)p2;
 
@@ -388,7 +388,7 @@ void WdeHtKySetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
 void WdeHtKyGetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
 {
     // clear the style flags, since there are none for a progress bar
-    SETCTL_STYLE( o_info->info.c.info, GETCTL_STYLE( o_info->info.c.info ) & 0xffff0000 );
+    SETCTL_STYLE( o_info->info.c.control, GETCTL_STYLE( o_info->info.c.control ) & 0xffff0000 );
 
     // get the extended control settings
     WdeEXGetDefineInfo( o_info, hDlg );

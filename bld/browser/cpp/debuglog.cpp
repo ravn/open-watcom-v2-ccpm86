@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,18 +31,18 @@
 ****************************************************************************/
 
 
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <time.h>
+#include <cstdlib>
+#include <cstdarg>
+#include <cstring>
+#include <ctime>
 #include <wclist.h>
 #include <wcstack.h>
 
 #include "debuglog.h"
 
-static FILE * OpenFile( const char * name, bool append );
+static std::FILE * OpenFile( const char * name, bool append );
 static char * AppendSlash( char * fileName );
-static void   PrintHeader( const char * name, FILE * fp );
+static void   PrintHeader( const char * name, std::FILE * fp );
 
 DebuggingLog::DebuggingLog( const char * name, bool append )
                 : _fp( stderr )
@@ -60,7 +60,7 @@ DebuggingLog::DebuggingLog( const char * name, bool append )
     }
 
     if( _fp == NULL ) {
-        fprintf( stderr, "%s: %s (error %d)\n\n", name, strerror( errno ), errno );
+        std::fprintf( stderr, "%s: %s (error %d)\n\n", name, std::strerror( errno ), errno );
         _fp = stderr;
     }
 
@@ -70,7 +70,7 @@ DebuggingLog::DebuggingLog( const char * name, bool append )
 DebuggingLog::~DebuggingLog()
 //---------------------------
 {
-    fprintf( _fp, "\n\n<log end> %s\n", DebuggingLog::timeStamp() );
+    std::fprintf( _fp, "\n\n<log end> %s\n", DebuggingLog::timeStamp() );
 
     if( _times ) {
         _times->clear();
@@ -83,13 +83,13 @@ int DebuggingLog::printf( const char * format, ... )
 //--------------------------------------------------
 // normal printf to the file
 {
-    va_list args;
-    int     rc;
+    std::va_list    args;
+    int             rc;
 
     va_start( args, format );
-    rc = vfprintf( _fp, format, args );
+    rc = std::vfprintf( _fp, format, args );
     va_end( args );
-    fflush( _fp );
+    std::fflush( _fp );
 
     if( rc < 0 ) {
         throw WriteError;
@@ -98,15 +98,15 @@ int DebuggingLog::printf( const char * format, ... )
     return rc;
 }
 
-void DebuggingLog::write( const char * buffer, size_t len )
-//---------------------------------------------------------
+void DebuggingLog::write( const char * buffer, std::size_t len )
+//--------------------------------------------------------------
 // write a straight buffer out.  I don't know a good
 // use for this, but trmem uses it, so...
 {
-    size_t numWritten;
+    std::size_t numWritten;
 
-    numWritten = fwrite( buffer, len, 1, _fp );
-    fflush( _fp );
+    numWritten = std::fwrite( buffer, len, 1, _fp );
+    std::fflush( _fp );
 
     if( numWritten != 1 ) {
         throw WriteError;
@@ -119,8 +119,8 @@ void DebuggingLog::puts( const char * buffer )
 {
     int rc;
 
-    rc = fputs( buffer, _fp );
-    fflush( _fp );
+    rc = std::fputs( buffer, _fp );
+    std::fflush( _fp );
 
     if( rc ) {
         throw WriteError;
@@ -131,10 +131,10 @@ static char * DebuggingLog::timeStamp()
 //-------------------------------------
 // writes a time / date stamp then a newline
 {
-    time_t  timeOfDay;
+    std::time_t  timeOfDay;
 
-    timeOfDay = time( NULL );
-    return ctime( &timeOfDay );
+    timeOfDay = std::time( NULL );
+    return std::ctime( &timeOfDay );
 }
 
 static char * AppendSlash( char * fileName )
@@ -144,7 +144,7 @@ static char * AppendSlash( char * fileName )
 {
     int len;
 
-    len = strlen( fileName );
+    len = std::strlen( fileName );
     if( fileName[ len - 1 ] != '\\' && fileName[ len - 1 ] != '/' ) {
         fileName[ len ] = '\\';
         fileName[ len + 1 ] = '\0';
@@ -164,67 +164,67 @@ static char * AppendSlash( char * fileName )
 const char * LogDirEnvVar = "log_dir";
 const char * TmpEnvVar = "tmp";
 
-FILE * OpenFile( const char * name, bool append )
-//-----------------------------------------------
+std::FILE * OpenFile( const char * name, bool append )
+//----------------------------------------------------
 {
     char    fileName[ _MAX_PATH ];
     char *  foundName;
-    FILE *  fp;
+    std::FILE *  fp;
 
-    foundName = getenv( name );
+    foundName = std::getenv( name );
 
     if( foundName != NULL ) {
-        strcpy( fileName, foundName );
+        std::strcpy( fileName, foundName );
     } else {
-        foundName = getenv( LogDirEnvVar );
+        foundName = std::getenv( LogDirEnvVar );
         if( foundName != NULL ) {
-            strcpy( fileName, foundName );
+            std::strcpy( fileName, foundName );
             AppendSlash( fileName );
-            strncat( fileName, name, _MAX_FNAME - 1 );
-            strcat( fileName, ".log" );
+            std::strncat( fileName, name, _MAX_FNAME - 1 );
+            std::strcat( fileName, ".log" );
         } else {
-            foundName = getenv( TmpEnvVar );
+            foundName = std::getenv( TmpEnvVar );
             if( foundName != NULL ) {
-                strcpy( fileName, foundName );
+                std::strcpy( fileName, foundName );
                 AppendSlash( fileName );
-                strncat( fileName, name, _MAX_FNAME );
-                strcat( fileName, ".log" );
+                std::strncat( fileName, name, _MAX_FNAME );
+                std::strcat( fileName, ".log" );
             } else {
-                strcpy( fileName, name );           // give up, use name
+                std::strcpy( fileName, name );           // give up, use name
             }
         }
     }
 
     if( append ) {
-        fp = fopen( fileName, "at" );               // append to end
+        fp = std::fopen( fileName, "at" );               // append to end
     } else {
-        fp = fopen( fileName, "wt" );
+        fp = std::fopen( fileName, "wt" );
     }
 
     return fp;
 }
 
-static void PrintHeader( const char * name, FILE * fp )
-//-----------------------------------------------------
+static void PrintHeader( const char * name, std::FILE * fp )
+//----------------------------------------------------------
 {
     int     nChars;
     int     i;
 
-    nChars = fprintf( fp, "%s:  %s", name, DebuggingLog::timeStamp() );
+    nChars = std::fprintf( fp, "%s:  %s", name, DebuggingLog::timeStamp() );
 
     for( i = 0; i < nChars; i += 1 ) {
-        fputc( '-', fp );
+        std::fputc( '-', fp );
     }
 
-    fputs( "\n", fp );
+    std::fputs( "\n", fp );
 }
 
 void DebuggingLog::startTiming()
 //------------------------------
 {
-    clock_t  timeOfDay;
+    std::clock_t  timeOfDay;
 
-    timeOfDay = clock();
+    timeOfDay = std::clock();
 
 
     if( _times == NULL ) {
@@ -237,14 +237,14 @@ void DebuggingLog::startTiming()
 double DebuggingLog::endTiming()
 //------------------------------
 {
-    clock_t  oldTime;
-    clock_t  newTime;
+    std::clock_t  oldTime;
+    std::clock_t  newTime;
 
     if( _times->isEmpty() ) {
         return 0.0;
     } else {
         oldTime = _times->pop();
-        newTime = clock();
+        newTime = std::clock();
 
         return (double)(newTime - oldTime) / CLOCKS_PER_SEC;
     }

@@ -48,6 +48,7 @@
 #include "cmdlnprs.gh"
 #include "cmdlnprs.h"
 #include "cmdscan.h"
+#include "mangle.h"
 
 #include "clibint.h"
 #include "clibext.h"
@@ -184,6 +185,27 @@ void BadCmdLineOption( void )
     BadCmdLine( MSG_UNKNOWN_OPTION );
 }
 
+static char *SetStringOption( char **o, OPT_STRING **h )
+/******************************************************/
+{
+    OPT_STRING *s;
+    char *p;
+
+    s = *h;
+    p = NULL;
+    if( s != NULL ) {
+        if( s->data[0] != '\0' ) {
+            p = MemStrdupSafe( s->data );
+        }
+        OPT_CLEAN_STRING( h );
+    }
+    if( o != NULL ) {
+        MemFree( *o );
+        *o = p;
+    }
+    return( p );
+}
+
 static char *SetTargetName( char *target_name, const char *name )
 /***************************************************************/
 {
@@ -191,6 +213,22 @@ static char *SetTargetName( char *target_name, const char *name )
         MemFree( target_name );
     }
     return( MemStrdupSafe( name ) );
+}
+
+static char *SetTargetNameBT( char *target_name, OPT_STRING **bt_value )
+/**********************************************************************/
+{
+    int             c;
+    char            *p;
+
+    if( target_name != NULL ) {
+        MemFree( target_name );
+    }
+    target_name = p = SetStringOption( NULL, bt_value );
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
+    return( target_name );
 }
 
 static bool isvalidident( const char *id )
@@ -318,7 +356,7 @@ static void srcFileName( const char *token )
     }
     _splitpath2( token, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
     if( pg.ext[0] == '\0' ) {
-        pg.ext = ASM_EXT;
+        pg.ext = FEXT_ASM;
     }
     SrcFName = MemStrdupSafe( pg.fname );
     SrcModuleName = MemStrdupSafe( pg.fname );
@@ -465,10 +503,6 @@ static char *ReadIndirectFile( char *name )
             if( ch == '\r' || ch == '\n' ) {
                 *str = ' ';
             }
-            if( ch == 0x1A ) {      // if end of file
-                *str = '\0';        // - mark end of str
-                break;
-            }
         }
     }
     return( env );
@@ -482,12 +516,7 @@ static bool scanMode( unsigned *p )
 
     CmdRecogEquals();
     len = CmdScanId( &str );
-    if( len > sizeof( buff ) - 1 ) {
-        len = sizeof( buff ) - 1;
-    }
-    strncpy( buff, str, len );
-    buff[len] = '\0';
-    strupr( buff );
+    len = get_ucase_name( buff, sizeof( buff ), str, len );
     if( strcmp( buff, "MASM5" ) == 0 ) {
 #if 0
         *p = MODE_MASM5;
@@ -585,27 +614,6 @@ static int ProcOptions( OPT_STORAGE *data, const char *str )
     return( 0 );
 }
 
-static char *SetStringOption( char **o, OPT_STRING **h )
-/******************************************************/
-{
-    OPT_STRING *s;
-    char *p;
-
-    s = *h;
-    p = NULL;
-    if( s != NULL ) {
-        if( s->data[0] != '\0' ) {
-            p = MemStrdupSafe( s->data );
-        }
-        OPT_CLEAN_STRING( h );
-    }
-    if( o != NULL ) {
-        MemFree( *o );
-        *o = p;
-    }
-    return( p );
-}
-
 static void reverseList( OPT_STRING **h )
 {
     OPT_STRING *s;
@@ -627,9 +635,7 @@ static char *set_build_target( OPT_STORAGE *data )
     char    *target_name = NULL;
 
     if( data->bt ) {
-        char *target = SetStringOption( NULL, &(data->bt_value) );
-        target_name = SetTargetName( target_name, strupr( target ) );
-        MemFree( target );
+        target_name = SetTargetNameBT( target_name, &(data->bt_value) );
     }
 
     if( target_name == NULL ) {

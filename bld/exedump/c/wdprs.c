@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -65,12 +66,16 @@ void Puthex64( long long num, unsigned_16 width )
 /*
  * Put a decimal number
  */
-void Putdec( unsigned_32 num )
-/****************************/
+int Putdec( unsigned_32 num )
+/***************************/
 {
+    int len;
+
+    len = 1;
     if( num >= 10 )
-        Putdec( num / 10 );
+        len += Putdec( num / 10 );
     Wdputc( num % 10 + '0' );
+    return( len );
 }
 
 /*
@@ -106,7 +111,7 @@ void Putdec64( long long num )
 void Putdecl( unsigned_32 num, unsigned_16 len )
 /**********************************************/
 {
-    Putdecbz( num /10, len - 1 );
+    Putdecbz( num / 10, len - 1 );
     Wdputc( num % 10 + '0' );
 }
 
@@ -132,8 +137,10 @@ static void DecBZRecurse( unsigned_32 num, unsigned_16 len, char minus )
             Wdputc( ' ' );
         }
     } else {
-        if( num < 10 && minus )
+        if( num < 10
+          && minus ) {
             Wdputc( '-' );
+        }
         Wdputc( num % 10 + '0' );
     }
 }
@@ -172,8 +179,10 @@ static void DecBZRecurse64( long long num, unsigned_16 len, char minus )
             Wdputc( ' ' );
         }
     } else {
-        if( num < 10 && minus )
+        if( num < 10
+          && minus ) {
             Wdputc( '-' );
+        }
         Wdputc( num % 10 + '0' );
     }
 }

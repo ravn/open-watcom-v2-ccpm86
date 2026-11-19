@@ -60,7 +60,8 @@
 #define STATIC_TABALLOC (256 * sizeof( symbol * ))  // 1st power of 128 > TABSIZE
 #define GLOBAL_TABALLOC (1792 * sizeof( symbol * )) // 1st power of 128 > TABSIZE
 
-int             (*CmpRtn)( const char *, const char *, size_t );
+int             (*CmpNRtn)( const char *, const char *, size_t );
+int             (*CmpRtn)( const char *, const char * );
 size_t          NameLen;
 symbol          *LastSym;
 
@@ -337,7 +338,8 @@ void ResetSym( void )
     SymList = NULL;
     HeadSym = NULL;
     LastSym = NULL;
-    CmpRtn = strnicmp;
+    LinkFlags |= LF_CASE_FLAG;
+    SetSymCase();
     ResetPermBlocks();
     ClearHashPointers();
 }
@@ -405,13 +407,14 @@ static void WipeSym( symbol *sym )
     if( IS_SYM_IMPORTED( sym )
       && (FmtData.type & MK_ELF) == 0 ) {
         if( FmtData.type & MK_NOVELL ) {
-            if( sym->p.import != DUMMY_IMPORT_PTR ) {
-                MemFree( sym->p.import );
+            if( sym->p.import_nov != DUMMY_IMPORT_PTR ) {
+                MemFree( sym->p.import_nov );
             }
+            sym->p.import_nov = NULL;
         } else {
-            FreeImport( sym->p.import );
+            FreeImport( sym->p.import_dll );
+            sym->p.import_dll = NULL;
         }
-        sym->p.import = NULL;
     } else if( IS_SYM_ALIAS( sym ) ) {
         if( sym->p.alias.u.ptr != NULL ) {
             MemFree( sym->p.alias.u.ptr );
@@ -501,9 +504,11 @@ void SetSymCase( void )
 /****************************/
 {
     if( LinkFlags & LF_CASE_FLAG ) {
-        CmpRtn = strncmp;
+        CmpNRtn = strncmp;
+        CmpRtn = strcmp;
     } else {
-        CmpRtn = strnicmp;
+        CmpNRtn = strnicmp;
+        CmpRtn = stricmp;
     }
 }
 
@@ -634,7 +639,7 @@ void MakeSymAlias( const char *name, size_t namelen, const char *target, size_t 
     symbol      *targ;
 
     if( namelen == targetlen
-      && (*CmpRtn)( name, target, namelen ) == 0 ) {
+      && (*CmpNRtn)( name, target, namelen ) == 0 ) {
         char    *buff;
 
         DUPSTR_STACK( buff, target, targetlen );
@@ -678,7 +683,7 @@ static symbol *GlobalSearchSym( const char *symname, unsigned hash, size_t len )
 
     for( sym = GlobalSymPtrs[hash]; sym != NULL; sym = sym->hash ) {
         if( len == sym->namelen_cmp
-          && (*CmpRtn)( symname, sym->name.u.ptr, len ) == 0 ) {
+          && (*CmpNRtn)( symname, sym->name.u.ptr, len ) == 0 ) {
             break;
         }
     }
@@ -844,7 +849,7 @@ void ReportMultiple( symbol *sym, const char *name, size_t len )
         lev = MILD_ERR;
         LinkState |= LS_UNDEFED_SYM_ERROR;
     }
-    if( CmpRtn( sym->name.u.ptr, name, len + 1 ) == 0 ) {
+    if( (*CmpNRtn)( sym->name.u.ptr, name, len + 1 ) == 0 ) {
         LnkMsg( LOC+lev+MSG_MULT_DEF, "S", sym );
     } else {
         LnkMsg( LOC+lev+MSG_MULT_DEF_BY, "12", sym->name.u.ptr, name );

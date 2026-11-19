@@ -36,17 +36,8 @@
 #include "aui.h"
 #include "guimem.h"
 #include "memfuncs.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
-
-#if defined( TRMEM ) && defined( _M_IX86 ) && ( __WATCOMC__ > 1290 )
-#define _XSTR(s)    # s
-#define TRMEMAPI(x) _Pragma(_XSTR(aux x __frame))
-#else
-#define TRMEMAPI(x)
-#endif
 
 #ifdef TRMEM
 
@@ -85,7 +76,7 @@ void    GUIMemOpen( void )
     if( TrHdl == _TRMEM_HDL_NONE ) {
         TrFile = stderr;
         TrHdl = _trmem_open( malloc, free, realloc, strdup,
-            NULL, GUIMemPrintLine, _TRMEM_DEF );
+            NULL, MemPrintLine, _TRMEM_DEF );
 
         tmpdir = getenv( "TRMEMFILE" );
         if( tmpdir != NULL ) {

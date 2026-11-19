@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,8 +30,8 @@
 ****************************************************************************/
 
 
-#include <stdlib.h>
-#include <ctype.h>
+#include <cstdlib>
+#include <cctype>
 #if defined( __WATCOMC__ ) || !defined( __UNIX__ )
 #include <process.h>
 #endif
@@ -79,20 +79,20 @@ int main( int argc, char *argv[] )
     cmd_line = new char[cmd_len];
     _bgetcmd( cmd_line, cmd_len );
     cmd = cmd_line;
-    while( *cmd != '\0' && isspace( *cmd ) ) {
+    while( *cmd != '\0' && std::isspace( *cmd ) ) {
         cmd++;
     }
     pfilename = NULL;
     if( *cmd == '-' || *cmd == '/' ) {
         cmd++;
-        if( (cmd[0] != 'q' && cmd[0] != 'Q') || !isspace( cmd[1] ) ) {
+        if( (cmd[0] != 'q' && cmd[0] != 'Q') || !std::isspace( cmd[1] ) ) {
             delete[] cmd_line;
             HCWarning( USAGE );
             return( -1 );
         }
         quiet = true;
         cmd++;
-        while( *cmd != '\0' && isspace( *cmd ) ) {
+        while( *cmd != '\0' && std::isspace( *cmd ) ) {
             cmd++;
         }
         if( *cmd == '\0' ) {
@@ -115,7 +115,7 @@ int main( int argc, char *argv[] )
                 return( -1 );
             }
             cmd++;
-            while( *cmd != '\0' && isspace( *cmd ) ) {
+            while( *cmd != '\0' && std::isspace( *cmd ) ) {
                 cmd++;
             }
             if( *cmd != '\0' ) {
@@ -138,17 +138,17 @@ int main( int argc, char *argv[] )
     _fullpath( path, pfilename, _MAX_PATH );
     _splitpath2( path, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
 
-    if( CMPFEXT( pg.ext, PH_EXT ) || CMPFEXT( pg.ext, HLP_EXT ) ) {
+    if( CMPFEXT( pg.ext, FEXT_PH ) || CMPFEXT( pg.ext, FEXT_HLP ) ) {
         delete[] cmd_line;
         HCWarning( BAD_EXT );
         return( -1 );
     }
     if( pg.ext[0] == '\0' ) {
-        _makepath( path, pg.drive, pg.dir, pg.fname, HPJ_EXT );
+        _makepath( path, pg.drive, pg.dir, pg.fname, FEXT_HPJ );
     }
 
     char    destpath[_MAX_PATH];
-    _makepath( destpath, pg.drive, pg.dir, pg.fname, HLP_EXT );
+    _makepath( destpath, pg.drive, pg.dir, pg.fname, FEXT_HLP );
 
     {
         InFile  input( path );
@@ -182,7 +182,7 @@ int main( int argc, char *argv[] )
                                 &bitfiles,
             };
 
-            if( CMPFEXT( pg.ext, RTF_EXT ) ) {
+            if( CMPFEXT( pg.ext, FEXT_RTF ) ) {
                 my_files._topFile = new HFTopic( &helpfile );
                 RTFparser   rtfhandler( &my_files, &input );
                 rtfhandler.Go();

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -58,7 +58,7 @@
 /****************************************************************************/
 
 bool WRENewResource( WRECurrentResInfo *curr, WResID *tname, WResID *rname,
-                     uint_16 memflags, uint_32 offset, uint_32 length,
+                     ResMemFlags res_flags, uint_32 offset, uint_32 length,
                      WResLangType *lang, bool *dup, uint_16 type,
                      bool new_type )
 {
@@ -72,7 +72,7 @@ bool WRENewResource( WRECurrentResInfo *curr, WResID *tname, WResID *rname,
     }
 
     if( ok ) {
-        ok = !WResAddResource( tname, rname, memflags, offset, length,
+        ok = !WResAddResource( tname, rname, res_flags, offset, length,
                                curr->info->info->dir, lang, dup );
     }
 
@@ -90,18 +90,18 @@ bool WRENewResource( WRECurrentResInfo *curr, WResID *tname, WResID *rname,
     }
 
     if( ok && new_type ) {
-        curr->type = WREFindTypeNodeFromWResID( curr->info->info->dir, tname );
-        ok = (curr->type != NULL);
+        curr->typenode = WREFindTypeNodeFromWResID( curr->info->info->dir, tname );
+        ok = (curr->typenode != NULL);
     }
 
     if( ok ) {
-        curr->res = WREFindResNodeFromWResID( curr->type, rname );
-        ok = (curr->res != NULL);
+        curr->resnode = WREFindResNodeFromWResID( curr->typenode, rname );
+        ok = (curr->resnode != NULL);
     }
 
     if( ok ) {
-        curr->lang = WREFindLangNodeFromLangType( curr->res, lang );
-        ok = (curr->lang != NULL);
+        curr->langnode = WREFindLangNodeFromLangType( curr->resnode, lang );
+        ok = (curr->langnode != NULL);
     }
 
     return( ok );

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -80,19 +81,15 @@ static char * MenuOffFlags[16] = {
     NULL
 };
 
-static void PrintPopupItem( MenuItemPopup * item )
-/************************************************/
+static void PrintMenuItem( MenuItem *item )
+/*****************************************/
 {
-    printf( "\tPopup item.   Flags: " );
-    PrintUint16Flags( item->ItemFlags, MenuOnFlags, MenuOffFlags, 43 );
-    printf( "\t    Text: %s\n", item->ItemText );
-}
-
-static void PrintNormalItem( MenuItemNormal * item )
-/**************************************************/
-{
-    printf( "\tNormal item.   Id: %5d  Flags: ", item->ItemID );
-    PrintUint16Flags( item->ItemFlags, MenuOnFlags, MenuOffFlags, 43 );
+    if( IS_MENU_POPUP( item ) ) {
+        printf( "\tPopup item.   Flags: " );
+    } else {
+        printf( "\tNormal item.   Id: %5d  Flags: ", item->ItemId );
+    }
+    PrintUint16Flags( item->u.ItemFlags, MenuOnFlags, MenuOffFlags, 43 );
     printf( "\t    Text: %s\n", item->ItemText );
 }
 
@@ -124,19 +121,13 @@ bool DumpMenu( uint_32 offset, uint_32 length, FILE *fp )
     depth = 1;
     while( depth > 0 && !error ) {
         item = ResNewMenuItem();
-        error = ResReadMenuItem( item, fp );
+        error = ResReadMenuItem( item, false, fp );
         if( !error ) {
-            if( item->IsPopup ) {
+            if( IS_MENU_POPUP( item ) )
                 depth++;
-                PrintPopupItem( &(item->Item.Popup) );
-                if (item->Item.Popup.ItemFlags & MENU_ENDMENU) {
-                    depth--;
-                }
-            } else {
-                PrintNormalItem( &(item->Item.Normal) );
-                if (item->Item.Normal.ItemFlags & MENU_ENDMENU) {
-                    depth--;
-                }
+            PrintMenuItem( item );
+            if( item->u.ItemFlags & MENU_LAST_ITEM ) {
+                depth--;
             }
         }
         ResFreeMenuItem( item );

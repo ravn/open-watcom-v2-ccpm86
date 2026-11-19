@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,7 +31,7 @@
 ****************************************************************************/
 
 
-#include <string.h>
+#include <cstring>
 #include <mbctype.h>
 
 #include <wfiledlg.hpp>
@@ -499,12 +500,12 @@ void OptionManager::loadFrom( const char * file )
             throw DEATH_BY_FILE_READING;    // fixme -- change throw
         }
 
-        if( memcmp( sigCheck, SIG, SIGLEN ) ) {
+        if( std::memcmp( sigCheck, SIG, SIGLEN ) ) {
             errMessage( "%s is not a valid option file", file );
             throw DEATH_BY_FILE_READING;    // fixme -- change throw
         }
 
-        if( memcmp( sigCheck + SIGLEN, VER, VERLEN ) ) {
+        if( std::memcmp( sigCheck + SIGLEN, VER, VERLEN ) ) {
             errMessage( "%s is an out-of-date option file -- ignoring", file );
             throw DEATH_BY_FILE_READING;    // fixme -- change throw
         }
@@ -526,7 +527,7 @@ void OptionManager::loadFrom( const char * file )
         loadFile.read( &_editorIsDLL, sizeof( _editorIsDLL ) );
         loadFile.readNString( _editorParms );
 
-        memcpy( &_current, &_initial, sizeof( OptionSet ) );
+        std::memcpy( &_current, &_initial, sizeof( OptionSet ) );
 
         delete _queryConfig;        // make sure pick up new patterns.
         _queryConfig = NULL;

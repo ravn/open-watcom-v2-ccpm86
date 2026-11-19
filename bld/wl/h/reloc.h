@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -60,11 +60,6 @@
 #define PE_FIX_HIGHADJ          (0x4<<PEUP)     /* see the doc */
 #define PE_FIX_MIPSJMP          (0x5<<PEUP)     /* see the doc */
 
-#define OSF_RLIDX_MASK          0x3FF
-#define OSF_RLIDX_LOW(val)      (val & OSF_RLIDX_MASK)
-#define OSF_RLIDX_HIGH(val)     ((val & (~OSF_RLIDX_MASK)) >> 10)
-#define OSF_RLIDX_MAX           0x400
-
 #define OSF_PAGE_SHIFT          12
 #define OSF_PAGE_SIZE           (1 << OSF_PAGE_SHIFT)
 #define OSF_PAGE_MASK           (OSF_PAGE_SIZE-1)
@@ -74,7 +69,7 @@
 #include "pushpck1.h"
 
 typedef struct os2_reloc_item {
-    unsigned_8      addr_type;          /* see below                     */
+    unsigned_8      fixtype;            /* see below                     */
     unsigned_8      reloc_type;         /* see below                     */
     unsigned_16     reloc_offset;       /* where to put addr in curr grp */
     union addr_to_put {                 /* where,how to get addr to put  */
@@ -174,24 +169,22 @@ typedef union {
     elf_reloc_item      elf;
 } reloc_item;
 
-typedef struct reloc_info RELOC_INFO;
-
 #include "poppck.h"
 
 extern unsigned         FmtRelocSize;
-extern RELOC_INFO       *FloatFixups;
+extern reloc_info       FloatFixups;
 
-extern void             WriteReloc( group_entry *, offset, void *, size_t );
+extern void             WriteReloc( group_entry *group, offset, void *, size_t );
 #ifdef _QNX
 extern void             WriteQNXFloatReloc( qnx_reloc_item * item );
-extern void             WriteQNXLinearReloc( group_entry *, qnx_linear_item * );
+extern void             WriteQNXLinearReloc( group_entry *group, qnx_linear_item * );
 #endif
-extern bool             TraverseOS2RelocList( group_entry *, bool (*)(RELOC_INFO *));
+extern bool             TraverseOS2RelocList( group_entry *group, bool (*fn)(reloc_info));
 extern void             FreeRelocInfo( void );
-extern unsigned_32      RelocSize( RELOC_INFO * );
-extern unsigned_32      DumpMaxRelocList( RELOC_INFO **, unsigned_32 );
-extern bool             DumpRelocList( RELOC_INFO * );
+extern unsigned         RelocSize( reloc_info reloclist );
+extern unsigned         DumpMaxRelocList( reloc_info *reloclist_head, unsigned );
+extern bool             DumpRelocList( reloc_info reloclist );
 extern void             SetRelocSize( void );
 extern bool             SwapOutRelocs( void );
 extern void             ResetReloc( void );
-extern unsigned_32      WalkRelocList( RELOC_INFO **head, bool (*fn)( void *data, size_t size, void *ctx ), void *ctx );
+extern unsigned         WalkRelocList( reloc_info *reloclist_head, bool (*fn)( void *data, size_t size, void *ctx ), void *ctx );

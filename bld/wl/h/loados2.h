@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,17 +37,6 @@
 #ifdef _OS2
 
 // linker specific OS/2 load file stuff.
-
-// the first 4 fields must be the same as the xxx_seg_flags structure
-// defined in objstruc.h
-
-typedef struct os2_seg_flags {
-    struct os2_seg_flags    *next;
-    unsigned_16             flags;
-    char                    *name;
-    segflag_type            type;
-    unsigned_16             specified;  // used for enforcing mutual exclusion
-} os2_seg_flags;
 
 // These used in the specified field.
 #define SEG_IOPL_SPECD  0x800
@@ -91,8 +80,6 @@ typedef struct os2_seg_flags {
 
 #define FLAT_GRANULARITY    _64K
 #define FLAT_ROUND( x )     __ROUND_UP_SIZE( x, FLAT_GRANULARITY )
-
-#include "exeos2.h"
 
 /* in loadflat.c */
 

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,20 +48,14 @@ extern char             **_argv;        /* arguments vector */
 
 #if defined( __WATCOMC__ )
 
-extern int              _fltused_;
-
 #if defined( _M_IX86 )
-
-extern int              _fltused_80bit_;
-#pragma aux _fltused_ "*"
-#pragma aux _fltused_80bit_  "*"
 
 extern unsigned char    _8087;
 extern unsigned char    _real87;
 
 #endif
 
-#endif
+#endif  /* __WATCOMC__ */
 
 #ifdef __cplusplus
 }

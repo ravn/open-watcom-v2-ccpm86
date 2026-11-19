@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,8 +40,6 @@
 #include "misc.h"
 
 
-static byte             RecHdr[3];
-
 static void usage( void )
 /***********************/
 {
@@ -56,6 +54,7 @@ static bool ProcFile( FILE *fp )
     bool        ok;
     int         rc;
     bool        first;
+    char        name[256];
 
     page_len = 0;
     ReadRecInit();
@@ -63,38 +62,33 @@ static bool ProcFile( FILE *fp )
     ok = true;
     while( ok ) {
         offset = ftell( fp );
-        rc = ReadRec( fp, RecHdr );
+        rc = ReadRec( fp );
         if( rc <= 0 ) {
             if( rc == 0 )
                 ok = false;
             break;
         }
-        switch( RecHdr[0] & ~1 ) {
+        switch( GET_RECCMD() ) {
         case CMD_THEADR:
             if( first ) {
-                GetName();
-                NameTerm();
+                GetNameBuf( name );
                 printf( "%s\n", NamePtr );
                 first = false;
             }
             break;
         case CMD_MODEND:
+        case CMD_MODEND32:
             if( page_len != 0 ) {
-                offset = ftell( fp );
-                offset = page_len - offset % page_len;
-                if( offset != page_len ) {
-                    fseek( fp, offset, SEEK_CUR );
-                }
+                AlignFile( fp, page_len );
             }
             first = true;
             break;
         case LIB_HEADER_REC:
-            if( RecHdr[0] & 1 ) {
-                fseek( fp, 0L, SEEK_END );
-                page_len = 0;
-            } else {
-                page_len = GET_RECLEN( RecHdr ) - 1 + 4;
-            }
+            page_len = GET_RECLEN() - 1 + 4;
+            break;
+        case LIB_TRAILER_REC:
+            fseek( fp, 0L, SEEK_END );
+            page_len = 0;
             break;
         default:
             break;

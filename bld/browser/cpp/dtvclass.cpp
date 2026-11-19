@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,10 +40,11 @@
 #include "assure.h"
 #include "dtvclass.h"
 #include "classtyp.h"
-#include "brmem.h"
+#include "memfuncs.h"
 #include "util.h"
 #include "menuids.h"
 #include "viewmgr.h"
+
 
 static char * AccessStr[] = {
     "",
@@ -200,7 +202,7 @@ void DTViewClass::event( ViewEvent ev, View * )
 
     switch( ev ) {
     case VEOptionValChange:
-        if( memcmp( &_filter, &test, sizeof( MemberFilter ) ) ) {
+        if( std::memcmp( &_filter, &test, sizeof( MemberFilter ) ) ) {
             _filter = optManager()->getMemberFilter();
             load();
         }
@@ -281,7 +283,7 @@ void DTViewClass::addDescriptions()
                 tmpName = NULL;
             }
             desc.append( new ClassMember( mem->_parent, (dr_access)0, tmpName ) );
-            WBRFree( tmpName );
+            MemFree( tmpName );
         }
         if( mem->_access != prevAccess ) {
             prevAccess = mem->_access;

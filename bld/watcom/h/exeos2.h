@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -75,6 +75,7 @@ typedef struct os2_exe_header {
     unsigned_16         swaparea;
     unsigned_16         expver;
 } os2_exe_header;
+#include "poppck.h"
 
 #define RAT_SIGNATURE_WORD          EXESIGN_LE
 #define OS2_SIGNATURE_WORD          EXESIGN_NE
@@ -173,32 +174,39 @@ typedef struct segment_record {
  *
  *****************************************************************************/
 
-/* NOTE: the linker uses some of the unused bits here. If these bits become
- * used, make sure the linker developer knows about it! */
+/*
+ * NOTE: the linker uses some of the unused bits here. If these bits become
+ * used, make sure the linker developer knows about it!
+ */
 
-#define SEG_DATA            1
-#define SEG_FLAG_1       0x02
-#define SEG_FLAG_2       0x04
-#define SEG_ITERATED        8
-#define SEG_MOVABLE      0x10
-#define SEG_PURE         0x20       /* i.e. segment is sharable. */
-#define SEG_PRELOAD      0x40
-#define SEG_READ_ONLY    0x80
-#define SEG_RELOC       0x100
-#define SEG_CONFORMING  0x200       /* was SEG_DEBUG */
-#define SEG_LEVEL_1     0x400
-#define SEG_LEVEL_2     0x800
-#define SEG_LEVEL_3     0xC00
-#define SEG_DISCARD    0x1000
-#define SEG_32_BIT     0x2000
-#define SEG_HUGE       0x4000
-#define SEG_RESRC_HIGH 0x8000
-#define SEG_SHIFT_PMODE_LVL     10
-#define SEG_SHIFT_PRI_LVL       12
+#define SEG_SHIFT_PMODE_DPL         10
+#define SEG_SHIFT_DISCARD_PRIORITY  12
 
-#define SEG_LEVEL_MASK  0x0C00
+typedef enum seg_flags_type {
+    SEG_NONE          = 0x0000,
+    SEG_DATA          = 0x0001,
+    SEG_FLAG_1        = 0x0002,
+    SEG_FLAG_2        = 0x0004,
+    SEG_ITERATED      = 0x0008,
+    SEG_MOVABLE       = 0x0010,
+    SEG_PURE          = 0x0020,       /* i.e. segment is sharable. */
+    SEG_PRELOAD       = 0x0040,
+    SEG_READ_ONLY     = 0x0080,
+    SEG_RELOC         = 0x0100,
+    SEG_CONFORMING    = 0x0200,       /* was SEG_DEBUG */
+    SEG_PMODE_DPL     = 0x0400 | 0x0800,
+    SEG_DISCARD_PRIOR = 0x1000 | 0x2000 | 0x3000 | 0x4000,
+    SEG_DISCARD       = 0x1000,
+    SEG_32_BIT        = 0x2000,
+    SEG_HUGE          = 0x4000,
+    SEG_RESRC_HIGH    = 0x8000,
+} seg_flags_type;
 
-#define MOVABLE_ENTRY_PNT       0xff
+#define GET_SEG_DISCARD_PRIORITY(x) (((x) & SEG_DISCARD_PRIOR) >> SEG_SHIFT_DISCARD_PRIORITY)
+#define GET_SEG_PMODE_DPL(x)        (((x) & SEG_PMODE_DPL) >> SEG_SHIFT_PMODE_DPL)
+#define SET_SEG_PMODE_DPL(x,v)      (x) = (((x) & ~SEG_PMODE_DPL) | (((v) & 3) << SEG_SHIFT_PMODE_DPL))
+
+#define MOVABLE_ENTRY_PNT   0xff
 
 typedef struct bundle_prefix {
     unsigned_8          number;         /* number of entries in bundle      */
@@ -209,6 +217,7 @@ typedef struct bundle_prefix {
                                         /*        segment nn                */
 } bundle_prefix;
 
+#include "pushpck1.h"
 typedef struct movable_record {
     unsigned_8          info;           /* flags: 1 = exported entry        */
                                         /*    2 = uses shared data segment  */
@@ -216,41 +225,43 @@ typedef struct movable_record {
     unsigned_8          entrynum;       /* segment # containing entry point */
     unsigned_16         entry;          /* offset of entry point            */
 } movable_record;
+#include "poppck.h"
 
 #define ENTRY_EXPORTED  0x01
 #define ENTRY_SHARED    0x02
 #define IOPL_WORD_SHIFT 3
 
+#include "pushpck1.h"
 typedef struct fixed_record {
     unsigned_8          info;           /* flags: 1 = exported entry        */
                                         /*    2 = uses shared data segment  */
     unsigned_16         entry;          /* offset of entry point            */
 } fixed_record;
+#include "poppck.h"
 
 #define OS2_DEF_SEGMENT_SHIFT  9
 
 /* The resource table entries type */
 typedef struct resource_table_record {
-    unsigned_16         type;           /* resource type */
-    unsigned_16         name;           /* resource name */
+    unsigned_16         type_id;        /* resource type */
+    unsigned_16         res_id;         /* resource name */
 } resource_table_record;
 
-/* repeated for each type */
+/* repeated for each resource type (type_id) */
 typedef struct resource_type_record {
-    unsigned_16         type;           /* see below */
+    unsigned_16         type_id;        /* see below */
     unsigned_16         num_resources;  /* of this type */
     unsigned_32         reserved;
 } resource_type_record;
 
-/* repeated for each instance of this type */
+/* repeated for each instance of resource type (res_id) */
 typedef struct resource_record {
     unsigned_16         offset;         /* after resource shift */
     unsigned_16         length;         /* after resource shift */
     unsigned_16         flags;          /* resource flags */
-    unsigned_16         name;
+    unsigned_16         res_id;
     unsigned_32         reserved;
 } resource_record;
-#include "poppck.h"
 
 /* resource flags are any combination of SEG_MOVABLE, SEG_PURE, SEG_PRELOAD, */
 /* and SEG_DISCARD */

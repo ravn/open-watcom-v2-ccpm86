@@ -58,7 +58,7 @@ static void buildOS2ResTable( OS2ResTable *restab, WResDir dir )
     WResTypeInfo    *typeinfo;
     WResResInfo     *resinfo;
     uint_16         type_id;
-    uint_16         name_id;
+    uint_16         res_id;
     int_32          length;
 
     /*
@@ -80,25 +80,25 @@ static void buildOS2ResTable( OS2ResTable *restab, WResDir dir )
         if( !typeinfo->TypeName.IsName )
             type_id = typeinfo->TypeName.ID.Num;
 
-        name_id = 0;
+        res_id = 0;
         if( !resinfo->ResName.IsName )
-            name_id = resinfo->ResName.ID.Num;
+            res_id = resinfo->ResName.ID.Num;
         /*
          * Fill in resource entries
          */
-        entry->res_type   = type_id;
-        entry->res_name   = name_id;
+        entry->type_id    = type_id;
+        entry->res_id     = res_id;
         entry->wind       = wind;
-        entry->mem_flags  = langinfo->MemoryFlags;
+        entry->res_flags  = langinfo->res_flags;
         entry->seg_length = 0;  /* Zero means 64K */
         entry->first_part = true;
 
         for( length = langinfo->Length; length > 0x10000; length -= 0x10000 ) {
             entry++;
-            entry->res_type   = type_id;
-            entry->res_name   = name_id;
+            entry->type_id    = type_id;
+            entry->res_id     = res_id;
             entry->wind       = wind;
-            entry->mem_flags  = langinfo->MemoryFlags;
+            entry->res_flags  = langinfo->res_flags;
             entry->seg_length = 0;
             entry->first_part = false;
         }
@@ -113,7 +113,7 @@ static int compareOS2ResTypeId( const void *e1, const void *e2 )
 {
 #define LXRE(e) ((LXResEntry *)(e))
     if( LXRE(e1)->resource.type_id == LXRE(e2)->resource.type_id ) {
-        return( LXRE(e1)->resource.name_id - LXRE(e2)->resource.name_id );
+        return( LXRE(e1)->resource.res_id - LXRE(e2)->resource.res_id );
     } else {
         return( LXRE(e1)->resource.type_id - LXRE(e2)->resource.type_id );
     }
@@ -281,14 +281,15 @@ RcStatus CopyOS2Resources( ExeFileInfo *dst, ResFileInfo *res )
         dst_seg->address = seg_offset >> shift_count;
         dst_seg->size    = entry->seg_length;
         dst_seg->min     = entry->seg_length;
-        dst_seg->info    = SEG_DATA | SEG_READ_ONLY | SEG_LEVEL_3;
-        if( entry->mem_flags & MEMFLAG_MOVEABLE )
+        dst_seg->info    = SEG_DATA | SEG_READ_ONLY;
+        SET_SEG_PMODE_DPL( dst_seg->info, 3 );
+        if( entry->res_flags & RESFLAG_MOVEABLE )
             dst_seg->info |= SEG_MOVABLE;
-        if( entry->mem_flags & MEMFLAG_PURE )
+        if( entry->res_flags & RESFLAG_PURE )
             dst_seg->info |= SEG_PURE;
-        if( entry->mem_flags & MEMFLAG_PRELOAD )
+        if( entry->res_flags & RESFLAG_PRELOAD )
             dst_seg->info |= SEG_PRELOAD;
-        if( entry->mem_flags & MEMFLAG_DISCARDABLE )
+        if( entry->res_flags & RESFLAG_DISCARDABLE )
             dst_seg->info |= SEG_DISCARD;
         /*
          * For non-last segment of a resource, there's nothing to copy
@@ -323,8 +324,8 @@ RcStatus WriteOS2ResTable( FILE *fp, OS2ResTable *restab, int *err_code )
 
     ret = RS_OK;
     for( i = 0; i < restab->num_res_segs && ret == RS_OK; i++ ) {
-        res_tab.type = restab->resources[i].res_type;
-        res_tab.name = restab->resources[i].res_name;
+        res_tab.type_id = restab->resources[i].type_id;
+        res_tab.res_id = restab->resources[i].res_id;
         if( RESWRITE( fp, &res_tab, sizeof( res_tab ) ) != sizeof( res_tab ) ) {
             ret = RS_WRITE_ERROR;
         }

@@ -187,33 +187,33 @@ void WRAPI WRMakeHashTableClean( WRHashTable *table )
 
 bool WRAPI WRDeleteDLGInclude( WResDir dir )
 {
-    WResTypeNode        *tnode;
-    WResResNode         *rnode;
-    WResLangNode        *lnode;
+    WResTypeNode        *typenode;
+    WResResNode         *resnode;
+    WResLangNode        *langnode;
     WResLangType        lang;
     bool                ok;
 
     ok = (dir != NULL);
 
     if( ok ) {
-        tnode = WRFindTypeNode( dir, RESOURCE2INT( RT_RCDATA ), NULL );
-        ok = (tnode != NULL);
+        typenode = WRFindTypeNode( dir, RESOURCE2INT( RT_RCDATA ), NULL );
+        ok = (typenode != NULL);
     }
 
     if( ok ) {
-        rnode = WRFindResNode( tnode, 0, "DLGINCLUDE" );
-        ok = (rnode != NULL);
+        resnode = WRFindResNode( typenode, 0, "DLGINCLUDE" );
+        ok = (resnode != NULL);
     }
 
     if( ok ) {
         lang.lang = DEF_LANG;
         lang.sublang = DEF_SUBLANG;
-        lnode = WRFindLangNodeFromLangType( rnode, &lang );
-        ok = (lnode != NULL);
+        langnode = WRFindLangNodeFromLangType( resnode, &lang );
+        ok = (langnode != NULL);
     }
 
     if( ok ) {
-        ok = WRRemoveLangNodeFromDir( dir, &tnode, &rnode, &lnode );
+        ok = WRRemoveLangNodeFromDir( dir, &typenode, &resnode, &langnode );
     }
 
     return( ok );
@@ -260,7 +260,7 @@ bool WRAPI WRCreateDLGInclude( WResDir *dir, const char *include )
         lang.lang = DEF_LANG;
         lang.sublang = DEF_SUBLANG;
         len = strlen( include ) + 1;
-        ok = !WResAddResource( type, res, MEMFLAG_DISCARDABLE, 0, len, *dir, &lang, NULL );
+        ok = !WResAddResource( type, res, RESFLAG_DISCARDABLE, 0, len, *dir, &lang, NULL );
     }
 
     if( ok ) {

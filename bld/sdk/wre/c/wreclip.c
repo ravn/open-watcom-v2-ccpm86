@@ -85,7 +85,7 @@ typedef struct WREClipData {
     size_t      data_size;
     uint_32     data_offset;
     uint_16     type_id;
-    uint_16     memflags;
+    ResMemFlags res_flags;
     bool        is32bit;
     char        name[1];
 } WREClipData;
@@ -253,9 +253,9 @@ static bool WREHandleClipDataNames( WREResInfo *info, WResID *type,
             }
             if( *replace ) {
                 curr.info = info;
-                curr.type = WREFindTypeNodeFromWResID( info->info->dir, type );
-                curr.res = WREFindResNodeFromWResID( curr.type, *name );
-                curr.lang = WREFindLangNodeFromLangType( curr.res, &lang );
+                curr.typenode = WREFindTypeNodeFromWResID( info->info->dir, type );
+                curr.resnode = WREFindResNodeFromWResID( curr.typenode, *name );
+                curr.langnode = WREFindLangNodeFromLangType( curr.resnode, &lang );
                 ok = WREDeleteResource( &curr, true );
                 if( !ok ) {
                     break;
@@ -353,13 +353,13 @@ static bool WREGetAndPasteResource( WREClipFormat *fmt )
                 new_type = (WREFindTypeNodeFromWResID( curr.info->info->dir, ctype ) == NULL);
             }
         }
-        ok = WRENewResource( &curr, ctype, cname, cdata->memflags, 0,
+        ok = WRENewResource( &curr, ctype, cname, cdata->res_flags, 0,
                              (uint_32)cdata->data_size, &lang, &dup, tn->type,
                              new_type ) && !dup;
     }
 
     if( ok ) {
-        curr.lang->data = data;
+        curr.langnode->data = data;
         WRESetResModified( curr.info, true );
     }
 
@@ -451,7 +451,7 @@ static bool WREGetAndPasteIconOrCursor( WREClipFormat *fmt )
                 new_type = (WREFindTypeNodeFromWResID( curr.info->info->dir, ctype ) == NULL );
             }
         }
-        ok = WRENewResource( &curr, ctype, cname, cdata->memflags, 0,
+        ok = WRENewResource( &curr, ctype, cname, cdata->res_flags, 0,
                              (uint_32)cdata->data_size, &lang, &dup, fmt->type_id,
                              new_type ) && !dup;
     }
@@ -545,13 +545,13 @@ static bool WREGetAndPasteBitmap( WREClipFormat *fmt, char *data, uint_32 dsize 
                 new_type = (WREFindTypeNodeFromWResID( curr.info->info->dir, ctype ) == NULL );
             }
         }
-        ok = WRENewResource( &curr, ctype, cname, DEF_MEMFLAGS, 0,
+        ok = WRENewResource( &curr, ctype, cname, DEFAULT_FLAGS_MP, 0,
                              dsize, &lang, &dup, RESOURCE2INT( RT_BITMAP ),
                              new_type ) && !dup;
     }
 
     if( ok ) {
-        curr.lang->data = data;
+        curr.langnode->data = data;
         WRESetResModified( curr.info, true );
     }
 
@@ -710,17 +710,17 @@ WREClipData *WRECreateClipData( WRECurrentResInfo *curr )
     name = NULL;
     type_id = 0;
 
-    ok = (curr != NULL && curr->type != NULL && curr->res != NULL && curr->lang != NULL);
+    ok = (curr != NULL && curr->typenode != NULL && curr->resnode != NULL && curr->langnode != NULL);
 
     if( ok ) {
-        if( !curr->type->Info.TypeName.IsName ) {
-            type_id = curr->type->Info.TypeName.ID.Num;
+        if( !curr->typenode->Info.TypeName.IsName ) {
+            type_id = curr->typenode->Info.TypeName.ID.Num;
         }
         ok = ( type_id != 0 );
     }
 
     if( ok ) {
-        ok = WRDataFromWResID( &curr->res->Info.ResName, &name, &name_size, curr->info->is32bit );
+        ok = WRDataFromWResID( &curr->resnode->Info.ResName, &name, &name_size, curr->info->is32bit );
     }
 
     if( ok ) {
@@ -730,7 +730,7 @@ WREClipData *WRECreateClipData( WRECurrentResInfo *curr )
             ok = WRECreateCursorDataFromGroup( curr, &rdata, &rdata_size );
         } else {
             rdata = WREGetCopyResData( curr );
-            rdata_size = curr->lang->Info.Length;
+            rdata_size = curr->langnode->Info.Length;
             ok = (rdata != NULL && rdata_size != 0);
         }
     }
@@ -746,7 +746,7 @@ WREClipData *WRECreateClipData( WRECurrentResInfo *curr )
         cdata->data_size = rdata_size;
         cdata->data_offset = cdata_size - rdata_size;
         cdata->type_id = type_id;
-        cdata->memflags = curr->lang->Info.MemoryFlags;
+        cdata->res_flags = curr->langnode->Info.res_flags;
         cdata->is32bit = curr->info->is32bit;
         memcpy( &cdata->name[0], name, name_size );
         memcpy( &cdata->name[name_size], rdata, rdata_size );
@@ -778,7 +778,7 @@ bool WREClipBitmap( WRECurrentResInfo *curr, HWND main )
     data = NULL;
     hbitmap = (HBITMAP)NULL;
 
-    ok = (curr != NULL && curr->type != NULL && curr->res != NULL && curr->lang != NULL);
+    ok = (curr != NULL && curr->typenode != NULL && curr->resnode != NULL && curr->langnode != NULL);
 
     if( ok ) {
         data = WREGetCopyResData( curr );
@@ -786,7 +786,7 @@ bool WREClipBitmap( WRECurrentResInfo *curr, HWND main )
     }
 
     if( ok ) {
-        dsize = curr->lang->Info.Length;
+        dsize = curr->langnode->Info.Length;
         ok = WRAddBitmapFileHeader( &data, &dsize );
     }
 
@@ -807,7 +807,7 @@ bool WREClipBitmap( WRECurrentResInfo *curr, HWND main )
     }
 
     if( ok ) {
-        WRRememberBitmapName( &curr->res->Info.ResName );
+        WRRememberBitmapName( &curr->resnode->Info.ResName );
     }
 
     if( data != NULL ) {
@@ -885,11 +885,11 @@ bool WREClipCurrentResource( HWND main, bool cut )
 
     WREGetCurrentResource( &curr );
 
-    ok = (curr.info != NULL && curr.type != NULL);
+    ok = (curr.info != NULL && curr.typenode != NULL);
 
     if( ok ) {
-        if( !curr.type->Info.TypeName.IsName ) {
-            type_id = curr.type->Info.TypeName.ID.Num;
+        if( !curr.typenode->Info.TypeName.IsName ) {
+            type_id = curr.typenode->Info.TypeName.ID.Num;
         }
         ok = ( type_id != 0 );
     }

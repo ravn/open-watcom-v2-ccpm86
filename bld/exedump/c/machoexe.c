@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,6 +37,7 @@
 
 #include "wdglb.h"
 #include "wdfunc.h"
+#include "macho.h"
 
 
 static  const_string_table m_segment_msg[] = {
@@ -133,7 +135,7 @@ static void dmp_sec_strtab( unsigned_32 offset, unsigned_32 size )
     for( ptr = string_table; ptr < (string_table + size); ) {
         if( *ptr ) {
             Puthex( (unsigned_32)( ptr - string_table ), 8 );
-            Wdputslc( ": " );
+            Wdputs( ": " );
             Wdputs( ptr );
             Wdputslc( "\n" );
             ptr += strlen( ptr );
@@ -316,55 +318,49 @@ static void dmp_sec_type( unsigned_32 type )
 }
 
 /*
- * dump the program flag word
+ * dump the program flags word
  */
-static void dmp_prog_flgs( unsigned_32 flags )
-/********************************************/
+static void dmp_prog_flags( unsigned_32 flags )
+/*********************************************/
 {
-    char    name[128];
+    char            buffer[128];
+    char            *p;
 
-    name[0] = '\0';
+    p = buffer;
     if( flags & PF_X ) {
-        strcat( name, " EXECUTABLE |" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "EXECUTABLE" );
     }
     if( flags & PF_W ) {
-        strcat( name, " WRITABLE |" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "WRITABLE" );
     }
     if( flags & PF_R ) {
-        strcat( name, " READABLE |" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "READABLE" );
     }
-    if( name[strlen(name)-1] == '|' ) {
-        name[strlen(name)-1] = '\0';
-    }
-    Wdputs( "flags = " );
-    Wdputs( name );
-    Wdputslc( "\n" );
+    *p = '\0';
+    Wdputs( buffer );
 }
 
 /*
- * dump the section flag word
+ * dump the section flags word
  */
-static void dmp_sec_flgs( unsigned_32 flags )
-/*******************************************/
+static void dmp_sec_flags( unsigned_32 flags )
+/********************************************/
 {
-    char    name[128];
+    char            buffer[128];
+    char            *p;
 
-    name[0] = '\0';
+    p = buffer;
     if( flags & SHF_WRITE ) {
-        strcat( name, " WRITABLE |" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "WRITABLE" );
     }
     if( flags & SHF_ALLOC ) {
-        strcat( name, " ALLOC_SPACE |" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "ALLOC_SPACE" );
     }
     if( flags & SHF_EXECINSTR ) {
-        strcat( name, " EXEC_INSTR |" );
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "EXEC_INSTR" );
     }
-    if( name[strlen(name)-1] == '|' ) {
-        name[strlen(name)-1] = '\0';
-    }
-    Wdputs( "flags = " );
-    Wdputs( name );
-    Wdputslc( "\n" );
+    *p = '\0';
+    Wdputs( buffer );
 }
 
 /*
@@ -418,7 +414,7 @@ static void set_dwarf( unsigned_32 start )
     unsigned_32     sections[DR_DEBUG_NUM_SECTS];
 
     // grab the string table, if it exists
-    if( !Elf_head.elf32.e_shstrndx ) {
+    if( Elf_head.elf32.e_shstrndx == 0 ) {
         return; // no strings no dwarf
     }
     if( Elf_head.elf32.e_shnum == 0 ) {
@@ -426,8 +422,7 @@ static void set_dwarf( unsigned_32 start )
     }
     memset( sections, 0, DR_DEBUG_NUM_SECTS * sizeof( unsigned_32 ) );
     memset( sectsizes, 0, DR_DEBUG_NUM_SECTS * sizeof( unsigned_32 ) );
-    offset = Elf_head.elf32.e_shoff
-           + Elf_head.elf32.e_shstrndx * Elf_head.elf32.e_shentsize+start;
+    offset = Elf_head.elf32.e_shoff + Elf_head.elf32.e_shstrndx * Elf_head.elf32.e_shentsize+start;
     Wlseek( offset );
     Wread( &elf_sec, sizeof( Elf32_Shdr ) );
     swap_shdr( &elf_sec );
@@ -440,7 +435,7 @@ static void set_dwarf( unsigned_32 start )
         swap_shdr( &elf_sec );
         if( elf_sec.sh_type == SHT_PROGBITS ) {
             sect = Lookup_section_name( &string_table[elf_sec.sh_name] );
-            if ( sect < DW_DEBUG_MAX ) {
+            if( sect < DW_DEBUG_MAX ) {
                 sections[sect] = elf_sec.sh_offset + start;
                 sectsizes[sect] = elf_sec.sh_size;
             }
@@ -533,8 +528,7 @@ static void dmp_prog_sec( unsigned_32 start )
         set_dwarf( start );
     }
     if( Elf_head.elf32.e_shstrndx ) {
-        offset = Elf_head.elf32.e_shoff
-               + Elf_head.elf32.e_shstrndx * Elf_head.elf32.e_shentsize+start;
+        offset = Elf_head.elf32.e_shoff + Elf_head.elf32.e_shstrndx * Elf_head.elf32.e_shentsize+start;
         Wlseek( offset );
         Wread( &elf_sec, sizeof( Elf32_Shdr ) );
         swap_shdr( &elf_sec );
@@ -564,9 +558,12 @@ static void dmp_prog_sec( unsigned_32 start )
             Data_count++;
             dmp_prog_type( elf_prog.p_type );
             Dump_header( &elf_prog, elf_prog_msg, 4 );
-            dmp_prog_flgs( elf_prog.p_flags );
+            Wdputs( "flags = " );
+            dmp_prog_flags( elf_prog.p_flags );
+            Wdputslc( "\n" );
             if( Options_dmp & (DOS_SEG_DMP | OS2_SEG_DMP) ) {
-                if( Segspec == 0 || Segspec == Data_count ) {
+                if( Segspec == 0
+                  || Segspec == Data_count ) {
                     Dmp_seg_data( elf_prog.p_offset + start, elf_prog.p_filesz );
                 }
             } else if( elf_prog.p_type == PT_NOTE ) {
@@ -598,9 +595,12 @@ static void dmp_prog_sec( unsigned_32 start )
             }
             dmp_sec_type( elf_sec.sh_type );
             Dump_header( &elf_sec.sh_name, elf_sec_msg, 4 );
-            dmp_sec_flgs( elf_sec.sh_flags );
+            Wdputs( "flags = " );
+            dmp_sec_flags( elf_sec.sh_flags );
+            Wdputslc( "\n" );
             if( Options_dmp & FIX_DMP ) {
-                if( elf_sec.sh_type==SHT_REL || elf_sec.sh_type==SHT_RELA ) {
+                if( elf_sec.sh_type == SHT_REL
+                  || elf_sec.sh_type == SHT_RELA ) {
                     Elf32_Shdr      rel_sec;
                     Elf32_Rela      elf_rela;
                     unsigned long   loc;
@@ -664,7 +664,8 @@ static void dmp_prog_sec( unsigned_32 start )
                                   elf_sec.sh_size );
                 }
             } else if( Options_dmp & OS2_SEG_DMP ) {
-                if( elf_sec.sh_size && elf_sec.sh_type != SHT_NOBITS ) {
+                if( elf_sec.sh_size
+                  && elf_sec.sh_type != SHT_NOBITS ) {
                     Wdputslc( "Section dump:\n" );
                     Dmp_seg_data( elf_sec.sh_offset + start, elf_sec.sh_size );
                 }
@@ -699,19 +700,20 @@ bool Dmp_machlib_head( void )
     Elf_off = LIBMAG_LEN + LIB_CLASS_LEN + LIB_DATA_LEN;
     Wlseek( Elf_off );
     for( ;; ) {
-        if( Elf_off + LIB_HEADER_SIZE >= filesize ) break;
+        if( Elf_off + LIB_HEADER_SIZE >= filesize )
+            break;
         Wread( &hdr, LIB_HEADER_SIZE );
         Elf_off += LIB_HEADER_SIZE;
-        hdr.lib_date[0]='\0';
+        hdr.lib_date[0] = '\0';
         Wdputs( "lib name = " );
         Wdputs( hdr.lib_name );
         Wdputslc( "\n" );
         hdr.lib_fmag[0] = '\0';
         size = strtoul( hdr.lib_size, NULL, 10 );
         if( !Dmp_elf_header( Elf_off ) ) {
-            if( strcmp( hdr.lib_name, LIB_SYMTAB_NAME ) &&
-                strcmp( hdr.lib_name, LIB_LFTAB_NAME ) &&
-                strcmp( hdr.lib_name, LIB_FFTAB_NAME ) ) {
+            if( strcmp( hdr.lib_name, LIB_SYMTAB_NAME )
+              && strcmp( hdr.lib_name, LIB_LFTAB_NAME )
+              && strcmp( hdr.lib_name, LIB_FFTAB_NAME ) ) {
                 Wdputslc( "archive entry not identified\n" );
             }
             Dmp_seg_data( Elf_off, size );
@@ -750,9 +752,9 @@ static void dmp_cmd_list( unsigned_32 start, int n )
             Dump_header( &seg, m_segment_msg, 4 );
             break;
         default:
-            Wdputs( "\ncmd       = " );
+            Wdputslc( "\ncmd       = " );
             Puthex( cmd, 8 );
-            Wdputs( "H\ncmdsize   = " );
+            Wdputslc( "H\ncmdsize   = " );
             Puthex( cmdsize, 8 );
             Wdputs( "H" );
         }
@@ -771,7 +773,8 @@ bool Dmp_macho_header( unsigned long start )
     struct mach_header  mhead;
 
     Wread( &mhead, sizeof( mhead ) );
-    if( (mhead.magic != MH_MAGIC) && (mhead.magic != MH_CIGAM) ) {
+    if( (mhead.magic != MH_MAGIC)
+      && (mhead.magic != MH_CIGAM) ) {
         return( false );
     }
     if( mhead.magic == MH_CIGAM ) {
@@ -792,11 +795,11 @@ bool Dmp_macho_header( unsigned long start )
     }
     Wdputs( "magic                                       = " );
     Puthex( mhead.magic, 8 );
-    Wdputs( "\ncputype                                     = " );
+    Wdputslc( "\ncputype                                     = " );
     Puthex( mhead.cputype, 8 );
-    Wdputs( "H\ncpusubtype                                  = " );
+    Wdputslc( "H\ncpusubtype                                  = " );
     Puthex( mhead.cpusubtype, 8 );
-    Wdputs( "H\nfiletype                                    = " );
+    Wdputslc( "H\nfiletype                                    = " );
     Puthex( mhead.filetype, 8 );
     Wdputslc( "H\nncmds                                       = " );
     Puthex( mhead.ncmds, 8 );

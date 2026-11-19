@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,7 +38,7 @@
 #include "wdfunc.h"
 
 
-struct  int_entry_pnt     *Entry_pnts = NULL;
+int_entry_pnt       *Entry_pnts = NULL;
 
 static  char    *bund_types[] = {
     "EMPTY", "ENTRY16", "GATE16", "ENTRY32",
@@ -74,21 +74,19 @@ static unsigned_16 dmp_res_nonres_name( void )
 
     len = read_res_nonres_name( name, &entry_index );
     if( len ) {
-        if( Form == FORM_NE ) {
-            Wdputs( name );
-            Dmp_ordinal( entry_index );
-        } else {
-            Wdputs( "ordinal " );
-            Puthex( entry_index, 2 * sizeof( entry_index ) );
-            Wdputs( ": " );
-            Wdputs( name );
+        Putdec( entry_index );
+        Wdputs( ": " );
+        Wdputs( name );
+        if( Form == FORM_NE && entry_index ) {
+            if( Dmp_ordinal( entry_index ) ) {
+                Wdputs( " (unknown ordinal)" );
+            }
         }
         Wdputslc( "\n" );
         /* Length byte + string + ordinal. */
         return( sizeof( len ) + len + sizeof( entry_index ) );
-    } else {
-        return( 0 );
     }
+    return( 0 );
 }
 
 /*
@@ -303,13 +301,13 @@ static void dmp_ent_tab( unsigned_32 ent_tab )
 
     Wlseek( ent_tab );
     Wread( &ent_bund_pfx, sizeof( ent_bund_pfx ) );
-    if( !ent_bund_pfx.b32_cnt ) {
+    if( ent_bund_pfx.b32_cnt == 0 ) {
         return;
     }
     Wdputslc( "\n" );
     Banner( "Entry Point Table" );
     for( ; ent_bund_pfx.b32_cnt != 0; ) {
-        Wdputs( "\nnumber of entries in bundle = " );
+        Wdputslc( "\nnumber of entries in bundle = " );
         Puthex( ent_bund_pfx.b32_cnt, 2 );
         Wdputslc( "\ntype = " );
         Puthex( ent_bund_pfx.b32_type, 2 );
@@ -333,14 +331,20 @@ static void dmp_ent_tab( unsigned_32 ent_tab )
 /*
  * allocate a new int_entry_pnt structure
  */
-static struct int_entry_pnt *new_ent_pnt( void )
-/**********************************************/
+static int_entry_pnt *new_ent_pnt( void )
+/***************************************/
 {
-    struct int_entry_pnt    *new_ent;
+    int_entry_pnt           *new_ent;
+    static int_entry_pnt    *tail = NULL;
 
-    new_ent = Wmalloc( sizeof( struct int_entry_pnt ) );
-    new_ent->next = Entry_pnts;
-    Entry_pnts = new_ent;
+    new_ent = Wmalloc( sizeof( *new_ent ) );
+    new_ent->next = NULL;
+    if( tail == NULL ) {
+        Entry_pnts = new_ent;
+    } else {
+        tail->next = new_ent;
+    }
+    tail = new_ent;
     return( new_ent );
 }
 
@@ -348,16 +352,16 @@ static void *dmp_fixed_seg_ent_pnts( unsigned_16 num_ent_pnts,
         void *ent_pnts, unsigned_16 ent_pnt_index, unsigned_16 seg_num )
 /**********************************************************************/
 {
-    struct fixed_record             *fix_ent;
-    struct int_entry_pnt            *new;
+    fixed_record    *fix_ent;
+    int_entry_pnt   *new;
 
     fix_ent = ent_pnts;
-    for( ; num_ent_pnts != 0; num_ent_pnts-- ) {
+    while( num_ent_pnts-- > 0 ) {
         new = new_ent_pnt();
         new->ordinal = ent_pnt_index++;
         new->seg_num = seg_num;
         new->offset = fix_ent->entry;
-        new->ent_flag = fix_ent->info;
+        new->flags = fix_ent->info;
         ++fix_ent;
     }
     return( fix_ent );
@@ -367,14 +371,14 @@ static void *dmp_movable_seg_ent_pnts( unsigned_16 num_ent_pnts,
                         void *ent_pnts, unsigned_16 ent_pnt_index )
 /*****************************************************************/
 {
-    struct movable_record           *mov_ent;
-    struct int_entry_pnt            *new;
+    movable_record  *mov_ent;
+    int_entry_pnt   *new;
 
     mov_ent = ent_pnts;
-    for( ; num_ent_pnts != 0; num_ent_pnts-- ) {
+    while( num_ent_pnts-- > 0 ) {
         new = new_ent_pnt();
         new->ordinal = ent_pnt_index++;
-        new->ent_flag = mov_ent->info;
+        new->flags = mov_ent->info;
         new->seg_num = mov_ent->entrynum;
         new->offset = mov_ent->entry;
         ++mov_ent;
@@ -421,10 +425,12 @@ static void prs_ent_tab( unsigned_32 ent_tab, unsigned_16 ent_tab_len )
     free( init_ent_bund );
 }
 
-static void dmp_an_ord( struct int_entry_pnt *find )
-/**************************************************/
+static void dmp_an_ord( int_entry_pnt *find )
+/*******************************************/
 {
-    unsigned_16     flag;
+    unsigned_16     flags;
+    char            buffer[128];
+    char            *p;
 
     Wdputc( '.' );
     Putdec( find->ordinal );
@@ -433,32 +439,37 @@ static void dmp_an_ord( struct int_entry_pnt *find )
     Wdputs( " off " );
     Puthex( find->offset, 4 );
     Wdputs( " parm " );
-    flag = find->ent_flag;
-    Puthex( flag >> 3, 2 );
-    if( flag & ENTRY_EXPORTED ) {
-        Wdputs( " EXPORTED" );
+    flags = find->flags;
+    Puthex( flags >> 3, 2 );
+    p = buffer;
+    if( flags & ENTRY_EXPORTED ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "EXPORTED" );
     }
-    if( flag & ENTRY_SHARED ) {
-        Wdputs( "|SHAREDATA" );
+    if( flags & ENTRY_SHARED ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "SHAREDATA" );
+    }
+    *p = '\0';
+    if( *buffer != '\0' ) {
+        Wdputs( "  " );
+        Wdputs( buffer );
     }
 }
 
 /*
  * dump an ordinal entry point
  */
-void Dmp_ordinal( unsigned_16 ordinal )
+bool Dmp_ordinal( unsigned_16 ordinal )
 /*************************************/
 {
-    struct int_entry_pnt    *find;
+    int_entry_pnt   *find;
 
     for( find = Entry_pnts; find != NULL; find = find->next ) {
         if( find->ordinal == ordinal ) {
             dmp_an_ord( find );
-            return;
+            return( false );
         }
     }
-    Wdputs( " unknown ordinal " );
-    Puthex( ordinal, 2 * sizeof( ordinal ) );
+    return( true );
 }
 
 /*
@@ -467,7 +478,7 @@ void Dmp_ordinal( unsigned_16 ordinal )
 static void dmp_entry_tab( void )
 /*******************************/
 {
-    struct int_entry_pnt    *find;
+    int_entry_pnt   *find;
 
     if( Entry_pnts == NULL ) {
         return;
@@ -483,8 +494,8 @@ static void dmp_entry_tab( void )
 /*
  * Dump the tables
  */
-void Dmp_ne_tbls( void )
-/**********************/
+void Dmp_tables_ne( void )
+/************************/
 {
     prs_ent_tab( New_exe_off + Os2_head.entry_off, Os2_head.entry_size );
     Banner( "Resident Names Table" );
@@ -504,8 +515,8 @@ void Dmp_ne_tbls( void )
 /*
  * Dump the tables
  */
-void Dmp_le_lx_tbls( void )
-/*************************/
+void Dmp_tables_lelx( void )
+/**************************/
 {
     unsigned_32     size;
 
@@ -563,6 +574,7 @@ bool Dmp_os2_exports( void )
     char            name[256];
     unsigned_16     ordinal;
 
+    New_exe_off = 0;
     /* Check executable format; handle stubless modules */
     Wread( &Dos_head, sizeof( Dos_head.hdr ) );
     if( Dos_head.hdr.signature == EXESIGN_DOS ) {
@@ -571,29 +583,27 @@ bool Dmp_os2_exports( void )
         }
         Wlseek( NE_HEADER_OFFSET );
         Wread( &New_exe_off, sizeof( New_exe_off ) );
-    } else if( Dos_head.hdr.signature == EXESIGN_LX
-      || Dos_head.hdr.signature == EXESIGN_LE
-      || Dos_head.hdr.signature == EXESIGN_NE ) {
-        New_exe_off = 0;
     }
-
-    /* Read appropriate header */
+    /*
+     * Read appropriate header
+     */
     Wlseek( New_exe_off );
     Wread( &Os2_386_head, sizeof( Os2_386_head ) );
-    if( Os2_386_head.signature == EXESIGN_NE ) {
+    switch( Os2_386_head.signature ) {
+    case EXESIGN_LE:
+        Form = FORM_LE;
+        break;
+    case EXESIGN_LX:
+        Form = FORM_LX;
+        break;
+    case EXESIGN_NE:
         Form = FORM_NE;
         Wlseek( New_exe_off );
         Wread( &Os2_head, sizeof( Os2_head ) );
-    } else {
-        if( Os2_386_head.signature == EXESIGN_LE ) {
-            Form = FORM_LE;
-        } else if( Os2_386_head.signature == EXESIGN_LX ) {
-            Form = FORM_LX;
-        } else {
-            return( false );
-        }
+        break;
+    default:
+        return( false );
     }
-
     if( Form == FORM_NE ) {
         res_nam_tab = New_exe_off + Os2_head.resident_off;
     } else {

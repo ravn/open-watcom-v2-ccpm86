@@ -339,13 +339,13 @@ HDDEDATA WdeCreateResData( WdeResDlgItem *ditem )
 
 static WdeResDlgItem *WdeGetDlgItem( void )
 {
-    WdeResInfo          *rinfo;
+    WdeResInfo          *res_info;
     WdeResDlgItem       *ditem;
 
     ditem = NULL;
-    rinfo = WdeGetCurrentRes();
-    if( rinfo != NULL && rinfo->dlg_item_list != NULL ) {
-        ditem = (WdeResDlgItem *)ListElement( rinfo->dlg_item_list );
+    res_info = WdeGetCurrentRes();
+    if( res_info != NULL && res_info->ditem_list != NULL ) {
+        ditem = (WdeResDlgItem *)ListElement( res_info->ditem_list );
     }
 
     return( ditem );
@@ -353,7 +353,7 @@ static WdeResDlgItem *WdeGetDlgItem( void )
 
 bool WdeUpdateDDEEditSession( void )
 {
-    WdeResInfo          *rinfo;
+    WdeResInfo          *res_info;
     WdeResDlgItem       *ditem;
     HDDEDATA            hData;
     bool                ok;
@@ -387,8 +387,8 @@ bool WdeUpdateDDEEditSession( void )
     }
 
     if( ok ) {
-        rinfo = WdeGetCurrentRes();
-        WdeSetResModified( rinfo, FALSE );
+        res_info = WdeGetCurrentRes();
+        WdeSetResModified( res_info, false );
     }
 
     return( ok );
@@ -396,7 +396,7 @@ bool WdeUpdateDDEEditSession( void )
 
 bool WdeStartDDEEditSession( void )
 {
-    WdeResInfo          *rinfo;
+    WdeResInfo          *res_info;
     WdeResDlgItem       *ditem;
     char                *filename;
     HDDEDATA            hData;
@@ -408,6 +408,7 @@ bool WdeStartDDEEditSession( void )
 
     object = NULL;
     filename = NULL;
+    res_info = NULL;
 
     ditem = WdeAllocResDlgItem();
     ok = (ditem != NULL);
@@ -431,9 +432,16 @@ bool WdeStartDDEEditSession( void )
         if( hData == NULL ) {
             ok = false;
         } else {
-            ditem->is32bit = true;
+            ok = WRAllocDataFromDDE( hData, &data, &size );
             DdeFreeDataHandle( hData );
         }
+    }
+    if( ok ) {
+        ok = ( size != 0 );
+        if( ok ) {
+            ditem->is32bit = ( data[0] != 0 );
+        }
+        MemFree( data );
     }
 
     if( ok ) {
@@ -466,8 +474,8 @@ bool WdeStartDDEEditSession( void )
             ok = WRAllocDataFromDDE( hData, &data, &size );
             DdeFreeDataHandle( hData );
             if( ok ) {
-                ditem->dialog_info = WdeAllocDBIFromData( data, size, ditem->is32bit );
-                if( ditem->dialog_info == NULL ) {
+                ditem->dlg_info = WdeAllocDBIFromData( data, size, ditem->is32bit );
+                if( ditem->dlg_info == NULL ) {
                     ok = false;
                 }
                 MemFree( data );
@@ -476,23 +484,23 @@ bool WdeStartDDEEditSession( void )
     }
 
     if( ok ) {
-        rinfo = WdeCreateNewResource( filename );
-        if( rinfo == NULL ) {
+        res_info = WdeCreateNewResource( filename );
+        if( res_info == NULL ) {
             ok = false;
         }
     }
 
     if( ok ) {
-        if( ditem->dialog_info != NULL ) {
-            ok = WdeOpenDialogFromResInfo( rinfo, ditem );
+        if( ditem->dlg_info != NULL ) {
+            ok = WdeOpenDialogFromResInfo( res_info, ditem );
             if( ok ) {
-                WdeAddResDlgItemToResInfo( rinfo, ditem );
+                WdeAddResDlgItemToResInfo( res_info, ditem );
                 object = ditem->object;
             }
         } else {
             object = WdeCreateNewDialog( ditem->dialog_name, ditem->is32bit );
             if( ditem != NULL ) {
-                WdeFreeResDlgItem( &ditem, TRUE );
+                WdeFreeResDlgItem( &ditem, true );
             }
             ditem = NULL;
         }
@@ -507,10 +515,10 @@ bool WdeStartDDEEditSession( void )
 
     if( !ok ) {
         if( ditem != NULL ) {
-            WdeFreeResDlgItem( &ditem, TRUE );
+            WdeFreeResDlgItem( &ditem, true );
         }
-        if( rinfo != NULL ) {
-            WdeFreeResInfo( rinfo );
+        if( res_info != NULL ) {
+            WdeFreeResInfo( res_info );
         }
     }
 
@@ -528,7 +536,7 @@ void WdeHandlePokedData( HDDEDATA hData )
     HWND        main;
     char        *cmd;
     size_t      size;
-    WdeResInfo  *rinfo;
+    WdeResInfo  *res_info;
 
     if( hData == NULL ) {
         return;
@@ -548,8 +556,8 @@ void WdeHandlePokedData( HDDEDATA hData )
     } else if( stricmp( cmd, "endsession" ) == 0 ) {
         if( !GotEndSession ) {
             GotEndSession = true;
-            rinfo = WdeGetCurrentRes();
-            WdeDestroyResourceWindow( rinfo );
+            res_info = WdeGetCurrentRes();
+            WdeDestroyResourceWindow( res_info );
         }
     } else if( stricmp( cmd, "bringtofront" ) == 0 ) {
         if( IsIconic( main ) ) {

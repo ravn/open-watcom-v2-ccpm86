@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -32,7 +32,11 @@
 #ifdef __WATCOMC__
  #if defined( BOOTSTRAP )
   #if defined( TESTBOOT )
-    #include <time.h>
+   #ifdef __cplusplus
+    #include <ctime>        /* for time_t */
+   #else
+    #include <time.h>       /* for time_t */
+   #endif
   #elif ( __WATCOMC__ == 1300 ) /* OW 2.0 */
     /*
      * fix for bug in older builds of OW 2.0
@@ -47,11 +51,22 @@
    #ifndef _WCI86HUGE
     #define _WCI86HUGE
    #endif
-    #include <time.h>
-    extern time_t _mkgmtime20( struct tm *t );
-  #elif ( __WATCOMC__ == 1290 ) /* OW 1.9 */
+   #ifdef __cplusplus
+    #include <ctime>        /* for time_t */
+    extern std::time_t _mkgmtime20( struct std::tm *t );
+   #else
     #include <time.h>       /* for time_t */
     extern time_t _mkgmtime20( struct tm *t );
+   #endif
+  #elif ( __WATCOMC__ == 1290 ) /* OW 1.9 */
+   #ifdef __cplusplus
+    #include <ctime>        /* for time_t */
+    extern std::time_t _mkgmtime20( struct std::tm *t );
+   #else
+    #include <time.h>       /* for time_t */
+    extern time_t _mkgmtime20( struct tm *t );
+   #endif
+    #define _MK_FP  MK_FP
    #ifdef __NT__
     /*
      * this enable to use new OW 2.0 ...dir() functions
@@ -83,10 +98,24 @@
      * This file contains defines and prototypes of functions that are present
      * in Watcom's CLIB but not in many other C libraries
      */
+ #ifdef __UNIX__
+  #ifdef __cplusplus
+    #include <ctime>
+  #else
+    #include <time.h>
+  #endif
+ #endif
+ #ifdef __cplusplus
+    #include <climits>
+    #include <cstdlib>
+    #include <cstdio>
+    #include <cstdarg>
+ #else
     #include <limits.h>
     #include <stdlib.h>
     #include <stdio.h>
     #include <stdarg.h>
+ #endif
  #ifdef __BSD__
     #include <unistd.h>     /* for off_t */
  #else
@@ -95,7 +124,6 @@
  #ifdef __UNIX__
     #include <strings.h>    /* for str*case* functions */
     #include <sys/wait.h>
-    #include <time.h>
  #endif
 
     #define _WCRTLINK
@@ -215,9 +243,6 @@
 
     extern void     _makepath( char *path, const char *drive, const char *dir, const char *fname, const char *ext );
     extern char     *_fullpath( char *buf, const char *path, size_t size );
-    extern char     *strlwr( char *string );
-    extern char     *strupr( char *string );
-    extern char     *strrev( char *string );
     extern void     _searchenv( const char *name, const char *env_var, char *buf );
     extern int      spawnlp( int mode, const char *path, const char *cmd, ... );
     extern int      spawnvp( int mode, const char *cmd, const char * const *args );
@@ -276,3 +301,4 @@
     #define READDIRXX       readdir
     #define CLOSEDIRXX      closedir
 #endif
+

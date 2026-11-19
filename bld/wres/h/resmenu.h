@@ -34,100 +34,88 @@
 #ifndef RESMENU_INCLUDED
 #define RESMENU_INCLUDED
 
-typedef uint_16             MenuFlags;
-#define MENU_GRAYED         0x0001
-#define MENU_INACTIVE       0x0002
-#define MENU_BITMAP         0x0004
-#define MENU_CHECKED        0x0008
-#define MENU_POPUP          0x0010
-#define MENU_MENUBARBREAK   0x0020
-#define MENU_MENUBREAK      0x0040
-#define MENU_ENDMENU        0x0080
-#define MENU_OWNERDRAWN     0x0100
-#define MENU_SEPARATOR      0x0800
-#define MENU_HELP           0x4000
-
-#define MENUEX_POPUP        0x0001
-#define MENUEX_SEPARATOR    0x0800
 
 #define MENUEX_VERSION_SIG  0x0001
+#define IS_MENUEX(x)        ((x).Version == MENUEX_VERSION_SIG)
+#define IS_MENUEX_POPUP(x)  (((x)->u.ExFlags & MENUEX_POPUP) != 0)
+#define IS_MENU_POPUP(x)    (((x)->u.ItemFlags & MENU_POPUP) != 0)
+
+#define MENU_LAST_ITEM      0x80
+
+typedef enum MenuFlags {
+    MENU_GRAYED         = 0x0001,
+    MENU_INACTIVE       = 0x0002,
+    MENU_BITMAP         = 0x0004,
+    MENU_CHECKED        = 0x0008,
+    MENU_POPUP          = 0x0010,
+    MENU_MENUBARBREAK   = 0x0020,
+    MENU_MENUBREAK      = 0x0040,
+    MENU_OWNERDRAWN     = 0x0100,
+    MENU_SEPARATOR      = 0x0800,
+    MENU_HELP           = 0x4000,
+    MENU_max_value      = 0xFFFFU
+} MenuFlags;
+
+typedef enum MenuExFlags {
+    MENUEX_POPUP        = 0x0001,
+    MENUEX_max_value    = 0xFFFFU
+} MenuExFlags;
+
+typedef enum MenuExTypeFlags {
+    MENUEX_TYPE_STRING          = 0x00000000,
+    MENUEX_TYPE_BITMAP          = 0x00000004,
+    MENUEX_TYPE_MENUBARBREAK    = 0x00000020,
+    MENUEX_TYPE_MENUBREAK       = 0x00000040,
+    MENUEX_TYPE_OWNERDRAW       = 0x00000100,
+    MENUEX_TYPE_RADIOCHECK      = 0x00000200,
+    MENUEX_TYPE_SEPARATOR       = 0x00000800,
+    MENUEX_TYPE_RIGHTORDER      = 0x00002000,
+    MENUEX_TYPE_RIGHTJUSTIFY    = 0x00004000,
+    MENUEX_TYPE_max_value       = 0xFFFFFFFFU
+} MenuExTypeFlags;
+
+typedef enum MenuExStateFlags {
+    MENUEX_STATE_GRAYED     = 0x00000003,
+    MENUEX_STATE_DISABLED   = 0x00000003,
+    MENUEX_STATE_CHECKED    = 0x00000008,
+    MENUEX_STATE_HILITE     = 0x00000080,
+    MENUEX_STATE_DEFAULT    = 0x00001000,
+    MENUEX_STATE_max_value  = 0xFFFFFFFFU
+} MenuExStateFlags;
+
+typedef union MenuFlagsU {
+    MenuFlags       ItemFlags;
+    MenuExFlags     ExFlags;
+} MenuFlagsU;
 
 typedef struct MenuHeader {
     uint_16         Version;        /* currently 0 */
     uint_16         Size;           /* currently 0 */
+    unsigned        ExHelpId;
 } MenuHeader;
 
-typedef struct MenuItemPopup {      /* if (ItemFlags & MENU_POPUP) */
-    MenuFlags       ItemFlags;
-    char            *ItemText;
-} MenuItemPopup;
-
-typedef struct MenuExItemPopup {
-    uint_32         ItemId;
-    uint_32         ItemType;
-    uint_32         ItemState;
-    uint_32         HelpId;
-} MenuExItemPopup;
-
-typedef struct MenuItemNormal {     /* if !(ItemFlags & MENU_POPUP) */
-    MenuFlags       ItemFlags;
-    uint_32         ItemID;         /* Note! This was changed from uint_16!! */
-    char            *ItemText;
-} MenuItemNormal;
-
-typedef struct MenuExItemNormal {
-    uint_32         ItemType;
-    uint_32         ItemState;
-} MenuExItemNormal;
-
 typedef struct MenuItem {
-    uint_8          IsPopup;
-    union {
-        MenuItemNormal  Normal;
-        MenuItemPopup   Popup;
-    } Item;
+    char                *ItemText;
+    unsigned            ItemId;
+    unsigned            ExHelpId;
+    MenuExTypeFlags     ExType;
+    MenuExStateFlags    ExState;
+    MenuFlagsU          u;
+    unsigned            IsOldWin :1;
 } MenuItem;
-
-typedef struct MenuExItemNormalData {
-    MenuItemNormal      Normal;
-    MenuExItemNormal    ExData;
-} MenuExItemNormalData;
-
-typedef struct MenuExItemPopupData {
-    MenuItemPopup       Popup;
-    MenuExItemPopup     ExData;
-} MenuExItemPopupData;
-
-typedef struct MenuExItem {
-    uint_8        IsPopup;
-    union {
-        MenuExItemNormalData    ExNormal;
-        MenuExItemPopupData     ExPopup;
-    } Item;
-} MenuExItem;
 
 /* reswmenu.c */
 
 extern bool     ResWriteMenuHeader( MenuHeader *head, FILE *fp );
-extern bool     ResWriteMenuItemNormal( const MenuItemNormal *item, bool use_unicode, FILE *fp );
-extern bool     ResWriteMenuItemNormalOldWin( const MenuItemNormal *item, bool use_unicode, FILE *fp );
-extern bool     ResWriteMenuItemPopup( const MenuItemPopup *item, bool use_unicode, FILE *fp );
-extern bool     ResWriteMenuItemPopupOldWin( const MenuItemPopup *item, bool use_unicode, FILE *fp );
-extern bool     ResWriteMenuItem( const MenuItem *item, bool use_unicode, FILE *fp );
-extern bool     ResWriteMenuItemOldWin( const MenuItem *item, bool use_unicode, FILE *fp );
-extern bool     ResWriteMenuExHeader( MenuHeader *head, uint_8 *data, FILE *fp );
-extern bool     ResWriteMenuExItemPopup( const MenuItemPopup *item, const MenuExItemPopup *exdata, bool use_unicode, FILE *fp );
-extern bool     ResWriteMenuExItemNormal( const MenuItemNormal *, const MenuExItemNormal *, bool use_unicode, FILE *fp );
+extern bool     ResWriteMenuItem( const MenuItem *item, FILE *fp );
+extern bool     ResWriteMenuItem32( const MenuItem *item, FILE *fp );
+extern bool     ResWriteMenuItemEx( const MenuItem *item, FILE *fp );
 
 /* resrmenu.c */
 
 extern bool     ResReadMenuHeader( MenuHeader *head, FILE *fp );
-extern bool     ResReadMenuItem( MenuItem *item, FILE *fp );
-extern bool     ResReadMenuItem32( MenuItem *item, FILE *fp );
-extern bool     ResReadMenuExItem( MenuExItem *item, FILE *fp );
-extern bool     ResReadMenuExtraBytes( MenuHeader *header, char *buf, FILE *fp );
-extern bool     ResIsMenuEx( FILE *fp );
-extern bool     ResIsHeaderMenuEx( MenuHeader *hdr );
+extern bool     ResReadMenuItem( MenuItem *item, bool use_unicode, FILE *fp );
+extern bool     ResReadMenuItemEx( MenuItem *item, FILE *fp );
 extern MenuItem *ResNewMenuItem( void );
 extern void     ResFreeMenuItem( MenuItem *olditem );
 

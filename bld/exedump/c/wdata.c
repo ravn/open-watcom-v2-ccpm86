@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -52,8 +52,8 @@ static  const_string_table reloc_addr_type[] = {
 /*
  * Dump a segment
  */
-static void dmp_segment( struct segment_record *seg )
-/***************************************************/
+static void dmp_segment( segment_record *seg, bool prt_hdr )
+/**********************************************************/
 {
     unsigned_32           file_off;
     unsigned_32           iter;
@@ -80,16 +80,20 @@ static void dmp_segment( struct segment_record *seg )
         Putdec( iter > 16 );
         Wdputslc( "\n" );
     }
-    Wdputslc( "        segment data =\n" );
+    if( prt_hdr ) {
+        Wdputslc( "        segment data =\n" );
+    }
     Dmp_seg_data( file_off, seg_len );
-    Wdputslc( "\n" );
+    if( prt_hdr ) {
+        Wdputslc( "\n" );
+    }
 }
 
 /*
  * Dump a relocation item
  */
-static void dmp_reloc_item( struct relocation_item *reloc )
-/*********************************************************/
+static void dmp_reloc_item( relocation_item *reloc )
+/**************************************************/
 {
     unsigned_16             seg_num;
     unsigned_16             ord_off;
@@ -111,7 +115,10 @@ static void dmp_reloc_item( struct relocation_item *reloc )
             }
         } else {
             Wdputs( "movable " );
-            Dmp_ordinal( ord_off );
+            if( Dmp_ordinal( ord_off ) ) {
+                Wdputs( " unknown ordinal " );
+                Puthex( ord_off, 2 * sizeof( ord_off ) );
+            }
         }
         break;
     case REL_IMPORTED_ORDINAL :
@@ -148,14 +155,14 @@ static void dmp_reloc_item( struct relocation_item *reloc )
 static void dmp_reloc_info( unsigned_32 reloc_off )
 /*************************************************/
 {
-    unsigned_16                     num_relocs;
-    struct relocation_item          *reloc_tab;
-    struct relocation_item          *reloc;
-    unsigned_16                     size_reloc_tab;
+    unsigned_16     num_relocs;
+    relocation_item *reloc_tab;
+    relocation_item *reloc;
+    unsigned_16     size_reloc_tab;
 
     Wlseek( reloc_off );
     Wread( &num_relocs, sizeof( unsigned_16 ) );
-    size_reloc_tab = num_relocs * sizeof( struct relocation_item );
+    size_reloc_tab = num_relocs * sizeof( relocation_item );
     Wdputslc( "\nNumber of relocations: " );
     Putdec( num_relocs );
     Wdputs( "     Total size of relocations: " );
@@ -166,7 +173,8 @@ static void dmp_reloc_info( unsigned_32 reloc_off )
     Wdputslc( "\n  === ==== ====" );
     for( reloc = reloc_tab; num_relocs-- != 0; ++reloc ) {
         Wdputslc( "\n  " );
-        if( (reloc->addr_type > REL_SEGMENT_OFFSET + 2) || reloc->addr_type == 0  ) {
+        if( (reloc->addr_type > REL_SEGMENT_OFFSET + 2)
+          || reloc->addr_type == 0  ) {
             Wdputc( '?' );
             Puthex( reloc->addr_type, 2 );
         } else {
@@ -191,12 +199,12 @@ static void dmp_reloc_info( unsigned_32 reloc_off )
 void Dmp_relocs( void )
 /*********************/
 {
-    struct segment_record   *seg;
-    unsigned_16             segnum;
-    unsigned_16             num_segs;
-    unsigned_32             reloc_off;
+    segment_record  *seg;
+    unsigned_16     segnum;
+    unsigned_16     num_segs;
+    unsigned_32     reloc_off;
 
-    if( !(Options_dmp & FIX_DMP) ) {
+    if( (Options_dmp & FIX_DMP) == 0 ) {
         return;
     }
     Wdputslc( "\n" );
@@ -216,14 +224,31 @@ void Dmp_relocs( void )
 }
 
 /*
+ * Dump the data of one segment
+ */
+void Dmp_one_seg_data( unsigned_16 seg_spec )
+/*******************************************/
+{
+    segment_record  *seg;
+
+    if( seg_spec > Os2_head.segments ) {
+        Wdputslc( "segment specified was too large\n" );
+        return;
+    }
+    seg = &Int_seg_tab[ seg_spec - 1 ];
+    dmp_segment( seg, false );
+    return;
+}
+
+/*
  * Dump the Segments
  */
 void Dmp_segments( void )
 /***********************/
 {
-    struct segment_record   *seg;
-    unsigned_16             segnum;
-    unsigned_16             num_segs;
+    segment_record  *seg;
+    unsigned_16     segnum;
+    unsigned_16     num_segs;
 
     Wdputslc( "\n" );
     Banner( "The Segments" );
@@ -235,7 +260,7 @@ void Dmp_segments( void )
         Wdputs( "segment # " );
         Putdec( Segspec );
         seg = &Int_seg_tab[ Segspec - 1 ];
-        dmp_segment( seg );
+        dmp_segment( seg, true );
         return;
     }
     seg = Int_seg_tab;
@@ -243,19 +268,20 @@ void Dmp_segments( void )
     for( segnum = 1; segnum != num_segs; segnum++ ) {
         Wdputs( "segment # " );
         Putdec( segnum );
-        dmp_segment( seg++ );
+        dmp_segment( seg++, true );
     }
 }
 
 /*
  * Dump the Segments
  */
-void Dmp_le_page_seg( void )
+void Dmp_page_seg_le( void )
 /**************************/
 {
     unsigned_32     offset;
 
-    if( Segspec == 0 || Segspec == Data_count ) {
+    if( Segspec == 0
+      || Segspec == Data_count ) {
         Wdputslc( "\n" );
         offset = ( Data_count - 1 ) * Os2_386_head.page_size;
         offset += Os2_386_head.page_off;
@@ -281,12 +307,13 @@ void Dmp_le_page_seg( void )
 /*
  * Dump the Segments
  */
-void Dmp_lx_page_seg( map_entry map )
+void Dmp_page_seg_lx( map_entry map )
 /***********************************/
 {
     unsigned_32     offset;
 
-    if( Segspec == 0 || Segspec == Data_count ) {
+    if( Segspec == 0
+      || Segspec == Data_count ) {
         Wdputslc( "\n" );
         offset = map.lx.page_offset << Os2_386_head.l.page_shift;
         offset += Os2_386_head.page_off;

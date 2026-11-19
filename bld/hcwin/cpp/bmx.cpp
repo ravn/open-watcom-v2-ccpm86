@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 BMX:  Image file handling
 */
 
-#include <stdlib.h>
+#include <cstdlib>
 #include "bmx.h"
 #include "wio.h"
 #include "compress.h"
@@ -78,7 +78,7 @@ Bitmap::Bitmap( InFile *fp ) : Bmx( fp )
 #define MIN_16BIT   0x80    // Smallest value stored in a short
 #define MIN_32BIT   0x8000  // Smallest value stored in a long
 
-#define OBJ_OFFSET  8   // Offset of the "object" in a .SHG file.
+#define START_OFFSET    8   // Offset of the "object" in a .SHG file.
 
 uint_32 Bitmap::size()
 {
@@ -178,7 +178,7 @@ uint_32 Bitmap::size()
     if( _pixSize >= MIN_32BIT ) {
         _objOffset += 2;
     }
-    _size = _objOffset + OBJ_OFFSET + _pixSize;
+    _size = _objOffset + START_OFFSET + _pixSize;
 
     delete[] buffer;
 
@@ -194,7 +194,7 @@ int Bitmap::dump( OutFile *dest )
 {
     dest->write( (uint_16)SHG1_MAGIC );
     dest->write( (uint_16)1 );
-    dest->write( (uint_32)OBJ_OFFSET );
+    dest->write( (uint_32)START_OFFSET );
     dest->write( (uint_8)0x06 );      // Identifies this as a .BMP
     dest->write( (uint_8)0x02 );      // Specifies the compression type
     dest->write( (uint_8)0xC0 );      // Specifies 96dpi
@@ -393,7 +393,7 @@ void HFBitmaps::addToPath( char const path[] )
         }
         temp = new StrNode;
         temp->_name = new char[j + 1];
-        memcpy( temp->_name, arg, j );
+        std::memcpy( temp->_name, arg, j );
         temp->_name[j] = '\0';
         temp->_next = NULL;
         if( chdir( temp->_name ) ) {
@@ -457,8 +457,8 @@ void HFBitmaps::note( char const name[] )
     bmp->reset();
 
     current = new Image;
-    current->_name = new char[strlen( name ) + 1];
-    strcpy( current->_name, name );
+    current->_name = new char[std::strlen( name ) + 1];
+    std::strcpy( current->_name, name );
     current->_next = _files;
     _files = current;
     if( magic == BITMAP_MAGIC ) {
@@ -557,8 +557,8 @@ uint_16 HFBitmaps::use( char const name[] )
             bmp->reset();
 
             current = new Image;
-            current->_name = new char[strlen( name ) + 1];
-            strcpy( current->_name, name );
+            current->_name = new char[std::strlen( name ) + 1];
+            std::strcpy( current->_name, name );
             if( magic == BITMAP_MAGIC ) {
                 current->_image = new Bitmap(bmp);
             } else {
@@ -573,7 +573,7 @@ uint_16 HFBitmaps::use( char const name[] )
     } else {
         _usedFiles = current;
     }
-    sprintf( filename + 3, "%u", result );
+    std::sprintf( filename + 3, "%u", result );
     _dfile->addFile( current->_image, filename );
 
     _numImages += 1;

@@ -92,12 +92,12 @@
 #define MAX_SUBSTITUTABLE_ARGS  8
 #define MAX_INT_SIZE    11              //  buffer for 32-bit integer strings
 
-#define TOOL_FOR_EXT    "for"
-#define TOOL_LNK_EXT    "lnk"
+#define TOOL_FEXT_FOR   "for"
+#define TOOL_FEXT_LNK   "lnk"
 
 #define LINK            "wlink"         // linker name
 #define PACK            "cvpack"        // packer name
-#define TEMPFILE        "__wfl__" "." TOOL_LNK_EXT  // temporary linker directive file 8.3
+#define TEMPFILE        "__wfl__" "." TOOL_FEXT_LNK // temporary linker directive file 8.3
 
 #if defined(__UNIX__)
 #define fname_cmp   strcmp
@@ -106,11 +106,11 @@
 #endif
 
 #if defined( __UNIX__ )
-  #define OBJ_EXT       "o"             // object file extension
-  #define TOOL_EXE_EXT  ""              // tool executable file extension
+  #define FEXT_OBJ      "o"             // object file extension
+  #define TOOL_FEXT_EXE ""              // tool executable file extension
 #else
-  #define OBJ_EXT       "obj"           // object file extension
-  #define TOOL_EXE_EXT  ".exe"          // tool executable file extension
+  #define FEXT_OBJ      "obj"           // object file extension
+  #define TOOL_FEXT_EXE ".exe"          // tool executable file extension
 #endif
 
 #ifdef __UNIX__
@@ -129,7 +129,7 @@
 
 #define MAX_OPTIONS     64
 
-#define IS_OBJ(x)       (x[0] == '.' && fname_cmp(x + 1, OBJ_EXT) == 0)
+#define IS_OBJ(x)       (x[0] == '.' && fname_cmp(x + 1, FEXT_OBJ) == 0)
 #define IS_WS(x)        ((x)==' ' || (x)=='\t')
 
 enum {
@@ -188,9 +188,9 @@ static struct {
     char *exename;
     char *path;
 } tools[ TYPE_MAX ] = {
-    { WFC,      WFC TOOL_EXE_EXT,       NULL },
-    { LINK,     LINK TOOL_EXE_EXT,      NULL },
-    { PACK,     PACK TOOL_EXE_EXT,      NULL }
+    { WFC,      WFC TOOL_FEXT_EXE,       NULL },
+    { LINK,     LINK TOOL_FEXT_EXE,      NULL },
+    { PACK,     PACK TOOL_FEXT_EXE,      NULL }
 };
 
 static  char    *Word;                  // one parameter
@@ -648,7 +648,7 @@ static  void    AddName( const char *name )
         // construct full name of object file from Obj_Name information
         _splitpath2( Obj_Name, pg1.buffer, &pg1.drive, &pg1.dir, &pg1.fname, &pg1.ext );
         if( pg1.ext[0] == '\0' )
-            pg1.ext = OBJ_EXT;
+            pg1.ext = FEXT_OBJ;
         if( ( pg1.fname[0] == '\0' )
           || ( ( pg1.fname[0] == '*' ) && ( pg1.fname[1] == '\0' ) ) ) {
             _splitpath2( name, pg2.buffer, NULL, NULL, &pg1.fname, &pg2.ext );
@@ -722,8 +722,8 @@ static  int     Parse( char *cmd )
     int         opt;
     int         ch;
     char        *end;
-//    char        *cmd;
     size_t      len;
+    size_t      i;
     bool        cmp_option;
     int         cmp_opt_index;
     bool        in_quotes;
@@ -771,9 +771,10 @@ static  int     Parse( char *cmd )
 
         if( len != 0 ) {
             if( opt == ' ' ) {  // if filename, add to list
-                strncpy( Word, cmd, len );
-                Word[len] = '\0';
-                strlwr( Word );
+                for( i = 0; i < len; i++ ) {
+                    Word[i] = (char)tolower( (unsigned char)cmd[i] );
+                }
+                Word[i] = '\0';
                 if( strstr( Word, ".lib" ) != NULL ) {
                     ListAppendString( &Lib_List, Word );
                     AddDirectivePath( "library ", Word );
@@ -792,7 +793,7 @@ static  int     Parse( char *cmd )
                         if( Link_Name != NULL )
                             MemFree( Link_Name );
                         if( (Word[1] == '=') || (Word[1] == '#') ) {
-                            MakeName( Word + 2, TOOL_LNK_EXT ); // add extension
+                            MakeName( Word + 2, TOOL_FEXT_LNK ); // add extension
                             Link_Name = MemAlloc( strlen( Word + 2 ) + 1 );
                             strcpy( Link_Name, Word + 2 );
                         } else {
@@ -1058,7 +1059,7 @@ static FILE *OpenWlinkTmpFile( char *name )
     int     fh;
 
     for( i = 0; i < 100; i++ ) {
-        sprintf( name + 1 + 6, "%2.2d" "." TOOL_LNK_EXT, i );
+        sprintf( name + 1 + 6, "%2.2d" "." TOOL_FEXT_LNK, i );
         fh = open( name + 1, O_RDWR | O_CREAT | O_EXCL | O_BINARY, PMODE_RW );
         if( fh != -1 ) {
             close( fh );
@@ -1079,17 +1080,27 @@ static  int     CompLink( void )
     pgroup2     pg;
     int         i;
     list        *currobj;
+#ifndef __UNIX__
+    char        *p;
+    int         c;
+#endif
 
     comp_err = false;
     Obj_List = NULL;
     for( currobj = File_List; currobj != NULL; ) {
         strcpy( Word, currobj->item );
-        MakeName( Word, "." TOOL_FOR_EXT ); // if no extension, assume "for"
+        MakeName( Word, "." TOOL_FEXT_FOR ); // if no extension, assume "for"
         file = DoWildCard( Word );
         while( file != NULL ) {     // while more filenames:
+#ifdef __UNIX__
             strcpy( Word, file );
-#ifndef __UNIX__
-            strlwr( Word );
+#else
+            p = Word;
+            while( (c = *(unsigned char *)file) != '\0' ) {
+                *p++ = (char)tolower( c );
+                file++;
+            }
+            *p = '\0';
 #endif
             _splitpath2( Word, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
             if( !IS_OBJ( pg.ext ) ) {   // if not object, compile
@@ -1108,7 +1119,7 @@ static  int     CompLink( void )
                     MemFree( Exe_Name );
                 Exe_Name = MemStrdup( Word );
             }
-            _makepath( Word, NULL, NULL, pg.fname, OBJ_EXT );
+            _makepath( Word, NULL, NULL, pg.fname, FEXT_OBJ );
             AddName( Word );            // add obj filename
 
             file = DoWildCard( NULL );  // get next filename

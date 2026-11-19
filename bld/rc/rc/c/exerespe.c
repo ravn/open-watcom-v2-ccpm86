@@ -25,8 +25,7 @@
 *
 *  ========================================================================
 *
-* Description:  WHEN YOU FIGURE OUT WHAT THIS FILE DOES, PLEASE
-*               DESCRIBE IT HERE!
+* Description:  PE format related functions (used by 16-bit code)
 *
 ****************************************************************************/
 
@@ -84,10 +83,9 @@ static void QueueEmpty( DirEntryQueue *queue )
 /********************************************/
 {
     QueueNode   *curr;
-    QueueNode   *next;
 
-    for( curr = queue->front; curr != NULL; curr = next ) {
-        next = curr->next;
+    while( (curr = queue->front) != NULL ) {
+        queue->front = curr->next;
         MemFree( curr );
     }
 
@@ -808,7 +806,7 @@ bool BuildPEResourceObject( ExeFileInfo *dst, ResFileInfo *resfiles,
         return( true );
     }
     if( PEResDirBuild( pedir, resfiles->Dir ) ) {
-        RcError( ERR_INTERNAL, INTERR_ERR_BUILDING_RES_DIR );
+        RcError( RCMSG_INTERNAL, INTERR_ERR_BUILDING_RES_DIR );
         return( true );
     }
     CompleteTree( pedir );
@@ -819,10 +817,10 @@ bool BuildPEResourceObject( ExeFileInfo *dst, ResFileInfo *resfiles,
     setDataOffsets( pedir, &curr_rva, resfiles, writebyfile );
     ret = writeDirectory( pedir, dst->fp );
     if( ret != RS_OK ) {
-        RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
+        RcError( RCMSG_WRITTING_FILE, dst->name, strerror( errno ) );
         return( true );
     }
-
+    errres = NULL;
     ret = copyPEResources( dst, resfiles, dst->fp, writebyfile, &errres );
     /*
      * warning - the file names output in these messages could be
@@ -840,7 +838,7 @@ bool BuildPEResourceObject( ExeFileInfo *dst, ResFileInfo *resfiles,
     pehdr = dst->u.PEInfo.WinHead;
     fillResourceObj( res_obj, pedir, PE( *pehdr, file_align ) );
     if( padObject( pedir, dst, res_obj->physical_size ) ) {
-        RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
+        RcError( RCMSG_WRITTING_FILE, dst->name, strerror( errno ) );
         return( true );
     }
     /*

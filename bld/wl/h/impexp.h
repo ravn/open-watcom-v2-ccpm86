@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,23 +31,23 @@
 
 
 typedef struct entry_export {
-    struct entry_export     *next;
-    name_strtab             name;
-    ordinal_t               ordinal;
-    unsigned_16             iopl_words;
-    boolbit                 isresident  : 1;
-    boolbit                 isexported  : 1;
-    boolbit                 ismovable   : 1;
-    boolbit                 isanonymous : 1;
-    boolbit                 isfree      : 1;
-    boolbit                 isprivate   : 1;
-    boolbit                 isiopl      : 1;
-    symbol                  *sym;
-    char                    *impname;
-    targ_addr               addr;
+    struct entry_export *next;
+    name_strtab         name;
+    ordinal_t           ordinal;
+    unsigned_16         iopl_words;
+    boolbit             isresident  : 1;
+    boolbit             isexported  : 1;
+    boolbit             ismovable   : 1;
+    boolbit             isanonymous : 1;
+    boolbit             isfree      : 1;
+    boolbit             isprivate   : 1;
+    boolbit             isiopl      : 1;
+    symbol              *sym;
+    char                *impname;
+    addr_type           addr;
 } entry_export;
 
-extern ordinal_t        FindEntryOrdinal( targ_addr, group_entry * );
+extern ordinal_t        FindEntryOrdinal( addr_type, group_entry * );
 extern void             FreeExportList( void );
 extern void             AddToExportList( entry_export * );
 extern void             MSExportKeyword( const length_name *, const length_name *, unsigned, ordinal_t );
@@ -55,7 +55,6 @@ extern void             MSImportKeyword( symbol *, const length_name *, const le
 extern dll_sym_info     *AllocDLLInfo( void );
 extern void             FreeImport( dll_sym_info * );
 extern entry_export     *AllocExport( const char *, size_t );
-extern char             *ImpModuleName( dll_sym_info * );
 extern bool             IsSymElfImported( symbol * );
 extern bool             IsSymElfExported( symbol * );
 extern bool             IsSymElfImpExp( symbol * );

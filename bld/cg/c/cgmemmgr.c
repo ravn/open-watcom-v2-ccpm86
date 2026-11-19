@@ -80,6 +80,9 @@ essentially no worst case performance scenario.
 #include "memsydep.h"
 #include "feprotos.h"
 
+#include "clibext.h"
+
+
 #define ALLOCATED       1
 
 #define MAX_SIZE        14  /* 16384 (2 ^ 14) */
@@ -210,7 +213,7 @@ static  void    CalcMemSize( void )
 
         } else { // PharLap or win386
 
-            if( _DPMI ) { // DPMI HOST
+            if( DPMIModeDetect() == 0 ) { // DPMI HOST
 
                 dpmi_mem    mem_info;
 

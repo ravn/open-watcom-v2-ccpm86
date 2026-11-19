@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,12 +36,9 @@
 
 
 int                     Handle;
-int                     Lhandle;
 unsigned_16             Sizeleft;
-unsigned_16             WSize;
 unsigned_16             Num_buff;
 char                    Read_buff[BSIZE];
-char                    Write_buff[BSIZE];
 char                    *Wbuff;
 char                    *Lang_lst;
 unsigned                Num_read;
@@ -54,7 +51,7 @@ unsigned_32             Imp_off;
 unsigned_32             Fix_off;
 unsigned_32             Res_off;
 unsigned_32             Data_off;
-struct segment_record   *Int_seg_tab;
+segment_record          *Int_seg_tab;
 char                    **Int_mod_ref_tab;
 unsigned_16             Segspec;
 unsigned long           Hexoff;
@@ -65,8 +62,8 @@ simple_header           Phar_head;
 extended_nlm_header     Nlm_ext_head;
 nlm_header              Nlm_head;
 pe_exe_header           Pe_head;
-struct os2_flat_header  Os2_386_head;
-struct os2_exe_header   Os2_head;
+os2_flat_header         Os2_386_head;
+os2_exe_header          Os2_head;
 dos_exe_header_ex       Dos_head;
 unsigned_16             Resrc_shift_cnt;
 unsigned_16             Options_dmp;
@@ -76,4 +73,4 @@ unsigned_32             Resrc_end;
 jmp_buf                 Se_env;
 exe_form                Form;
 bool                    Byte_swap;
-struct                  section_data Sections[DR_DEBUG_NUM_SECTS];
+section_data            Sections[DR_DEBUG_NUM_SECTS];

@@ -45,7 +45,7 @@ extern offset   CAlign( offset, unsigned );
 extern void     Align( byte );
 extern void     MAlign( byte );
 extern void     StartMemMap( void );
-extern void     ChkLocated( targ_addr *segadr, bool fixed);
+extern void     ChkLocated( addr_type *segadr, bool fixed);
 extern void     NewSegment( seg_leader * );
 
 /* in objcalc.c */
@@ -59,6 +59,6 @@ extern void     AllocClasses( section * );
 extern void     CombineSeg( seg_leader *, signed_32 *, offset, byte, byte );
 extern void     ProcPubsSect( mod_entry *, section * );
 extern void     DoPubsSect( section * );
-extern void     SetSegFlags( xxx_seg_flags * );
+extern void     SetSegFlags( seg_flags_struct * );
 extern void     CalcSegSizes( void );
-extern void     ConvertToFrame( targ_addr *, segment, bool );
+extern void     ConvertToFrame( addr_type *, segment, bool );

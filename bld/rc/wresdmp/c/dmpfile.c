@@ -121,40 +121,40 @@ static void ConvertTypeIDToStr( WResID *type_id, char *str, int maxlen )
 
 static char * MemFlagsOnList[16] = {
     NULL,               /* 0x0001 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0002 */
+    NULL,               /* 0x0004 */
+    NULL,               /* 0x0008 */
     "MOVEABLE",         /* 0x0010 */
     "PURE",             /* 0x0020 */
     "PRELOAD",          /* 0x0040 */
-    NULL,
+    NULL,               /* 0x0080 */
     NULL,               /* 0x0100 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0200 */
+    NULL,               /* 0x0400 */
+    NULL,               /* 0x0800 */
     "DISCARDABLE",      /* 0x1000 */
-    NULL,
-    NULL,
-    NULL
+    NULL,               /* 0x2000 */
+    NULL,               /* 0x4000 */
+    "SEGALIGN"          /* 0x8000 */
 };
 
 static char * MemFlagsOffList[16] = {
     NULL,               /* 0x0001 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0002 */
+    NULL,               /* 0x0004 */
+    NULL,               /* 0x0008 */
     "FIXED",            /* 0x0010 */
     "IMPURE",           /* 0x0020 */
     "LOADONCALL",       /* 0x0040 */
-    NULL,
+    NULL,               /* 0x0080 */
     NULL,               /* 0x0100 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0200 */
+    NULL,               /* 0x0400 */
+    NULL,               /* 0x0800 */
     NULL,               /* 0x1000 */
-    NULL,
-    NULL,
-    NULL
+    NULL,               /* 0x2000 */
+    NULL,               /* 0x4000 */
+    NULL                /* 0x8000 */
 };
 
 static bool DumpResource( WResDirWindow wind, FILE *fp, WResTargetOS res_os )
@@ -165,11 +165,11 @@ static bool DumpResource( WResDirWindow wind, FILE *fp, WResTargetOS res_os )
     char            typename[20];
     WResTypeInfo    *type;
     WResResInfo     *res;
-    WResLangInfo    *lang;
+    WResLangInfo    *langinfo;
 
     type = WResGetTypeInfo( wind );
     res = WResGetResInfo( wind );
-    lang = WResGetLangInfo( wind );
+    langinfo = WResGetLangInfo( wind );
 
     if( CmdLineParms.Type != NULL ) {
         if( !WResIDCmp( CmdLineParms.Type, &(type->TypeName) ) ) {
@@ -185,12 +185,12 @@ static bool DumpResource( WResDirWindow wind, FILE *fp, WResTargetOS res_os )
     ConvertIDToStr( &(res->ResName), resname, 15 );
     ConvertTypeIDToStr( &(type->TypeName), typename, 20 );
 
-    fprintf( stdout, "%-20.20s  %-15.15s  0x%04X 0x%02X  ", typename,
-                resname, (int)lang->lang.lang, (int)lang->lang.sublang );
-    PrintUint16Flags( lang->MemoryFlags, MemFlagsOnList, MemFlagsOffList, 53 );
+    fprintf( stdout, "%-20.20s  %-15.15s  0x%04X 0x%02X  0x%04X ", typename,
+                resname, (int)langinfo->lang.lang, (int)langinfo->lang.sublang, langinfo->res_flags );
+    PrintUint16Flags( langinfo->res_flags, MemFlagsOnList, MemFlagsOffList, 53 );
 
     if( CmdLineParms.DumpContents ) {
-        error = DumpContents( type, res, lang, fp, res_os );
+        error = DumpContents( type, res, langinfo, fp, res_os );
         if( error ) {
             return( true );
         }

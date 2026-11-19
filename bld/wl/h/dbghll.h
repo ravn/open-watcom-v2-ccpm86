@@ -2,7 +2,6 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -25,18 +24,26 @@
 *
 *  ========================================================================
 *
-* Description:  Public interface to OS/2 specific yydriver module.
+* Description:  routines for producing HLL debug information in the load file
 *
 ****************************************************************************/
 
 
-#ifndef _YYDRIVR2_H
-#define _YYDRIVR2_H
+extern void     HllInit( void );
+extern void     HllInitModule( mod_entry * );
+extern void     HllP1ModuleScanned( void );
+extern void     HllP1ModuleFinished( mod_entry * );
+extern void     HllAddModule( mod_entry *, section * );
+extern void     HllGenModule( void );
+extern void     HllAddLocal( seg_leader *, offset );
+extern void     HllAddGlobal( symbol * );
+extern void     HllGenGlobal( symbol *, section * );
+extern void     HllGenLines( lineinfo * );
+extern void     HllAddAddrInfo( seg_leader * );
+extern void     HllGenAddrInfo( seg_leader * );
+extern void     HllAddrStart( void );
+extern void     HllDefClass( class_entry *, unsigned_32 );
+extern void     HllFini( section * );
+extern void     HllWrite( void );
 
-#include "os2ytab.h"
-#include "scan.h"
-
-extern YYTOKENTYPE  LookupKeywordOS2( ScanString newstring );
-extern YYTOKENTYPE  ScanOS2( ScanValue *value );
-
-#endif
+//extern unsigned_32      HllSize;- loadpe.c?

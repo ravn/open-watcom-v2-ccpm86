@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -84,7 +84,10 @@
 #include "clibext.h"
 
 
-#define MAX_DEPS    50
+#define MAX_DEPS        50
+#define TOKEN_MAX_LEN   31
+
+#define KEYWORD_CHAR    ':'
 
 // wsplice expression operators definition
 #define OP_OR       '|'
@@ -95,8 +98,7 @@
 
 #define ARRAY_SIZE(a)   (sizeof( a ) / sizeof( (a)[0] ))
 
-enum                    // PROCESSING MODES
-{
+enum {                  // PROCESSING MODES
     MODE_DELETE,        // - deleting
     MODE_OUTPUT,        // - outputting
     MODE_SKIPPING       // - skipping to ENDSEGMENT
@@ -113,7 +115,7 @@ enum                    // PROCESSING MODES
 typedef union textent   TEXTENT;
 typedef struct segment  SEGMENT;
 typedef struct filestk  FILESTK;
-typedef struct segstk   SEGSTK;
+typedef struct segmstk  SEGMSTK;
 typedef struct ipathlst IPATHLST;
 typedef unsigned        PROCMODE;
 
@@ -143,23 +145,23 @@ union textent {                         // define TEXTENT
 
 struct segment {                        // define SEGMENT
     SEGMENT             *next;          // - next element
-    char                seg_type;       // - segment type
+    char                type;           // - segment type
 #define SEG_REMOVE    'R'               // - - segment to be removed
 #define SEG_KEEP      'K'               // - - segment to be kept
 #define SEG_NONE      ' '               // - - keep and remove not specified
     char                name[1];        // - segment name
 };
 
-struct segstk {                         // define SEGSTK
-    SEGSTK              *next;          // - next entry
+struct segmstk {                        // define SEGMSTK
+    SEGMSTK             *next;          // - next entry
     unsigned            rec_def;        // - record number of definition
     PROCMODE            action;         // - saved processing mode
 };
 
 struct filestk {                        // define FILESTK
-    FILESTK             *last;          // - last element
-    FILE                *file_ptr;      // - file ptr.
-    SEGSTK              *save_stk;      // - saved segment stack
+    FILESTK             *next;          // - last element
+    FILE                *fp;            // - file ptr.
+    SEGMSTK             *segm_stk;      // - saved segment stack
     unsigned            rec_count;      // - current record
     char                name[1];        // - file name
 };
@@ -190,12 +192,11 @@ static const char * const KwTable[] = {     // - key words table
 // DATA (READ/WRITE)
 static unsigned     ErrCount;               // - number of errors
 static FILE         *OutputFile;            // - output file
-static FILESTK      *Files;                 // - stack of opened files
+static FILESTK      *FileStk;               // - stack of opened files
 static SEGMENT      *Segments;              // - list of segments
-static SEGSTK       *SegStk;                // - active-segments stack
-static char         KwChar = { ':' };       // - key word definition character
+static SEGMSTK      *SegmStk;               // - active-segments stack
 static TEXTENT      *SourceText;            // - source text
-static char         Token[32];              // - scan token
+static char         Token[TOKEN_MAX_LEN + 1]; // - scan token
 static char         Record[1024];           // - input record
 static const char   *Rptr;                  // - ptr into record
 static PROCMODE     ProcessMode;            // - processing mode
@@ -228,8 +229,8 @@ static void Error( const char *msg, ... )
 
     count = sprintf( emsg, "**** WSPLICE ERROR **** " );
     eptr = &emsg[count];
-    if( Files != NULL ) {
-        count = sprintf( eptr, "%s, line %u ", Files->name, Files->rec_count );
+    if( FileStk != NULL ) {
+        count = sprintf( eptr, "%s, line %u ", FileStk->name, FileStk->rec_count );
         eptr = &eptr[count];
     }
     vsprintf( eptr, msg, args );
@@ -241,7 +242,7 @@ static void Error( const char *msg, ... )
 // GET MEMORY BLOCK
 static void *GetMem( size_t size )
 {
-    void        *block;                         // - new memory
+    void        *block;                     // - new memory
     static bool FirstMemoryError = true;    // - indicates first "out of memory" error
 
     block = malloc( size );
@@ -256,32 +257,32 @@ static void *GetMem( size_t size )
     return( block );
 }
 
-static SEGSTK *PushSegStack( void )
+static SEGMSTK *PushSegStack( void )
 // PUSH THE SEGMENT STACK
 {
-    SEGSTK      *stk;           // - new stack entry
+    SEGMSTK     *segm_stk;           // - new stack entry
 
-    stk = ( SEGSTK *) GetMem( sizeof( SEGSTK ) );
-    if( stk != NULL ) {
-        stk->action = ProcessMode;
-        stk->next = SegStk;
-        stk->rec_def = Files->rec_count;
-        SegStk = stk;
+    segm_stk = (SEGMSTK *)GetMem( sizeof( SEGMSTK ) );
+    if( segm_stk != NULL ) {
+        segm_stk->action = ProcessMode;
+        segm_stk->next = SegmStk;
+        segm_stk->rec_def = FileStk->rec_count;
+        SegmStk = segm_stk;
     }
-    return( stk );
+    return( segm_stk );
 }
 
 static void PopSegStack( void ) // POP SEGMENTS STACK
 {
-    SEGSTK      *top;           // - top entry on stack
+    SEGMSTK     *segm_stk;           // - top entry on stack
 
-    if( SegStk == NULL ) {
+    if( SegmStk == NULL ) {
         Error( "Unexpected ENDSEGMENT statement" );
     } else {
-        top = SegStk;
-        SegStk = top->next;
-        ProcessMode = top->action;
-        free( top );
+        segm_stk = SegmStk;
+        SegmStk = segm_stk->next;
+        ProcessMode = segm_stk->action;
+        free( segm_stk );
     }
 }
 
@@ -349,12 +350,12 @@ static FILE *OpenFileTruncate(
     const char *file_name,    // - file to be opened
     const char *mode )        // - file mode
 {
-    FILE        *new = NULL;
+    FILE        *fp = NULL;
 
-    new = fopen( file_name, mode );
-    if( new != NULL )
+    fp = fopen( file_name, mode );
+    if( fp != NULL )
         AddDepDep( file_name );
-    if( new == NULL ) {
+    if( fp == NULL ) {
         pgroup2 pg;
         char    new_name[FILENAME_MAX];
         bool    truncated;
@@ -371,53 +372,51 @@ static FILE *OpenFileTruncate(
         }
         if( truncated ) {
             _makepath( new_name, pg.drive, pg.dir, pg.fname, pg.ext );
-            new = fopen( new_name, mode );
-            if( new != NULL ) {
+            fp = fopen( new_name, mode );
+            if( fp != NULL ) {
                 AddDepDep( new_name );
             }
         }
     }
-    return( new );
+    return( fp );
 }
 
-static FILE *OpenFilePathList(  //OPEN FILE, TRY EACH LOCATION IN PATH LIST
-    const char *file_name,    // - file to be opened
-    const char *mode )        // - file mode
+static FILE *OpenFilePathList(  // OPEN FILE, TRY EACH LOCATION IN PATH LIST
+    const char *file_name,      // - file to be opened
+    const char *mode )          // - file mode
 {
-    FILE        *new = NULL;
+    FILE        *fp = NULL;
 
-    new = OpenFileTruncate( file_name, mode );
-    if( new == NULL ) {
+    fp = OpenFileTruncate( file_name, mode );
+    if( fp == NULL ) {
         char            buff[FILENAME_MAX];
         IPATHLST        *list;
 
-        list = IncPathList;
-        while( list != NULL ) {
+        for( list = IncPathList; list != NULL; list = list->next ) {
             strcpy( buff, list->path );
             strcat( buff, file_name );
-            new = OpenFileTruncate( buff, mode );
-            if( new != NULL ) {
+            fp = OpenFileTruncate( buff, mode );
+            if( fp != NULL ) {
                 break;
             }
-            list = list->next;
         }
     }
-    return( new );
+    return( fp );
 }
 
 // OPEN FILE
 static void OpenFileNormal(
-    const char *file_name,    // - file to be opened
-    const char *mode )        // - file mode
+    const char *file_name,      // - file to be opened
+    const char *mode )          // - file mode
 {
-    FILE        *new;           // - new file ptr.
-    FILESTK     *stk;           // - new stack entry
+    FILE        *fp;            // - new file ptr.
+    FILESTK     *file_stk;      // - new stack entry
     char        *p;
     char        c;
 
-    stk = (FILESTK *)GetMem( sizeof( FILESTK ) + strlen( file_name ) );
-    if( stk != NULL ) {
-        p = stk->name;
+    file_stk = (FILESTK *)GetMem( sizeof( FILESTK ) + strlen( file_name ) );
+    if( file_stk != NULL ) {
+        p = file_stk->name;
         while( (c = *file_name++) != '\0' ) {
 #ifndef __UNIX__
             if( c == '/' )
@@ -426,17 +425,17 @@ static void OpenFileNormal(
             *p++ = c;
         }
         *p = c;
-        stk->rec_count = 0;
-        new = OpenFilePathList( stk->name, mode );
-        if( new == NULL ) {
-            Error( "Can not open '%s'", stk->name );
-            free( stk );
+        file_stk->rec_count = 0;
+        fp = OpenFilePathList( file_stk->name, mode );
+        if( fp == NULL ) {
+            Error( "Can not open '%s'", file_stk->name );
+            free( file_stk );
         } else {
-            stk->last = Files;
-            stk->file_ptr = new;
-            Files = stk;
-            Files->save_stk = SegStk;
-            SegStk = NULL;
+            file_stk->next = FileStk;
+            file_stk->fp = fp;
+            FileStk = file_stk;
+            FileStk->segm_stk = SegmStk;
+            SegmStk = NULL;
         }
     }
 }
@@ -444,22 +443,22 @@ static void OpenFileNormal(
 // CLOSE CURRENT FILE
 static void CloseFile( void )
 {
-    FILESTK     *stk;       // - file stack
+    FILESTK     *file_stk;       // - file stack
 
-    while( SegStk != NULL ) {
-        Error( "Unclosed segment from line %u", SegStk->rec_def );
+    while( SegmStk != NULL ) {
+        Error( "Unclosed segment from line %u", SegmStk->rec_def );
         PopSegStack();
     }
-    SegStk = Files->save_stk;
-    fclose( Files->file_ptr );
-    stk = Files;
-    Files = stk->last;
-    free( stk );
+    SegmStk = FileStk->segm_stk;
+    fclose( FileStk->fp );
+    file_stk = FileStk;
+    FileStk = file_stk->next;
+    free( file_stk );
 }
 
 static void EatWhite( void )
 {
-    while( isspace( (unsigned char)*Rptr ) ) {
+    while( isspace( *(unsigned char *)Rptr ) ) {
         ++Rptr;
     }
 }
@@ -494,9 +493,9 @@ static bool ScanString( void )
         Rptr = rptr + 1;
         return( true );
     }
-    eptr = cptr + sizeof( Token ) - 1;
+    eptr = cptr + TOKEN_MAX_LEN;
     for( ;; ) {
-        if( isspace( (unsigned char)*rptr ) )
+        if( isspace( *(unsigned char *)rptr ) )
             break;
         if( IsOper( *rptr ) )
             break;
@@ -519,25 +518,28 @@ static bool ScanString( void )
 
 static bool GetToken( char op )
 {
-    if( Token[0] != op || Token[1] != '\0' )
-        return( false );
-    ScanString();
-    return( true );
+    if( Token[0] == op && Token[1] == '\0' ) {
+        ScanString();
+        return( true );
+    }
+    return( false );
 };
 
 // INITIALIZE TO PROCESS RECORD
 static KW RecordInitialize( const char *record )
 {
-    KW          i;
+    int         i;
     const char  *token;
+    char        word[TOKEN_MAX_LEN + 1];
+    int         c;
 
     Rptr = record;
     if( !ScanString() )
         return( KW_TEXT );
-    if( Token[0] != KwChar )
+    if( Token[0] != KEYWORD_CHAR )
         return( KW_TEXT );
-    if( Token[1] == KwChar ) {
-        if( record[0] != KwChar || record[1] != KwChar ) {
+    if( Token[1] == KEYWORD_CHAR ) {
+        if( record[0] != KEYWORD_CHAR || record[1] != KEYWORD_CHAR ) {
             // verify comment started in column one
             // (both checks are necessary (i.e., <TAB>::))
             return( KW_TEXT );
@@ -549,8 +551,12 @@ static KW RecordInitialize( const char *record )
         ScanString();
         token = Token;
     }
+    i = 0;
+    while( (c = ((unsigned char *)token)[i]) != '\0' )
+        word[i++] = tolower( c );
+    word[i] = '\0';
     for( i = 0; i < ARRAY_SIZE( KwTable ); ++i ) {
-        if( 0 == stricmp( KwTable[i], token ) ) {
+        if( 0 == strcmp( KwTable[i], word ) ) {
             return( i );
         }
     }
@@ -560,63 +566,68 @@ static KW RecordInitialize( const char *record )
 // READ A RECORD
 static KW ReadInput( void )
 {
-    char    *p;
     KW      retn;           // - return: type of record
 
-    if( NULL == fgets( Record, sizeof( Record ), Files->file_ptr ) ) {
+    if( NULL == fgets( Record, sizeof( Record ), FileStk->fp ) ) {
         retn = KW_EOF;
     } else {
-        ++Files->rec_count;
-        p = Record + strlen( Record ) - 1;
-        if( *p == '\n' )    // turf \n on the end
-            *p = '\0';
+        FileStk->rec_count++;
+        Record[strcspn( Record, "\n" )] = '\0';
         retn = RecordInitialize( Record );
     }
     return( retn );
 }
 
 // LOOK UP A SEGMENT
-static SEGMENT *SegmentLookUp( const char *seg_name )
+static SEGMENT *SegmentLookUp( const char *name )
 {
-    SEGMENT     *sptr;          // - points to current segment
+    SEGMENT     *segment;       // - points to current segment
     size_t      size;           // - size of name
+    char        seg_name[TOKEN_MAX_LEN + 1];
+    int         c;
 
-    sptr = Segments;
-    for( ;; ) {
-        if( sptr == NULL )
-            break;
-        if( 0 == stricmp( seg_name, sptr->name ) )
-            return( sptr );
-        sptr = sptr->next;
+    size = 0;
+    while( (c = ((unsigned char *)name)[size]) != '\0' ) {
+        if( size == TOKEN_MAX_LEN ) {
+            Error( "Invalid segment name" );
+            return( NULL );
+        }
+        seg_name[size++] = tolower( c );
+    }
+    seg_name[size] = '\0';
+
+    for( segment = Segments; segment != NULL; segment = segment->next ) {
+        if( 0 == strcmp( seg_name, segment->name ) ) {
+            return( segment );
+        }
     }
 
-    size = strlen( seg_name );
-    sptr = ( SEGMENT *)GetMem( sizeof( SEGMENT ) + size );
-    if( sptr != NULL ) {
-        memcpy( sptr->name, seg_name, size + 1 );
-        sptr->seg_type = ' ';
-        sptr->next = Segments;
-        Segments = sptr;
+    segment = (SEGMENT *)GetMem( sizeof( SEGMENT ) + size );
+    if( segment != NULL ) {
+        memcpy( segment->name, seg_name, size + 1 );
+        segment->type = ' ';
+        segment->next = Segments;
+        Segments = segment;
     }
-    return( sptr );
+    return( segment );
 }
 
 static SEGMENT *ScanSegment( void )// SCAN A SEGMENT
 {
-    SEGMENT     *new;           // - new segment
+    SEGMENT     *segment;           // - new segment
 
     if( ScanString() ) {
-        new = SegmentLookUp( Token );
+        segment = SegmentLookUp( Token );
     } else {
         Error( "Invalid segment name" );
-        new = NULL;
+        segment = NULL;
     }
-    return( new );
+    return( segment );
 }
 
 static bool PrimaryExpr( void )
 {
-    SEGMENT     *new;           // - new segment
+    SEGMENT     *segment;           // - new segment
     bool        ret;
 
     if( GetToken( OP_LPAREN ) ) {
@@ -625,9 +636,9 @@ static bool PrimaryExpr( void )
             Error( "Expecting ')'" );
         }
     } else {
-        new = SegmentLookUp( Token );
+        segment = SegmentLookUp( Token );
         ScanString();
-        if( new != NULL && new->seg_type == SEG_KEEP ) {
+        if( segment != NULL && segment->type == SEG_KEEP ) {
             ret = true;
         } else {
             ret = false;
@@ -757,7 +768,7 @@ static void OutputString( const char *p, const char *record )
 // PROCESS A RECORD OF INPUT
 static void ProcessRecord( KW kw, const char *record )
 {
-    SEGMENT *seg;       // - current segment
+    SEGMENT *segment;       // - current segment
 
     switch( kw ) {
     case KW_SEGMENT:
@@ -792,18 +803,18 @@ static void ProcessRecord( KW kw, const char *record )
     case KW_KEEP:
         switch( ProcessMode ) {
         case MODE_OUTPUT:
-            seg = ScanSegment();
-            if( seg != NULL )
-                seg->seg_type = SEG_KEEP;
+            segment = ScanSegment();
+            if( segment != NULL )
+                segment->type = SEG_KEEP;
             break;
         }
         break;
     case KW_REMOVE:
         switch( ProcessMode ) {
         case MODE_OUTPUT:
-            seg = ScanSegment();
-            if( seg != NULL )
-                seg->seg_type = SEG_REMOVE;
+            segment = ScanSegment();
+            if( segment != NULL )
+                segment->type = SEG_REMOVE;
             break;
         }
         break;
@@ -838,11 +849,11 @@ static void ProcessSource( const char *src_file ) // - starting file
     KW  kw;     // - current key-word
 
     ProcessMode = MODE_OUTPUT;
-    SegStk = NULL;
+    SegmStk = NULL;
     SourceText = NULL;
-    Files = NULL;
+    FileStk = NULL;
     OpenFileNormal( src_file, "r" );
-    while( Files != NULL ) {
+    while( FileStk != NULL ) {
         kw = ReadInput();
         if( kw == KW_EOF ) {
             CloseFile();
@@ -877,11 +888,10 @@ static void AddIncludePathList( const char *path )
         lptr->path[size] = '/';
 #else
         lptr->path[size] = '\\';
-        ptr = lptr->path;
-        while( *ptr != '\0' ) {
-            if( *ptr == '/' )
+        for( ptr = lptr->path; *ptr != '\0'; ++ptr ) {
+            if( *ptr == '/' ) {
                 *ptr = '\\';
-            ++ptr;
+            }
         }
 #endif
         lptr->next = NULL;
@@ -903,7 +913,7 @@ int main(               // MAIN-LINE
 {
     int                 count;          // - current source file #
     char                *p;             // - generic pointer
-    SEGMENT             *seg;           // - segment structure
+    SEGMENT             *segment;       // - segment structure
     struct utimbuf      dest_time;
     struct stat         src_time;
     char                *src = NULL;
@@ -911,6 +921,7 @@ int main(               // MAIN-LINE
     char                *param[32];
     int                 arg_count = 0;
     char                *arg;
+    FILE                *fp;
 
     for( count = 1; count < argc; count++ ) {
         arg = argv[count];
@@ -918,7 +929,6 @@ int main(               // MAIN-LINE
             param[arg_count] = malloc( strlen( arg ) + 1 );
             strcpy( param[arg_count++], arg );
         } else {
-            FILE        *f;
             char        st[512], separator;
             int         i, j, k;
             size_t      len;
@@ -933,15 +943,15 @@ int main(               // MAIN-LINE
                 memcpy( st, env, len + 1 );
                 st[len] = '\0';
             } else {
-                f = fopen( arg + 1, "r" );
-                if( f == NULL ) {
+                fp = fopen( arg + 1, "r" );
+                if( fp == NULL ) {
                     Error( "Unable to open indirect argument file" );
                     continue;
                 }
 
-                if( fgets( st, sizeof( st ), f ) == NULL )
+                if( fgets( st, sizeof( st ), fp ) == NULL )
                     Error( "Unable to read indirect argument file" );
-                fclose( f );
+                fclose( fp );
             }
             len = strlen( st );
             if( st[len - 1] == '\n' ) {
@@ -1004,7 +1014,7 @@ int main(               // MAIN-LINE
 #define get_value() ( (arg[2]=='\0') ? (param[++count]) : arg + 2)
 
         tgt = tgt_file;
-        if( 0 == stricmp( tgt, "-" ) ) {
+        if( 0 == strcmp( tgt, "-" ) ) {
             OutputFile = stdout;
         } else {
             OutputFile = fopen( tgt, "wb" );
@@ -1023,15 +1033,15 @@ int main(               // MAIN-LINE
                         break;
                     case 'k':
                         p = get_value();
-                        seg = SegmentLookUp( p );
-                        if( seg != NULL )
-                            seg->seg_type = SEG_KEEP;
+                        segment = SegmentLookUp( p );
+                        if( segment != NULL )
+                            segment->type = SEG_KEEP;
                         break;
                     case 'r':
                         p = get_value();
-                        seg = SegmentLookUp( p );
-                        if( seg != NULL )
-                            seg->seg_type = SEG_REMOVE;
+                        segment = SegmentLookUp( p );
+                        if( segment != NULL )
+                            segment->type = SEG_REMOVE;
                         break;
                     case 'f':
                         OutFmt = get_value();
@@ -1084,7 +1094,7 @@ int main(               // MAIN-LINE
 #undef get_value
     }
     AddDepClose();
-    if( RestoreTime && stricmp( tgt, "-" ) != 0 ) {
+    if( RestoreTime && strcmp( tgt, "-" ) != 0 ) {
         if( stat( src, &src_time ) == 0 ) {
             dest_time.actime = src_time.st_atime;
             dest_time.modtime = src_time.st_mtime;

@@ -62,14 +62,14 @@ SemOffset SemStartResource( void )
 /********************************/
 {
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
     if( !CurrResFile.IsWatcomRes ) {
         tmpResFile = ResOpenFileTmp( NULL );
         if( tmpResFile == NULL ) {
             RCCloseFile( &(CurrResFile.fp) );
-            RcFatalError( ERR_OPENING_TMP, tmpResFileName, LastWresErrStr() );
+            RcFatalError( RCMSG_OPENING_TMP, tmpResFileName, LastWresErrStr() );
             /* never return */
         }
         /*
@@ -102,19 +102,19 @@ SemLength SemEndResource( SemOffset start )
     return( len );
 }
 
-void SemAddResourceAndFree( WResID *res_id, WResID *type_id, ResMemFlags flags, ResLocation loc )
-/******************************************************************************************/
+void SemAddResourceAndFree( WResID *res_id, WResID *type_id, ResMemFlags res_flags, ResLocation loc )
+/***************************************************************************************************/
 {
-    SemAddResource2( res_id, type_id, flags, loc, NULL );
+    SemAddResource2( res_id, type_id, res_flags, loc, NULL );
     MemFree( res_id );
     MemFree( type_id );
 }
 
-static void copyMSFormatRes( WResID *res_id, WResID *type_id, ResMemFlags flags,
-                ResLocation loc, const WResLangType *lang, bool iswin32 )
-/*************************************************************************/
+static void copyMSFormatRes( WResID *res_id, WResID *type_id, ResMemFlags res_flags,
+                ResLocation loc, const WResLangType *lang )
+/**********************************************************************************/
 {
-    MResResourceHeader  msheader;
+    MSResResourceHeader msheader;
     bool                error;
     char                buffer[512];
 
@@ -123,30 +123,31 @@ static void copyMSFormatRes( WResID *res_id, WResID *type_id, ResMemFlags flags,
      */
     msheader.Type = WResIDToNameOrOrdinal( type_id );
     msheader.Name = WResIDToNameOrOrdinal( res_id );
-    msheader.MemoryFlags = flags;
+    msheader.res_flags = res_flags;
     msheader.Size = loc.len;
     msheader.LanguageId = MAKELANGID( lang->lang, lang->sublang );
-    msheader.Version = 0L; /* Currently Unsupported */
-    msheader.DataVersion = 0L;
-    msheader.Characteristics = 0L; /* Currently Unsupported */
-    /*
-     * OS/2 resource header happens to be identical to Win16
-     */
-    error = MResWriteResourceHeader( &msheader, iswin32, CurrResFile.fp );
+    msheader.Version = 0; /* Currently Unsupported */
+    msheader.DataVersion = 0;
+    msheader.Characteristics = 0; /* Currently Unsupported */
+    if( CmdLineParms.iswin32 ) {
+        error = MSResWriteResourceHeader32( &msheader, CurrResFile.fp );
+    } else {
+        error = MSResWriteResourceHeader( &msheader, CurrResFile.fp );
+    }
     MemFree( msheader.Type );
     MemFree( msheader.Name );
     ErrorHasOccured = true;
     if( error ) {
-        RcError( ERR_WRITTING_RES, CurrResFile.filename, LastWresErrStr() );
+        RcError( RCMSG_WRITTING_RES, CurrResFile.filename, LastWresErrStr() );
     } else {
         if( tmpResFile == NULL ) {
-            RcError( ERR_READING_TMP, tmpResFileName, LastWresErrStr() );
+            RcError( RCMSG_READING_TMP, tmpResFileName, LastWresErrStr() );
         } else {
             /*
              * copy the data from the temporary file to the RES file
              */
             if( ResSeek( tmpResFile, loc.start, SEEK_SET ) ) {
-                RcError( ERR_READING_TMP, tmpResFileName, LastWresErrStr() );
+                RcError( RCMSG_READING_TMP, tmpResFileName, LastWresErrStr() );
             } else {
                 RcStatus    ret;
 
@@ -162,15 +163,15 @@ static void copyMSFormatRes( WResID *res_id, WResID *type_id, ResMemFlags flags,
     }
 }
 
-void SemAddResource( WResID *res_id, WResID *type_id, ResMemFlags flags, ResLocation loc )
-/****************************************************************************************/
+void SemAddResource( WResID *res_id, WResID *type_id, ResMemFlags res_flags, ResLocation loc )
+/********************************************************************************************/
 {
-    SemAddResource2( res_id, type_id, flags, loc, NULL );
+    SemAddResource2( res_id, type_id, res_flags, loc, NULL );
 }
 
-void SemAddResource2( WResID *res_id, WResID *type_id, ResMemFlags flags,
+void SemAddResource2( WResID *res_id, WResID *type_id, ResMemFlags res_flags,
                 ResLocation loc, const char *filename )
-/******************************************************************/
+/***************************************************************************/
 {
     bool                error;
     bool                duplicate;
@@ -186,17 +187,17 @@ void SemAddResource2( WResID *res_id, WResID *type_id, ResMemFlags flags,
         if( !type_id->IsName
           && type_id->ID.Num > 0x7FFF ) {
             namestr = WResIDToStr( type_id );
-            RcWarning( ERR_TYPE_GT_7FFF, namestr );
+            RcWarning( RCMSG_TYPE_GT_7FFF, namestr );
             MemFree( namestr );
         }
         if( !res_id->IsName
           && res_id->ID.Num > 0x7FFF ) {
             namestr = WResIDToStr( res_id );
-            RcWarning( ERR_NAME_GT_7FFF, namestr );
+            RcWarning( RCMSG_NAME_GT_7FFF, namestr );
             MemFree( namestr );
         }
     }
-    error = WResAddResource( type_id, res_id, flags, loc.start, loc.len, CurrResFile.dir, lang, &duplicate );
+    error = WResAddResource( type_id, res_id, res_flags, loc.start, loc.len, CurrResFile.dir, lang, &duplicate );
 
     if( duplicate ) {
         if( filename == NULL ) {
@@ -211,13 +212,13 @@ void SemAddResource2( WResID *res_id, WResID *type_id, ResMemFlags flags,
          * the directory.
          */
     } else if( error ) {
-        RcError( ERR_OUT_OF_MEMORY );
+        RcError( RCMSG_OUT_OF_MEMORY );
         ErrorHasOccured = true;
     }
 
     if( !CurrResFile.IsWatcomRes ) {
         if( !duplicate ) {
-            copyMSFormatRes( res_id, type_id, flags, loc, lang, CmdLineParms.iswin32 );
+            copyMSFormatRes( res_id, type_id, res_flags, loc, lang );
         }
         /*
          * erase the temporary RES file
