@@ -121,8 +121,8 @@ void ODBIInit( section *sect )
 {
     DBISize = sizeof( Master );
     MPUT_LE_16( Master + offsetof( master_dbg_header, signature ), WAT_DBG_SIGNATURE );
-    Master[offsetof( master_dbg_header, exe_major_ver )] = EXE_MAJOR_VERSION;
-    Master[offsetof( master_dbg_header, exe_minor_ver )] = EXE_MINOR_VERSION;
+    Master[offsetof( master_dbg_header, exe_major_ver )] = MAJOR_EXE_VERSION;
+    Master[offsetof( master_dbg_header, exe_minor_ver )] = MINOR_EXE_VERSION;
     Master[offsetof( master_dbg_header, obj_major_ver )] = 0;
     Master[offsetof( master_dbg_header, obj_minor_ver )] = 0;
     DBISourceLang = LangAlloc( sizeof( FE_LANG_C ) - 1, FE_LANG_C );
@@ -371,7 +371,7 @@ static void AllocDBIClasses( class_entry *class )
     for( ; class != NULL; class = class->next ) {
         if( class->flags & CLASS_DEBUG_INFO ) {
             group = AllocGroup( AutoGrpName, &DBIGroups );
-            group->grp_addr.seg = 0;
+            group->addr.seg = 0;
             RingLookup( class->segs, AllocASeg, group );
         }
     }
@@ -469,7 +469,7 @@ void ODBIGenGlobal( symbol *sym, section *sect )
             data->kind |= GBL_KIND_STATIC;
         }
         if( sym->p.seg != NULL ) {
-            if( sym->p.seg->u.leader->info & SEG_CODE ) {
+            if( sym->p.seg->u.leader->info & SEGINF_CODE ) {
                 data->kind |= GBL_KIND_CODE;
             } else {
                 data->kind |= GBL_KIND_DATA;
@@ -507,8 +507,8 @@ static void ODBIGenAddrInit( segdata *sdata, void *_dinfo )
         seghdr.base.offset = seg->seg_addr.off;
         seghdr.base.segment = seg->seg_addr.seg;
     } else {
-        seghdr.base.offset = seg->group->grp_addr.off + SEG_GROUP_DELTA( seg );
-        seghdr.base.segment = seg->group->grp_addr.seg;
+        seghdr.base.offset = seg->group->addr.off + SEG_GROUP_DELTA( seg );
+        seghdr.base.segment = seg->group->addr.seg;
     }
     seghdr.count = seg->num;
     if( CurrSect == NonSect )
@@ -843,7 +843,7 @@ static unsigned_16 WriteSegValues( void )
         buffer = (unsigned_16 *)TokBuff;
         buflen = 0;
         for( group = Groups; group != NULL; group = group->next ) {
-            *buffer++ = group->grp_addr.seg;
+            *buffer++ = group->addr.seg;
             buflen += sizeof( unsigned_16 );
         }
         DBIWriteLocal( TokBuff, buflen );

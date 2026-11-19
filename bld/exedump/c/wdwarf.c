@@ -52,7 +52,7 @@ static  const_string_table mdh_msg[] = {
     NULL
 };
 
-typedef struct {
+typedef struct debug_header {
     char        signature[4];
     unsigned_32 vendor_id;
     unsigned_32 info_type;
@@ -110,8 +110,8 @@ static bool os2_debug( void )
     }
     // MZ stub is optional
     Wread( &Os2_386_head, sizeof( Os2_386_head ) );
-    if( Os2_386_head.signature == EXESIGN_LE ||
-        Os2_386_head.signature == EXESIGN_LX ) {
+    if( Os2_386_head.signature == EXESIGN_LE
+      || Os2_386_head.signature == EXESIGN_LX ) {
         if( Os2_386_head.debug_len ) {
             Wlseek( Os2_386_head.debug_off );
             return( Dmp_elf_header( Os2_386_head.debug_off ) );
@@ -179,17 +179,18 @@ bool Dmp_mdbg_head( void )
     Wlseek( Curr_sectoff -(int)sizeof( mdh ) );
     Wread( mdh, sizeof( mdh ) );
     if( MGET_LE_U16( mdh + offsetof( master_dbg_header, signature ) ) == WAT_DBG_SIGNATURE
-      && (int)mdh[offsetof( master_dbg_header, exe_major_ver )] == EXE_MAJOR_VERSION
-      && (int)mdh[offsetof( master_dbg_header, exe_minor_ver )] <= EXE_MINOR_VERSION
-      && (int)mdh[offsetof( master_dbg_header, obj_major_ver )] == OBJ_MAJOR_VERSION
-      && (int)mdh[offsetof( master_dbg_header, obj_minor_ver )] <= OBJ_MINOR_VERSION ) {
+      && (int)mdh[offsetof( master_dbg_header, exe_major_ver )] == MAJOR_EXE_VERSION
+      && (int)mdh[offsetof( master_dbg_header, exe_minor_ver )] <= MINOR_EXE_VERSION
+      && (int)mdh[offsetof( master_dbg_header, obj_major_ver )] == MAJOR_OBJ_VERSION
+      && (int)mdh[offsetof( master_dbg_header, obj_minor_ver )] <= MINOR_OBJ_VERSION ) {
         dmp_master( mdh );
         Dump_section();
         return( true );
     } else {
         Wlseek( 0 );
         // Handle ELF and NE/LX executables without TIS signature
-        if( Dmp_elf_header( 0 ) || os2_debug() ) {
+        if( Dmp_elf_header( 0 )
+          || os2_debug() ) {
             return( true );    // Don't dump debug data twice
         }
         for( ;; ) {

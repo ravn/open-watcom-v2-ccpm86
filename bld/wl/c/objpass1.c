@@ -83,9 +83,9 @@ static void DoSavedImport( symbol *sym )
     length_name         modname;
     length_name         extname;
 
-    if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE) ) {
-        dll = sym->p.import;
-        sym->p.import = NULL;
+    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE) ) {
+        dll = sym->p.import_dll;
+        sym->p.import_dll = NULL;
         sym->info &= ~SYM_DEFINED;
         modname.name = dll->m.modname.u.ptr;
         modname.len = strlen( modname.name );
@@ -94,7 +94,7 @@ static void DoSavedImport( symbol *sym )
         } else {
             extname.name = dll->u.entname.u.ptr;
             extname.len = strlen( extname.name );
-            MSImportKeyword( sym, &modname, &extname, NOT_IMP_BY_ORDINAL );
+            MSImportKeyword( sym, &modname, &extname, IMP_BY_NAME );
         }
         FreeImport( dll );
     }
@@ -106,7 +106,7 @@ static void DoSavedExport( symbol *sym )
     /* unused parameters */ (void)sym;
 
 #ifdef _OS2
-    if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) ) {
+    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) ) {
         entry_export    *exp;
 
         exp = sym->e.export;
@@ -358,8 +358,8 @@ void Set64BitMode( void )
 {
     LinkState |= LS_FMT_SEEN_64BIT;
     if( !HintFormat( MK_ALLOW_64 ) ) {
-        if( (ObjFormat & OBJ_FMT_TOLD_BITNESS) == 0 ) {
-            ObjFormat |= OBJ_FMT_TOLD_BITNESS;
+        if( (ObjFormat & OBJFMT_TOLD_BITNESS) == 0 ) {
+            ObjFormat |= OBJFMT_TOLD_BITNESS;
             LnkMsg( WRN+MSG_FOUND_XXBIT_OBJ, "sd",
                         CurrMod->u1.source->infile->name.u.ptr, 64 );
         }
@@ -372,8 +372,8 @@ void Set32BitMode( void )
 {
     LinkState |= LS_FMT_SEEN_32BIT;
     if( !HintFormat( MK_ALLOW_32 ) ) {
-        if( (ObjFormat & OBJ_FMT_TOLD_BITNESS) == 0 ) {
-            ObjFormat |= OBJ_FMT_TOLD_BITNESS;
+        if( (ObjFormat & OBJFMT_TOLD_BITNESS) == 0 ) {
+            ObjFormat |= OBJFMT_TOLD_BITNESS;
             LnkMsg( WRN+MSG_FOUND_XXBIT_OBJ, "sd",
                         CurrMod->u1.source->infile->name.u.ptr, 32 );
         }
@@ -384,8 +384,8 @@ void Set16BitMode( void )
 /***********************/
 {
     if( !HintFormat( MK_ALLOW_16 ) ) {
-        if( (ObjFormat & OBJ_FMT_TOLD_BITNESS) == 0 ) {
-            ObjFormat |= OBJ_FMT_TOLD_BITNESS;
+        if( (ObjFormat & OBJFMT_TOLD_BITNESS) == 0 ) {
+            ObjFormat |= OBJFMT_TOLD_BITNESS;
             LnkMsg( WRN+MSG_FOUND_XXBIT_OBJ, "sd",
                     CurrMod->u1.source->infile->name.u.ptr, 16 );
         }
@@ -424,7 +424,7 @@ static void DoAllocateSegment( segdata *sdata, const char *clname )
     AddSegment( sdata, class );
 #ifdef _EXE
     if( isovlclass ) {
-        sdata->u.leader->info |= SEG_OVERLAYED;
+        sdata->u.leader->info |= SEGINF_OVERLAYED;
     }
 #endif
     if( !sdata->isdead
@@ -434,13 +434,13 @@ static void DoAllocateSegment( segdata *sdata, const char *clname )
     }
 }
 
-void AllocateSegment( segnode *newseg, const char *clname )
-/**********************************************************
+void AllocateSegment( segnode *snode, const char *clname )
+/*********************************************************
  * allocate a new segment (or new piece of a segment)
  */
 {
-    DoAllocateSegment( newseg->entry, clname );
-    newseg->info = newseg->entry->u.leader->info;
+    DoAllocateSegment( snode->entry, clname );
+    snode->info = snode->entry->u.leader->info;
 }
 
 unsigned long IncPass1( void )
@@ -466,7 +466,7 @@ unsigned long IncPass1( void )
           && !seg->isdead
           && !seg->iscdat ) {
             PutInfo( seg->u1.vm_ptr, GetSegContents( seg, dataoff ), seg->length );
-            seg->u.leader->info |= SEG_LXDATA_SEEN;
+            seg->u.leader->info |= SEGINF_LXDATA_SEEN;
         }
     }
     publist = CurrMod->publist;
@@ -525,10 +525,7 @@ class_entry *FindClass( section *sect, const char *name, byte bits, bool iscode 
     class->segs = NULL;
     class->section = sect;
     class->next = NULL;
-    class->flags = 0;
-    if( iscode ) {
-        class->flags |= CLASS_CODE;
-    }
+    class->flags = ( iscode ) ? CLASS_CODE : CLASS_NONE;
     if( IsConstClass( name, namelen ) ) {
         class->flags |= CLASS_READ_ONLY;
     }
@@ -551,10 +548,10 @@ static void CheckForLast( seg_leader *seg, class_entry *class )
     if( (CurrMod->flags_mod & MOD_LAST_SEG)
       && (class->flags & CLASS_CODE) ) {
         if( LastCodeSeg != NULL ) {             // more than one code seg
-            LastCodeSeg->info &= ~LAST_SEGMENT; // so don't end at previous
+            LastCodeSeg->info &= ~SEGINF_LAST_SEGMENT; // so don't end at previous
         }
         LastCodeSeg = seg;
-        seg->info |= LAST_SEGMENT;
+        seg->info |= SEGINF_LAST_SEGMENT;
     }
 }
 
@@ -594,8 +591,8 @@ static void AddToLeader( seg_leader *seg, segdata *sdata )
     Ring2Append( &CurrMod->segs, sdata );
 }
 
-static seg_leader *MakeNewLeader( segdata *sdata, class_entry *class, unsigned_16 info )
-/**************************************************************************************/
+static seg_leader *MakeNewLeader( segdata *sdata, class_entry *class, seg_info_type info )
+/****************************************************************************************/
 {
     seg_leader *leader;
 
@@ -611,8 +608,8 @@ static seg_leader *MakeNewLeader( segdata *sdata, class_entry *class, unsigned_1
     return( leader );
 }
 
-static seg_leader *FindALeader( segdata *sdata, class_entry *class, unsigned_16 info )
-/************************************************************************************/
+static seg_leader *FindALeader( segdata *sdata, class_entry *class, seg_info_type info )
+/**************************************************************************************/
 {
     seg_leader  *leader;
 
@@ -641,7 +638,7 @@ seg_leader *InitLeader( const char *segname )
     seg->num = 0;
     SET_ADDR_UNDEFINED( seg->seg_addr );
     seg->group = NULL;
-    seg->info = 0;
+    seg->info = SEGINF_NONE;
     seg->segname.u.ptr = AddStringStringTable( &PermStrings, segname );
     seg->dbgtype = NOT_DEBUGGING_INFO;
     seg->segflags = FmtData.def_seg_flags;
@@ -652,21 +649,18 @@ void AddSegment( segdata *sd, class_entry *class )
 /************************************************/
 /* Add a segment to the segment list for an object file */
 {
-    unsigned_16     info;
+    seg_info_type   info;
     seg_leader      *leader;
 
     DEBUG((DBG_OLD,"- adding segment %s, class %s",sd->u.name.u.ptr, class->name.u.ptr ));
     DEBUG(( DBG_OLD, "- - size = %h, comb = %x, alignment = %x",
                       sd->length, sd->combine, sd->align ));
-    info = 0;
-    if( sd->bits != BITS_16 ) {
-        info |= USE_32;
-    }
+    info = ( sd->bits == BITS_16 ) ? SEGINF_NONE : SEGINF_USE_32;
     if( class->flags & CLASS_CODE ) {
-        info |= SEG_CODE;
+        info |= SEGINF_CODE;
     }
     if( sd->isabs ) {
-        info |= SEG_ABSOLUTE;
+        info |= SEGINF_ABSOLUTE;
         sd->isdefd = true;
     }
     if( sd->isabs
@@ -676,14 +670,14 @@ void AddSegment( segdata *sd, class_entry *class )
         const char  *seg_name = sd->u.name.u.ptr;
 
         leader = FindALeader( sd, class, info );
-        if( ( (leader->info & USE_32) != (info & USE_32) )
+        if( ( (leader->info & SEGINF_USE_32) != (info & SEGINF_USE_32) )
           && !( (FmtData.type & (MK_OS2_FLAT | MK_WIN_VXD))
           && FmtData.u.os2fam.mixed1632 )
           && (FmtData.type & MK_RAW) == 0 ) {
             const char  *segname_16;
             const char  *segname_32;
 
-            if( info & USE_32 ) {
+            if( info & SEGINF_USE_32 ) {
                 segname_16 = leader->segname.u.ptr;
                 segname_32 = seg_name;
             } else {
@@ -743,7 +737,7 @@ void AddToGroup( group_entry *group, seg_leader *seg )
         return;
     }
     if( ( group->leaders != NULL )
-      && ( (group->leaders->info & USE_32) != (seg->info & USE_32) )
+      && ( (group->leaders->info & SEGINF_USE_32) != (seg->info & SEGINF_USE_32) )
       && !( (FmtData.type & (MK_OS2_FLAT | MK_WIN_VXD))
       && FmtData.u.os2fam.mixed1632 )
       && (FmtData.type & MK_RAW) == 0 ) {
@@ -751,7 +745,7 @@ void AddToGroup( group_entry *group, seg_leader *seg )
         const char  *segname_16;
         const char  *segname_32;
 
-        if( seg->info & USE_32 ) {
+        if( seg->info & SEGINF_USE_32 ) {
             segname_16 = group->leaders->segname.u.ptr;
             segname_32 = seg->segname.u.ptr;
         } else {
@@ -773,23 +767,23 @@ void SetAddPubSym( symbol *sym, sym_info type, mod_entry *mod, offset off, unsig
     Ring2Append( &mod->publist, sym );
 }
 
-void DefineSymbol( symbol *sym, segnode *seg, offset off, unsigned_16 frame )
-/***************************************************************************/
+void DefineSymbol( symbol *sym, segnode *snode, offset off, unsigned_16 frame )
+/*****************************************************************************/
 // do the object file independent public symbol definition.
 {
     size_t          name_len;
     bool            frame_ok;
     sym_info        sym_type;
 
-    if( seg != NULL ) {
+    if( snode != NULL ) {
         frame = 0;
     }
     name_len = strlen( sym->name.u.ptr );
     if( !IS_ADDR_UNDEFINED( sym->addr )
       && !IS_SYM_COMMUNAL( sym ) ) {
-        if( seg != NULL
+        if( snode != NULL
           && sym->p.seg != NULL ) {
-            frame_ok = (sym->p.seg->u.leader == seg->entry->u.leader);
+            frame_ok = (sym->p.seg->u.leader == snode->entry->u.leader);
             if( sym->p.seg->u.leader->combine != COMBINE_COMMON ) {
                 frame_ok = false;
             }
@@ -810,9 +804,8 @@ void DefineSymbol( symbol *sym, segnode *seg, offset off, unsigned_16 frame )
             sym = HashReplace( sym );
 #ifdef _OS2
             if( FmtData.type & MK_PE ) {
-                if( sym->p.import != NULL ) {
-                    dll_sym_info  *dll_info = sym->p.import;
-                    AddPEImportLocalSym( sym, dll_info->iatsym );
+                if( sym->p.import_dll != NULL ) {
+                    AddPEImportLocalSym( sym, sym->p.import_dll->iatsym );
                     sym_type |= SYM_REFERENCED;
                     LnkMsg( WRN+MSG_IMPORT_LOCAL, "s", sym->name.u.ptr );
                 }
@@ -826,11 +819,11 @@ void DefineSymbol( symbol *sym, segnode *seg, offset off, unsigned_16 frame )
         ClearSymUnion( sym );
         SetAddPubSym( sym, sym_type, CurrMod, off, frame );
         sym->info &= ~SYM_1_DISTRIB;
-        if( seg != NULL ) {
+        if( snode != NULL ) {
             if( LinkFlags & LF_STRIP_CODE ) {
-                DefStripSym( sym, seg->entry );
+                DefStripSym( sym, snode->entry );
             }
-            if( seg->info & SEG_CODE ) {
+            if( snode->info & SEGINF_CODE ) {
 #ifdef _EXE
                 if( (FmtData.type & MK_OVERLAYS)
                   && FmtData.u.dos.distribute ) {
@@ -840,7 +833,7 @@ void DefineSymbol( symbol *sym, segnode *seg, offset off, unsigned_16 frame )
                 }
 #endif
             }
-            sym->p.seg = seg->entry;
+            sym->p.seg = snode->entry;
             if( sym->p.seg->isabs ) {
                 sym->info |= SYM_ABSOLUTE;
             }
@@ -884,7 +877,7 @@ static segdata *GetSegment( char *seg_name, char *class_name, char *group_name,
     sdata->align = align;
     sdata->combine = comb;
     sdata->isuninit = true;
-    leader = FindALeader( sdata, class, ( bits == BITS_16 ) ? 0 : USE_32 );
+    leader = FindALeader( sdata, class, ( bits == BITS_16 ) ? SEGINF_NONE : SEGINF_USE_32 );
     if( group_name != NULL ) {
         /* put in appropriate group */
         group = GetGroup( group_name );
@@ -1213,14 +1206,14 @@ void DefineVFTableRecord( symbol *sym, symbol *defsym, bool ispure,
     }
 }
 
-void DefineVFReference( void *src, symbol *targ, bool issym )
+void DefineVFReference( void *snode, symbol *targ, bool issym )
 /***********************************************************/
 {
     if( issym ) {
-        AddSymEdge( src, targ );
+        AddSymEdge( snode, targ );
     } else {
-        if( ((segnode *)src)->info & SEG_CODE ) {
-            AddEdge( (segdata *)((segnode *)src)->entry, targ );
+        if( ((segnode *)snode)->info & SEGINF_CODE ) {
+            AddEdge( (segdata *)((segnode *)snode)->entry, targ );
         }
     }
 }
@@ -1292,7 +1285,7 @@ bool SeenDLLRecord( void )
 /*******************************/
 {
     LinkState |= LS_FMT_SEEN_IMPORT_CMT;
-    if( !HintFormat( MK_OS2 | MK_WIN_NE | MK_PE | MK_ELF | MK_NOVELL ) ) {
+    if( !HintFormat( MK_NE | MK_OS2_FLAT | MK_PE | MK_ELF | MK_NOVELL ) ) {
         LnkMsg( WRN+LOC+MSG_DLL_WITH_386, NULL );
         return( false );    /* Not OK to process import/export records. */
     } else {
@@ -1318,7 +1311,7 @@ void HandleImport( const length_name *intname, const length_name *modname,
             sym->mod = CurrMod;
         }
 #ifdef _OS2
-        if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) ) {
+        if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) ) {
             MSImportKeyword( sym, modname, extname, ordinal );
         } else {
 #endif
@@ -1368,7 +1361,7 @@ void HandleExport( const length_name *expname, const length_name *intname,
 #endif
 
 #ifdef _OS2
-    if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) ) {
+    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) ) {
         MSExportKeyword( expname, intname, flags, ordinal );
     } else {
 #endif

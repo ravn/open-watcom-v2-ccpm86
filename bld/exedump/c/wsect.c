@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,13 +42,6 @@
 
 
 #define SCOPE_GUESS     0x50
-
-#define ARRAY_SIZE(a)   (sizeof( a ) / sizeof( (a)[0] ))
-
-#define NUM_TAGS            ARRAY_SIZE( readableTAGs )
-#define NUM_FORMS           ARRAY_SIZE( readableFORMs )
-#define NUM_ATS             ARRAY_SIZE( readableATs )
-#define NUM_REFERENCE_OPS   ARRAY_SIZE( readableReferenceOps )
 
 typedef struct {
     const unsigned_8    *p;
@@ -154,13 +147,13 @@ static int compare_table( const void *pa, const void *pb )
 static void sort_tables( void )
 /*****************************/
 {
-    static int  done = 0;
+    static bool  done = false;
 
     if( !done ) {
-        done = 1;
-        qsort( readableTAGs, NUM_TAGS, sizeof( readable_name ), compare_table );
-        qsort( readableFORMs, NUM_FORMS, sizeof( readable_name ), compare_table );
-        qsort( readableATs, NUM_ATS, sizeof( readable_name ), compare_table );
+        done = true;
+        qsort( readableTAGs, ARRAY_SIZE( readableTAGs ), sizeof( readable_name ), compare_table );
+        qsort( readableFORMs, ARRAY_SIZE( readableFORMs ), sizeof( readable_name ), compare_table );
+        qsort( readableATs, ARRAY_SIZE( readableATs ), sizeof( readable_name ), compare_table );
     }
 }
 
@@ -185,7 +178,7 @@ static void getTAG( unsigned_32 value )
     const char  *result;
     size_t      i;
 
-    result = Getname( value, readableTAGs, NUM_TAGS );
+    result = Getname( value, readableTAGs, ARRAY_SIZE( readableTAGs ) );
     if( result == NULL ) {
         Wdputs( "TAG_" );
         Puthex( value, 8 );
@@ -205,7 +198,7 @@ static void getFORM( unsigned_32 value )
     const char  *result;
     size_t      i;
 
-    result = Getname( value, readableFORMs, NUM_FORMS );
+    result = Getname( value, readableFORMs, ARRAY_SIZE( readableFORMs ) );
     if( result == NULL ) {
         Wdputs( "FORM_" );
         Puthex( value, 8 );
@@ -225,7 +218,7 @@ static void getAT( unsigned_32 value )
     const char  *result;
     size_t      i;
 
-    result = Getname( value, readableATs, NUM_ATS );
+    result = Getname( value, readableATs, ARRAY_SIZE( readableATs ) );
     if( result == NULL ) {
         Wdputs( "AT_" );
         Puthex( value, 8 );
@@ -277,7 +270,7 @@ static void dump_hex( const unsigned_8 *input, unsigned length )
         Wdputs( " <" );
         Wdputs( printable );
         Wdputslc( ">\n" );
-//      Wdputs( "%08lx:%-49s <%s>\n", old_offset, hex, printable );
+//        Wdputslc( "%08lx:%-49s <%s>\n", old_offset, hex, printable );
         p = printable;
         i = 0;
         if( offset == length ) {
@@ -369,7 +362,8 @@ static void DmpLoc( unsigned_8 const *p, unsigned length, unsigned_16 addr_size 
 
         Wdputs( OpName[op] );
         opr = LocOpr[op];
-        if( opr == DW_LOP_REG1 || opr == DW_LOP_BRG1 ) {
+        if( opr == DW_LOP_REG1
+          || opr == DW_LOP_BRG1 ) {
             Wdputs( "/" );
         } else {
             Wdputs( " " );
@@ -481,7 +475,8 @@ static void DmpLocList( unsigned_32 start, unsigned_16 addr_size )
     for( p += start; p < stop; p += len ) {
         p = GetInt( p, &low, addr_size );
         p = GetInt( p, &high, addr_size );
-        if( low == high && low == 0 ) {
+        if( low == high
+          && low == 0 ) {
             Wdputslc( "        <end>\n" );
             return;
         }
@@ -514,19 +509,20 @@ static bool dump_tag( info_state *info )
     for( ;; ) {
         attr = ReadULEB128( abbrev );
         form = ReadULEB128( abbrev );
-        if( attr == 0 ) break;
+        if( attr == 0 )
+            break;
         Wdputs( "        " );
         getAT( attr );
         if( attr == DW_AT_location
-         || attr == DW_AT_segment
-         || attr == DW_AT_return_addr
-         || attr == DW_AT_frame_base
-         || attr == DW_AT_static_link
-         || attr == DW_AT_data_member_location
-         || attr == DW_AT_string_length
-         || attr == DW_AT_vtable_elem_location
-         || attr == DW_AT_WATCOM_parm_entry
-         || attr == DW_AT_use_location ) {
+          || attr == DW_AT_segment
+          || attr == DW_AT_return_addr
+          || attr == DW_AT_frame_base
+          || attr == DW_AT_static_link
+          || attr == DW_AT_data_member_location
+          || attr == DW_AT_string_length
+          || attr == DW_AT_vtable_elem_location
+          || attr == DW_AT_WATCOM_parm_entry
+          || attr == DW_AT_use_location ) {
             is_loc = true;
        } else {
             is_loc = false;
@@ -765,15 +761,16 @@ static bool skip_tag( info_state *info )
     for( ;; ) {
         attr = ReadULEB128( abbrev );
         form = ReadULEB128( abbrev );
-        if( attr == 0 ) break;
+        if( attr == 0 )
+            break;
         if( attr == DW_AT_location
-         || attr == DW_AT_segment
-         || attr == DW_AT_return_addr
-         || attr == DW_AT_frame_base
-         || attr == DW_AT_static_link
-         || attr == DW_AT_data_member_location
-         || attr == DW_AT_string_length
-         || attr == DW_AT_use_location ) {
+          || attr == DW_AT_segment
+          || attr == DW_AT_return_addr
+          || attr == DW_AT_frame_base
+          || attr == DW_AT_static_link
+          || attr == DW_AT_data_member_location
+          || attr == DW_AT_string_length
+          || attr == DW_AT_use_location ) {
             is_loc = true;
        } else {
             is_loc = false;
@@ -899,7 +896,8 @@ static void dump_info_headers( const char *input, unsigned length )
         while( p - unit_base < unit_length ) {
             tag_offset = p - input;
             abbrev_code = ReadULEB128( p );
-            if( abbrev_code == 0 ) continue;
+            if( abbrev_code == 0 )
+                continue;
             abbrev = find_abbrev( abbrev_offset, abbrev_code );
             if( abbrev == NULL ) {
                 Wdputs( "can't find abbreviation " );
@@ -907,7 +905,8 @@ static void dump_info_headers( const char *input, unsigned length )
                 Wdputslc( "\n" );
                 break;
             }
-            if( p >= input + length ) break;
+            if( p >= input + length )
+                break;
             tag = ReadULEB128( abbrev );
             abbrev++;
             state.abbrev = abbrev;
@@ -924,13 +923,17 @@ static void dump_info_headers( const char *input, unsigned length )
                 Wdputs( "        " );
                 getTAG( tag );
                 Wdputslc( "\n" );
-               if( !dump_tag( &state ) )break;
+                if( !dump_tag( &state ) ) {
+                    break;
+                }
             } else {
                 skip_tag( &state );
             }
             p = state.p;
         }
-        if( found )break;
+        if( found ) {
+            break;
+        }
     }
 }
 #endif
@@ -986,7 +989,8 @@ void dump_abbrevs( const unsigned_8 *input, unsigned length )
             if( p > input + length )
                 break;
             tmp = ReadULEB128( p );
-            if( attr == 0 && tmp == 0 ) {
+            if( attr == 0
+              && tmp == 0 ) {
                 Wdputslc( "        End_form\n" );
                 break;
             }
@@ -1009,7 +1013,7 @@ static void get_reference_op( unsigned_8 value )
     const char  *result;
     size_t      i;
 
-    result = Getname( value, readableReferenceOps, NUM_REFERENCE_OPS );
+    result = Getname( value, readableReferenceOps, ARRAY_SIZE( readableReferenceOps ) );
     if( result == NULL ) {
         Wdputs( "REF_" );
         Puthex( value, 2 );
@@ -1045,7 +1049,7 @@ static unsigned_32 ScopePop( scope_stack *stack )
     }
 
     stack->free -= 1;
-    return stack->stack[stack->free];
+    return( stack->stack[stack->free] );
 }
 
 static void PutRefRegisters( ref_info *registers )
@@ -1194,8 +1198,11 @@ static void dump_aranges( const unsigned_8 *p, unsigned length )
             p = GetInt( p, &addr, addr_size );
             p = GetInt( p, &seg, seg_size );
             p = GetInt( p, &len, addr_size );
-            if( addr == 0 && seg == 0 && len == 0 )
+            if( addr == 0
+              && seg == 0
+              && len == 0 ) {
                 break;
+            }
             Wdputs( "    " );
             if( seg_size != 0 ) {
                 Puthex( seg, seg_size * 2 );
@@ -1323,7 +1330,7 @@ unsigned Lookup_section_name( const char *name )
 
     for( sect = 0 ; sect < DW_DEBUG_MAX ; sect++ ) {
         if( stricmp( sectionNames[sect], name ) == 0 ) {
-            return sect;
+            return( sect );
         }
     }
     return( sect );

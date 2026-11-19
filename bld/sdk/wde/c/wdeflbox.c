@@ -80,8 +80,8 @@ WINEXPORT LRESULT CALLBACK WdeLBoxSuperClassProc( HWND, UINT, WPARAM, LPARAM );
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static OBJPTR   WdeMakeLBox( OBJPTR, RECT *, OBJPTR, DialogStyle, char *, OBJ_ID );
-static OBJPTR   WdeLBCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl * );
+static OBJPTR   WdeMakeLBox( OBJPTR, RECT *, OBJPTR, DialogStyle, const char *, OBJ_ID );
+static OBJPTR   WdeLBCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl *control );
 static void     WdeLBoxSetDefineInfo( WdeDefineObjectInfo *, HWND );
 static void     WdeLBoxGetDefineInfo( WdeDefineObjectInfo *, HWND );
 static bool     WdeLBoxDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
@@ -120,7 +120,7 @@ OBJPTR CALLBACK WdeLBoxCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle )
 }
 
 OBJPTR WdeMakeLBox( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
-                    DialogStyle style, char *text, OBJ_ID id )
+                    DialogStyle style, const char *text, OBJ_ID id )
 {
     OBJPTR new;
 
@@ -139,7 +139,7 @@ OBJPTR WdeMakeLBox( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
     return( new );
 }
 
-OBJPTR WdeLBCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id, WdeDialogBoxControl *info )
+OBJPTR WdeLBCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id, WdeDialogBoxControl *control )
 {
     WdeLBoxObject *new;
 
@@ -178,7 +178,7 @@ OBJPTR WdeLBCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id, Wde
         return( NULL );
     }
 
-    if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
+    if( !Forward( new->object_handle, SET_OBJECT_INFO, control, NULL ) ) {
         WdeWriteTrail( "WdeLBoxCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
         MemFree( new );
@@ -253,7 +253,7 @@ bool WdeLBoxInit( bool first )
     SETCTL_SIZEW( WdeDefaultLBox, 0 );
     SETCTL_SIZEH( WdeDefaultLBox, 0 );
     SETCTL_TEXT( WdeDefaultLBox, NULL );
-    SETCTL_CLASSID( WdeDefaultLBox, ResNumToControlClass( CLASS_LISTBOX ) );
+    SETCTL_CLASSID( WdeDefaultLBox, ResNumToNameOrOrdinal( CLASS_LISTBOX ) );
 
 #ifdef __WINDOWS__
     WdeLBoxDispatch = MakeProcInstance_DISPATCHER( WdeLBoxDispatcher, WdeGetAppInstance() );
@@ -348,7 +348,7 @@ bool WdeLBoxGetWndProc( WdeLBoxObject *obj, WNDPROC *proc, void *p2 )
     return( true );
 }
 
-bool WdeLBoxGetWindowClass( WdeLBoxObject *obj, char **class, void *p2 )
+bool WdeLBoxGetWindowClass( WdeLBoxObject *obj, const char **class, void *p2 )
 {
     /* unused parameters */ (void)obj; (void)p2;
 
@@ -382,7 +382,7 @@ void WdeLBoxSetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
 
     id = o_info->obj_id;
 
-    mask = GETCTL_STYLE( o_info->info.c.info ) & 0x0000ffff;
+    mask = GETCTL_STYLE( o_info->info.c.control ) & 0x0000ffff;
 
     if( mask & LBS_NOTIFY ) {
         CheckDlgButton( hDlg, IDB_LBS_NOTIFY, BST_CHECKED );
@@ -465,7 +465,7 @@ void WdeLBoxSetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     EnableWindow( GetDlgItem( hDlg, IDB_WS_EX_LTRREADING ), TRUE );
     EnableWindow( GetDlgItem( hDlg, IDB_WS_EX_RTLREADING ), TRUE );
 
-    mask = GETCTL_EXSTYLE( o_info->info.c.info );
+    mask = GETCTL_EXSTYLE( o_info->info.c.control );
     if( mask & WS_EX_STATICEDGE ) {
         CheckDlgButton( hDlg, IDB_WS_EX_STATICEDGE, BST_CHECKED );
     }
@@ -560,8 +560,8 @@ void WdeLBoxGetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     }
 #endif
 
-    SETCTL_STYLE( o_info->info.c.info,
-                  (GETCTL_STYLE( o_info->info.c.info ) & 0xffff0000) | mask );
+    SETCTL_STYLE( o_info->info.c.control,
+                  (GETCTL_STYLE( o_info->info.c.control ) & 0xffff0000) | mask );
 
 #if __NT__XX
     // set the extended mask
@@ -578,7 +578,7 @@ void WdeLBoxGetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     if( IsDlgButtonChecked( hDlg, IDB_WS_EX_RTLREADING ) ) {
         mask |= WS_EX_RTLREADING;
     }
-    SETCTL_EXSTYLE( o_info->info.c.info, mask );
+    SETCTL_EXSTYLE( o_info->info.c.control, mask );
 #endif
 }
 

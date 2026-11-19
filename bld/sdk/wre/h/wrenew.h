@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,7 +39,6 @@
 /****************************************************************************/
 /* macro definitions                                                        */
 /****************************************************************************/
-#define DEF_MEMFLAGS (MEMFLAG_MOVEABLE | MEMFLAG_PURE)
 
 /****************************************************************************/
 /* type definitions                                                         */
@@ -47,6 +47,6 @@
 /****************************************************************************/
 /* function prototypes                                                      */
 /****************************************************************************/
-extern bool WRENewResource( WRECurrentResInfo *, WResID *, WResID *, uint_16, uint_32, uint_32, WResLangType *, bool *, uint_16, bool );
+extern bool WRENewResource( WRECurrentResInfo *, WResID *, WResID *, ResMemFlags, uint_32, uint_32, WResLangType *, bool *, uint_16, bool );
 
 #endif

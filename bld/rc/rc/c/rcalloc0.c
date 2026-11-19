@@ -106,7 +106,7 @@ static HeapList *RCMemLayer0AddToHeap( size_t heapsize, size_t blocks_per_heap )
 #endif
     data = SysMemAlloc( allocsize );
     if( data == NULL ) {
-        RcFatalError( ERR_OUT_OF_MEMORY );
+        RcFatalError( RCMSG_OUT_OF_MEMORY );
         /* never return */
     }
 #ifdef RCMEM_DEBUG
@@ -126,7 +126,7 @@ HeapHandle *RCMemLayer0NewHeap( size_t heapsize, size_t blocks_per_heap )
 
     heap = SysMemAlloc( sizeof( HeapHandle ) );
     if( heap == NULL ) {
-        RcFatalError( ERR_OUT_OF_MEMORY );
+        RcFatalError( RCMSG_OUT_OF_MEMORY );
         /* never return */
     }
     heap->list = NULL;
@@ -220,10 +220,9 @@ void RCMemLayer0ShutDown( HeapHandle *heap )
 /******************************************/
 {
     HeapList         *curnode;
-    HeapList         *nextnode;
 
-    for( curnode = heap->list; curnode != NULL; curnode = nextnode ) {
-        nextnode = curnode->next;
+    while( (curnode = heap->list) != NULL ) {
+        heap->list = curnode->next;
 #ifdef RCMEM_DEBUG
         RCMemLayer0CheckUnfreed( heap, (char *)curnode + sizeof( HeapList ) );
 #endif

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -61,8 +61,8 @@
 
 #include "browse.h"
 
-#include <stdlib.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstring>
 
 Browse  * browseTop = NULL;
 WWindow * topWindow = browseTop;
@@ -192,7 +192,7 @@ bool Browse::makeFileName( char *buff )
     p = new char [_searchPath.length() + 1];
     if( p == NULL )
         return( false );
-    strcpy( p, _searchPath );
+    std::strcpy( p, _searchPath );
 
     q = strtok( p, ";" );
     while( q != NULL ) {
@@ -201,7 +201,7 @@ bool Browse::makeFileName( char *buff )
         nfile.setFName( file.fName() );
         nfile.setExt( file.ext() );
         if( nfile.attribs() ) {
-            strcpy( buff, nfile.gets() );
+            std::strcpy( buff, nfile.gets() );
             delete[] p;
             return( true );
         }
@@ -466,7 +466,7 @@ void Browse::showSource( Symbol * sym )
 
     sym->filePosition( line, col );
     if( sym->defSourceFile( file ) ) {
-        int size = strlen( sym->name() );
+        int size = std::strlen( sym->name() );
         browseTop->positionEditor( file, line, col, size );
     } else {
         errMessage( "Unable to edit %s:  no source information.",

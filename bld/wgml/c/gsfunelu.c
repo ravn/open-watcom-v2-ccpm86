@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -120,11 +120,11 @@ static char *scr_single_func_sS( char *args, char *end, char **result, bool supe
     int             rc;
     char            *pval;
 
-    *(*result)++ = FUNC_escape;         // insert function code in buffer
+    *(*(unsigned char **)result)++ = FUNC_escape;         // insert function code in buffer
     if( super ) {
-        *(*result)++ = FUNC_superscript_beg;// function superscript start
+        *(*(unsigned char **)result)++ = FUNC_superscript_beg;// function superscript start
     } else {
-        *(*result)++ = FUNC_subscript_beg;  // function subscript start
+        *(*(unsigned char **)result)++ = FUNC_subscript_beg;  // function subscript start
     }
 
     if( *args == '&' ) {            // symbol name
@@ -143,11 +143,11 @@ static char *scr_single_func_sS( char *args, char *end, char **result, bool supe
             *(*result)++ = *pchar;
         }
     }
-    *(*result)++ = FUNC_escape;         // insert function code in buffer
+    *(*(unsigned char **)result)++ = FUNC_escape;         // insert function code in buffer
     if( super ) {
-        *(*result)++ = FUNC_superscript_end;    // function superscript end
+        *(*(unsigned char **)result)++ = FUNC_superscript_end;    // function superscript end
     } else {
-        *(*result)++ = FUNC_subscript_end;    // function subscript end
+        *(*(unsigned char **)result)++ = FUNC_subscript_end;    // function subscript end
     }
     **result = '\0';
 
@@ -257,16 +257,16 @@ static char *scr_single_func_w( char *args, char *end, char **result )
 static char *scr_single_func_x( char *args, char *end, char **result )
 {
     bool            accept;
-    char            c;
+    int             c;
     char            *pchar;
 
     accept = true;
-    if( *args != '&' ) {               // symbols/symbol values are not converted
+    if( *args != '&' ) {                // symbols/symbol values are not converted
         if( ( end - args ) % 2 ) {      // odd number of characters?
             accept = false;
         } else {
             for( pchar = args; pchar < end; pchar++ ) { // check for non-hex-digit in input
-                if( !my_isxdigit( *pchar ) ) {
+                if( !isxdigit( *(unsigned char *)pchar ) ) {
                     accept = false;
                     break;
                 }
@@ -274,21 +274,8 @@ static char *scr_single_func_x( char *args, char *end, char **result )
         }
         if( accept ) {                  // input is acceptable
             for( pchar = args; pchar < end; pchar++ ) { // convert input from hex
-
-                c = 0;
-                if( my_isdigit( *pchar ) ) {
-                    c += *pchar - '0';
-                } else {
-                    c += my_toupper( *pchar ) - 'A' + 10;
-                }
-                c *= 16;
-                pchar++;
-                if( my_isdigit( *pchar ) ) {
-                    c += *pchar - '0';
-                } else {
-                    c += my_toupper( *pchar ) - 'A' + 10;
-                }
-
+                c = get_char_hexval( pchar );
+                pchar += 2;
                 *(*result)++ = c;
             }
             **result = '\0';                    // final digit already skipped

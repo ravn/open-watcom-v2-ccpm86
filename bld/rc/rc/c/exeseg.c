@@ -25,7 +25,7 @@
 *
 *  ========================================================================
 *
-* Description:  NE segment processing functions.
+* Description:  NE segments processing functions (used by 16-bit code)
 *
 ****************************************************************************/
 
@@ -197,7 +197,7 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
     uint_16         numrelocs;
     long            dst_offset;
     long            align_amount;
-    uint_32         seg_len = 0L;
+    uint_32         seg_len = 0;
     char            zero;
 
     zero = 0;
@@ -213,13 +213,13 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
         dst_offset = RESTELL( dst->fp );
         if( dst_offset == -1 ) {
             error = true;
-            RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
+            RcError( RCMSG_WRITTING_FILE, dst->name, strerror( errno ) );
         }
         if( !error ) {
             align_amount = AlignAmount( dst_offset, dst_shift_count );
             if( RESSEEK( dst->fp, align_amount, SEEK_CUR ) ) {
                 error = true;
-                RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
+                RcError( RCMSG_WRITTING_FILE, dst->name, strerror( errno ) );
             }
             dst_offset += align_amount;
         }
@@ -232,25 +232,25 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
              */
             if( RESSEEK( src->fp, (long)src_seg->address << src_shift_count, SEEK_SET ) ) {
                 error = true;
-                RcError( ERR_READING_EXE, src->name, strerror( errno ) );
+                RcError( RCMSG_READING_EXE, src->name, strerror( errno ) );
             }
         }
 
         if( !error ) {
-            RcStatus    ret;
+            RcStatus    rcstat;
 
             if( src_seg->size == 0 ) {
                 seg_len = 0x10000L;
             } else {
                 seg_len = src_seg->size;
             }
-            ret = CopyExeData( src->fp, dst->fp, seg_len );
-            if( ret == RS_READ_ERROR ) {
-                ret = RS_READ_ERROR_EXE;
-//            } else if( ret == RS_WRITE_ERROR ) {
-//                ret = RS_WRITE_ERROR_RES;
+            rcstat = CopyExeData( src->fp, dst->fp, seg_len );
+            if( rcstat == RS_READ_ERROR ) {
+                rcstat = RS_READ_ERROR_EXE;
+//            } else if( rcstat == RS_WRITE_ERROR ) {
+//                rcstat = RS_WRITE_ERROR_RES;
             }
-            error = RcIOError( ret, src->name, dst->name, errno );
+            error = RcIOError( rcstat, src->name, dst->name, errno );
         }
 
         if( (src_seg->info & SEG_RELOC)
@@ -262,29 +262,29 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
             if( numread != sizeof( numrelocs ) ) {
                 error = true;
                 if( RESIOERR( src->fp, numread ) ) {
-                    RcError( ERR_READING_EXE, src->name, strerror( errno ) );
+                    RcError( RCMSG_READING_EXE, src->name, strerror( errno ) );
                 } else {
-                    RcError( ERR_UNEXPECTED_EOF, src->name );
+                    RcError( RCMSG_UNEXPECTED_EOF, src->name );
                 }
             } else {
                 if( RESWRITE( dst->fp, &numrelocs, sizeof( numrelocs ) ) != sizeof( numrelocs ) ) {
                     error = true;
-                    RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
+                    RcError( RCMSG_WRITTING_FILE, dst->name, strerror( errno ) );
                 }
             }
             /*
              * copy the relocation information
              */
             if( !error ) {
-                RcStatus    ret;
+                RcStatus    rcstat;
 
-                ret = CopyExeData( src->fp, dst->fp, numrelocs * OS_RELOC_ITEM_SIZE );
-                if( ret == RS_READ_ERROR ) {
-                    ret = RS_READ_ERROR_EXE;
-//                } else if( ret == RS_WRITE_ERROR ) {
-//                    ret = RS_WRITE_ERROR_RES;
+                rcstat = CopyExeData( src->fp, dst->fp, numrelocs * OS_RELOC_ITEM_SIZE );
+                if( rcstat == RS_READ_ERROR ) {
+                    rcstat = RS_READ_ERROR_EXE;
+//                } else if( rcstat == RS_WRITE_ERROR ) {
+//                    rcstat = RS_WRITE_ERROR_RES;
                 }
-                error = RcIOError( ret, src->name, dst->name, errno );
+                error = RcIOError( rcstat, src->name, dst->name, errno );
             }
             if( numrelocs * OS_RELOC_ITEM_SIZE + seg_len > 0x10000L ) {
                 ret = CPSEG_SEG_TOO_BIG;
@@ -303,7 +303,7 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
             }
             if( RESSEEK( dst->fp, align_amount - 1, SEEK_CUR ) ) {
                 error = true;
-                RcError( ERR_WRITTING_FILE, dst->name );
+                RcError( RCMSG_WRITTING_FILE, dst->name );
             } else {
                 /*
                  * write something out so if we have just seeked past the
@@ -312,7 +312,7 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
                  */
                 if( RESWRITE( dst->fp, &zero, 1 ) != 1 ) {
                     error = true;
-                    RcError( ERR_WRITTING_FILE, dst->name );
+                    RcError( RCMSG_WRITTING_FILE, dst->name );
                 }
             }
         }
@@ -463,7 +463,7 @@ CpSegRc CopyOS2Segments( ExeFileInfo *src, ExeFileInfo *dst )
         }
         if( RESSEEK( src->fp, end_offset, SEEK_SET ) ) {
             ret = CPSEG_ERROR;
-            RcError( ERR_READING_EXE, src->name, strerror( errno ) );
+            RcError( RCMSG_READING_EXE, src->name, strerror( errno ) );
         }
         CheckDebugOffset( src );
     }

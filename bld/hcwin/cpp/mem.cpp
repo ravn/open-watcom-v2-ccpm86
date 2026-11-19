@@ -36,12 +36,10 @@
  * appropriate C code use #pragma aux ... __frame to do same
  * for some unknown reason this doesn't work for C++ compiler now
  */
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstdlib>
+#include <cstdio>
 #include "hcmem.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
 
 #ifdef TRMEM
@@ -50,19 +48,23 @@
 #pragma initialize 40;
 #endif
 
-static _trmem_hdl TrHdl = _TRMEM_HDL_NONE;
-
 static Memory bogus;    // just need to get the ctors called
+
+extern "C" {
+
+static _trmem_hdl TrHdl = _TRMEM_HDL_NONE;
 
 //
 //  PrintLine   -- output function used by the memory tracker.
 //
 
-void PrintLine( void *parm, const char *buf, size_t len )
+void PrintLine( void *parm, const char *buf, std::size_t len )
 {
     /* unused parameters */ (void)parm; (void)len;
 
-    fprintf( stdout, "%s\n", buf );
+    std::fprintf( stdout, "%s\n", buf );
+}
+
 }
 
 //
@@ -74,33 +76,37 @@ void PrintLine( void *parm, const char *buf, size_t len )
 
 // temporary fix for bug in OW 1.9 C++ compiler
 
-void *my_malloc( size_t size )
+extern "C" {
+
+void *my_malloc( std::size_t size )
 {
-    return( malloc( size ) );
+    return( std::malloc( size ) );
 }
 
 void my_free( void *p )
 {
-    return( free( p ) );
+    return( std::free( p ) );
 }
 
-void *my_realloc( void *p, size_t size )
+void *my_realloc( void *p, std::size_t size )
 {
-    return( realloc( p, size ) );
+    return( std::realloc( p, size ) );
+}
+
 }
 
 Memory::Memory()
 {
     TrHdl = _trmem_open( my_malloc, my_free, my_realloc, _TRMEM_NO_STRDUP,
-            NULL, PrintLine, _TRMEM_ALL );
+            NULL, PrintLine, _TRMEM_DEF );
 }
 
 #else /* __WATCOMC__ != 1290 */
 
 Memory::Memory()
 {
-    TrHdl = _trmem_open( malloc, free, realloc, _TRMEM_NO_STRDUP,
-            NULL, PrintLine, _TRMEM_ALL );
+    TrHdl = _trmem_open( std::malloc, std::free, std::realloc, _TRMEM_NO_STRDUP,
+            NULL, PrintLine, _TRMEM_DEF );
 }
 
 #endif /* __WATCOMC__ == 1290 */
@@ -124,9 +130,9 @@ void mem_statistic()
 //
 
 #ifdef __WATCOMC__
-void *operator new( size_t size )
+void *operator new( std::size_t size )
 #else
-void *operator new( size_t size ) throw(std::bad_alloc)
+void *operator new( std::size_t size ) throw(std::bad_alloc)
 #endif
 {
     void *p;
@@ -134,7 +140,7 @@ void *operator new( size_t size ) throw(std::bad_alloc)
 #ifdef TRMEM
     p = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
 #else
-    p = malloc( size );
+    p = std::malloc( size );
 #endif
     return( p );
 }
@@ -144,12 +150,12 @@ void *operator new( size_t size ) throw(std::bad_alloc)
 //  renew -- global realloc function with hooks into the memory tracker.
 //
 
-void *renew( void *p, size_t size )
+void *renew( void *p, std::size_t size )
 {
 #ifdef TRMEM
     p = _trmem_realloc( p, size, _TRMEM_WHO( 2 ), TrHdl );
 #else
-    p = realloc( p, size );
+    p = std::realloc( p, size );
 #endif
     return( p );
 }
@@ -170,7 +176,7 @@ void operator delete( void *p ) throw()
 #ifdef TRMEM
     _trmem_free( p, _TRMEM_WHO( 3 ), TrHdl );
 #else
-    free( p );
+    std::free( p );
 #endif
 }
 
@@ -181,7 +187,7 @@ void operator delete( void *p ) throw()
 
 const unsigned Pool::BLOCK_SIZE = 1024;
 
-Pool::Pool( size_t size, unsigned b_size )
+Pool::Pool( std::size_t size, unsigned b_size )
     : _block( b_size ? b_size : BLOCK_SIZE ),
       _size( size > sizeof( void * ) ? size : sizeof( void * ) )
 {

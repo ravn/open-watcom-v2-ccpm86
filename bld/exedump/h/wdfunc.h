@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -127,14 +127,15 @@ extern void         Dmp_resources( void );
 /*
  * wdseg.c
  */
+extern void         Dmp_one_seg_data( unsigned_16 );
 extern void         Dmp_seg_tab( void );
 
 /*
  * wdtab.c
  */
-extern void         Dmp_ne_tbls( void );
-extern void         Dmp_le_lx_tbls( void );
-extern void         Dmp_ordinal( unsigned_16 );
+extern void         Dmp_tables_ne( void );
+extern void         Dmp_tables_lelx( void );
+extern bool         Dmp_ordinal( unsigned_16 );
 extern bool         Dmp_os2_exports( void );
 
 /*
@@ -148,8 +149,8 @@ extern void         Dmp_fixpage_tab( unsigned_32, unsigned_32 );
  */
 extern void         Dmp_relocs( void );
 extern void         Dmp_segments( void );
-extern void         Dmp_le_page_seg( void );
-extern void         Dmp_lx_page_seg( map_entry );
+extern void         Dmp_page_seg_le( void );
+extern void         Dmp_page_seg_lx( map_entry );
 extern void         Dmp_seg_data( unsigned long, unsigned long );
 extern void         dmp_mult_data_line( char *, unsigned_16, unsigned_16 );
 extern void         dmp_data_line_bytes( char *data, unsigned_16 amount );
@@ -160,7 +161,7 @@ extern void         dmp_data_line( char *, unsigned_16, unsigned_16 );
  */
 extern void         Puthex( unsigned_32, unsigned_16 );
 extern void         Puthex64( long long, unsigned_16 );
-extern void         Putdec( unsigned_32 );
+extern int          Putdec( unsigned_32 );
 extern void         Putdec64( long long );
 extern void         Putdecs( signed_32 );
 extern void         Putdecl( unsigned_32, unsigned_16 );
@@ -201,15 +202,14 @@ extern unsigned_8       Dump_name( void );
 extern unsigned         Align_name( unsigned_8 len, unsigned_8 align );
 extern void             Dump_header( const void *, const char * const *, int );
 extern void             Dump_asciiz( unsigned long offset );
-extern void             DumpFlags( unsigned_32, unsigned_32, const char * const *, const char * );
 extern void             *Wmalloc( size_t );
 extern void             Banner( const char * );
 
 /*
  * wdres.c
  */
-extern void         Dmp_resrc_tab( void );
-extern void         Dmp_resrc2_tab( void );
+extern void         Dmp_resrc_tab_ne( void );
+extern void         Dmp_resrc_tab_lelx( void );
 
 /*
  * coff.c

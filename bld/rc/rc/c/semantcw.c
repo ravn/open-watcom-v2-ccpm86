@@ -33,6 +33,7 @@
 #include <stdio.h>      /* remove call for MS format stuff */
 #include "global.h"
 #include "rcerrors.h"
+#include "yydriver.h"
 #include "semantic.h"
 #include "semantcw.h"
 #include "rcrtns.h"
@@ -42,6 +43,20 @@
 static WResLangType curLang;
 static bool         resourceHasLang;
 static WResLangType resourceLang;
+
+static uint_32  curCodepage = 0;
+
+uint_32 SemWINGetDefaultCodepage( void )
+/**************************************/
+{
+    return( curCodepage );
+}
+
+void SemWINSetDefaultCodepage( uint_32 codepage )
+/***********************************************/
+{
+    curCodepage = codepage;
+}
 
 void SemSetDefLang( void )
 /************************/
@@ -56,7 +71,7 @@ void SemWINSetGlobalLanguage( const WResLangType *newlang )
     if( CmdLineParms.iswin32 ) {
         curLang = *newlang;
     } else {
-        RcWarning( ERR_NT_KEYWORD, SemWINTokenToString( Y_LANGUAGE ) );
+        RcWarning( RCMSG_NT_KEYWORD, SemWINTokenToString( Y_LANGUAGE ) );
     }
 }
 
@@ -67,7 +82,7 @@ void SemWINSetResourceLanguage( const WResLangType *newlang, bool from_parser )
         resourceHasLang = true;
         resourceLang = *newlang;
     } else if( from_parser ) {
-        RcWarning( ERR_NT_KEYWORD,  SemWINTokenToString( Y_LANGUAGE ) );
+        RcWarning( RCMSG_NT_KEYWORD,  SemWINTokenToString( Y_LANGUAGE ) );
     }
 }
 
@@ -85,84 +100,39 @@ const WResLangType *SemGetResourceLanguage( void )
 void SemWINUnsupported( YYTOKENTYPE token )
 /*****************************************/
 {
-    RcWarning( ERR_UNSUPPORTED, SemWINTokenToString( token ) );
+    RcWarning( RCMSG_UNSUPPORTED, SemWINTokenToString( token ) );
 }
 
-FullMemFlags SemWINAddFirstMemOption( YYTOKENTYPE token )
-/*******************************************************/
-{
-    FullMemFlags    newflags;
-
-    newflags.flags = 0;
-    newflags.loadOptGiven = false;
-    newflags.memOptGiven = false;
-    newflags.purityOptGiven = false;
-
-    return( SemWINAddMemOption( newflags, token ) );
-}
-
-FullMemFlags SemWINAddMemOption( FullMemFlags currflags, YYTOKENTYPE token )
-/**************************************************************************/
+ResMemFlags SemWINAddResOption( ResMemFlags res_flags, YYTOKENTYPE token )
+/************************************************************************/
 {
     switch( token ) {
     case Y_PRELOAD:
-        currflags.flags |= MEMFLAG_PRELOAD;
-        currflags.loadOptGiven = true;
+        res_flags |= RESFLAG_PRELOAD;
         break;
     case Y_LOADONCALL:
-        currflags.flags &= ~MEMFLAG_PRELOAD;
-        currflags.loadOptGiven = true;
+        res_flags &= ~RESFLAG_PRELOAD;
         break;
     case Y_FIXED:
-        currflags.flags &= ~MEMFLAG_MOVEABLE;
-        currflags.memOptGiven = true;
+        /* not only MOVEABLE=0, but also DISCARDABLE=0 */
+        res_flags &= ~(RESFLAG_MOVEABLE | RESFLAG_DISCARDABLE);
         break;
     case Y_MOVEABLE:
-        currflags.flags |= MEMFLAG_MOVEABLE;
-        currflags.memOptGiven = true;
+        res_flags |= RESFLAG_MOVEABLE;
         break;
     case Y_DISCARDABLE:
-        currflags.flags |= MEMFLAG_DISCARDABLE;
-        currflags.memOptGiven = true;
+        /* not only DISCARDABLE=1, but also MOVEABLE=1 and PURE=1 */
+        res_flags |= (RESFLAG_MOVEABLE | RESFLAG_PURE | RESFLAG_DISCARDABLE);
         break;
     case Y_PURE:
-        currflags.flags |= MEMFLAG_PURE;
-        currflags.purityOptGiven = true;
+        res_flags |= RESFLAG_PURE;
         break;
     case Y_IMPURE:
-        currflags.flags &= ~MEMFLAG_PURE;
-        currflags.purityOptGiven = true;
+        /* not only PURE=0, but also DISCARDABLE=0 */
+        res_flags &= ~(RESFLAG_PURE | RESFLAG_DISCARDABLE);
         break;
     }
-
-    return( currflags );
-}
-
-void SemWINCheckMemFlags( FullMemFlags *currflags, ResMemFlags loadopts,
-            ResMemFlags memopts, ResMemFlags pureopts )
-/********************************************************************/
-{
-    if( !currflags->loadOptGiven ) {
-        currflags->flags |= loadopts;
-    }
-    if( !currflags->memOptGiven ) {
-        currflags->flags |= memopts;
-    }
-    if( !currflags->purityOptGiven ) {
-        currflags->flags |= pureopts;
-    }
-    /*
-     * If the user set the resource to be IMPURE but doesn't give a mem option
-     * set the resource to be non-discardable.
-     * This seems to be what Microsoft is doing (test this with the sample
-     * program clock).
-     */
-    if( currflags->purityOptGiven
-      && !currflags->memOptGiven ) {
-        if( !(currflags->flags & MEMFLAG_PURE) ) {
-            currflags->flags &= ~MEMFLAG_DISCARDABLE;
-        }
-    }
+    return( res_flags );
 }
 
 char *SemWINTokenToString( YYTOKENTYPE token )
@@ -435,9 +405,6 @@ char *SemWINTokenToString( YYTOKENTYPE token )
     case Y_RCDATA:
         return( "rcdata" );
         break;
-    case Y_RCINCLUDE:
-        return( "rcinclude" );
-        break;
     case Y_RTEXT:
         return( "rtext" );
         break;
@@ -488,4 +455,5 @@ void SemanticInitStaticsWIN( void )
     memset( &curLang, 0, sizeof( WResLangType ) );
     resourceHasLang = false;
     memset( &resourceLang, 0, sizeof( WResLangType ) );
+    curCodepage = 1252; /* Latin-1 Western Europe */
 }

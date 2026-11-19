@@ -392,6 +392,21 @@ void SetTargetName( char **target_name, const char *name )
     *target_name = CMemStrdup( name );
 }
 
+void SetTargetNameBT( char **target_name, OPT_STRING **bt_value )
+/***************************************************************/
+{
+    char            *p;
+    int             c;
+
+    if( *target_name != NULL ) {
+        CMemFree( *target_name );
+    }
+    *target_name = p = SetStringOption( NULL, bt_value );
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
+}
+
 static void AnalyseAnyTargetOptions( OPT_STORAGE *data )
 /******************************************************/
 {
@@ -868,13 +883,6 @@ static char *ReadIndirectFile( const char *fname )
             if( ch == '\r'
               || ch == '\n' ) {
                 *str = ' ';
-            }
-            /*
-             * if DOS end of file (^Z) -> mark end of str
-             */
-            if( ch == DOS_EOF_CHAR ) {
-                *str = '\0';
-                break;
             }
         }
     }

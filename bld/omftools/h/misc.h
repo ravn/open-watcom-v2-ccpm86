@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,12 +33,16 @@
 #ifndef __MISC_H
 #define __MISC_H
 
-#define GET_RECLEN(h)   (h[1] | ( h[2] << 8 ))
+#define GET_RECLEN()        MGET_LE_U16_UN(RecHdr + 1)
+#define GET_RECCMD()        RecHdr[0]
+#define IS_CMD32()          ((RecHdr[0] & 1) != 0)
+#define GET_LEN(s)          ((unsigned char *)(s))[0]
 
 typedef unsigned char   byte;
 
 extern char         *NamePtr;
 extern byte         NameLen;
+extern byte         RecHdr[3];
 
 extern char         *DoWildCard( char *base );
 extern void         DoWildCardClose( void );
@@ -46,14 +50,16 @@ extern void         DoWildCardClose( void );
 extern void         ReadRecInit( void );
 extern void         ReadRecFini( void );
 extern bool         IsDataToRead( void );
+extern unsigned_8   GetByte( void );
 extern unsigned_16  GetUInt( void );
-extern unsigned_32  GetOffset( bool wide );
+extern unsigned_32  GetOffset( void );
 extern unsigned_16  GetIndex( void );
-extern char         *GetName( void );
-extern int          ReadRec( FILE *fp, byte *hdr );
+extern char         *GetNameBuf( char *name );
+extern void         ReadSkip( int );
+extern int          ReadRec( FILE *fp );
 extern void         RewindReadRec( void );
-extern bool         WriteReadRec( FILE *fo, byte *hdr );
-extern void         NameTerm( void );
+extern bool         AlignFile( FILE *fp, int page_len );
+extern bool         WriteReadRec( FILE *fo );
 extern byte         *GetReadPtr( void );
 
 #endif

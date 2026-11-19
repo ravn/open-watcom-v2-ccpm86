@@ -113,13 +113,13 @@ static bool WWriteEntryToRC( WAccelEditInfo *einfo, WAccelEntry *entry, FILE *fp
     ok = (einfo != NULL && entry != NULL);
     if( ok ) {
         if( entry->is32bit ) {
-            key = entry->u.entry32.Ascii;
-            flags = entry->u.entry32.Flags;
-            id = entry->u.entry32.Id;
+            key = entry->entry.Ascii;
+            flags = entry->entry.Flags;
+            id = entry->entry.Id;
         } else {
-            key = entry->u.entry.Ascii;
-            flags = entry->u.entry.Flags;
-            id = (uint_16)entry->u.entry.Id;
+            key = entry->entry.Ascii;
+            flags = entry->entry.Flags;
+            id = (uint_16)entry->entry.Id;
         }
         keytext = WGetKeyText( key, flags );
         ok = (keytext != NULL);
@@ -178,7 +178,7 @@ bool WWriteAccToRC( WAccelEditInfo *einfo, char *file, bool append )
     }
 
     if( ok ) {
-        for( entry = einfo->tbl->first_entry; entry != NULL; entry = entry->next ) {
+        for( entry = einfo->tbl->head; entry != NULL; entry = entry->next ) {
             ok = WWriteEntryToRC( einfo, entry, fp );
             if( !ok ) {
                 break;

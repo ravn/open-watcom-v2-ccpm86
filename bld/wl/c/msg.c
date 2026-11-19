@@ -117,7 +117,7 @@ static size_t MakeExeTypeString( char *buff, size_t max )
         Msg_Get( MSG_FILE_TYPES_0 + num, rc_buff );
         str = rc_buff;
     }
-    if( IS_VOWEL( tolower(*str) ) ) {
+    if( IS_VOWEL( tolower( *(unsigned char *)str ) ) ) {
         *buff++ = 'n';
         len++;
     }
@@ -156,7 +156,7 @@ size_t FmtStr( char *buff, size_t len, const char *fmt, ... )
     return( size );
 }
 
-static size_t fmtAddr( char *dest, size_t len, targ_addr *addr, bool offs_32 )
+static size_t fmtAddr( char *dest, size_t len, addr_type *addr, bool offs_32 )
 /****************************************************************************/
 {
 #if defined( _PHARLAP ) || defined( _RAW )
@@ -186,7 +186,7 @@ static size_t fmtAddr( char *dest, size_t len, targ_addr *addr, bool offs_32 )
 #endif
     /* segmented formats 16:16 or 16:32 */
     if( !offs_32
-      && (FmtData.type & (MK_DOS | MK_OS2_NE | MK_WIN_NE | MK_DOS16M | MK_QNX_16 | MK_RDOS_16 | MK_CPM86)) ) {
+      && (FmtData.type & (MK_DOS | MK_NE | MK_DOS16M | MK_QNX_16 | MK_RDOS_16 | MK_CPM86)) ) {
         return( FmtStr( dest, len, "%x:%x", addr->seg, (unsigned short)addr->off ) );
     } else {
         return( FmtStr( dest, len, "%x:%h", addr->seg, addr->off ) );
@@ -217,7 +217,7 @@ size_t DoFmtStr( char *buff, size_t len, const char *src, va_list args )
     unsigned_16     num;
     unsigned_32     num2;
     size_t          size;
-    targ_addr       *addr;
+    addr_type       *addr;
     unsigned int    i;
     static char     hexchar[] = "0123456789abcdef";
     int             temp;
@@ -351,7 +351,7 @@ size_t DoFmtStr( char *buff, size_t len, const char *src, va_list args )
                     addr = MsgArgInfo.arg[MsgArgInfo.index].address;
                     IncremIndex();
                 } else {
-                    addr = va_arg( args, targ_addr * );
+                    addr = va_arg( args, addr_type * );
                 }
                 temp = MsgArgInfo.index;
                 MsgArgInfo.index = -1;
@@ -609,34 +609,34 @@ bool RcIOError( RcStatus ret, const char *srcname, const char *dstname, int err 
     case RS_PARAM_ERROR:
         return( false );
     case RS_OPEN_ERROR:
-        RcError( ERR_CANT_OPEN_FILE, srcname, strerror( err ) );
+        RcError( RCMSG_CANT_OPEN_FILE, srcname, strerror( err ) );
         break;
     case RS_BAD_FILE_FMT:
-        RcError( ERR_NOT_VALID_EXE, srcname );
+        RcError( RCMSG_NOT_VALID_EXE, srcname );
         break;
     case RS_READ_ERROR:
-        RcError( ERR_READING_FILE, srcname, strerror( err ) );
+        RcError( RCMSG_READING_FILE, srcname, strerror( err ) );
         break;
     case RS_READ_ERROR_EXE:
-        RcError( ERR_READING_EXE, srcname, strerror( err ) );
+        RcError( RCMSG_READING_EXE, srcname, strerror( err ) );
         break;
     case RS_READ_ERROR_TMP:
-        RcError( ERR_READING_TMP, srcname, strerror( err ) );
+        RcError( RCMSG_READING_TMP, srcname, strerror( err ) );
         break;
     case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, srcname );
+        RcError( RCMSG_UNEXPECTED_EOF, srcname );
         break;
     case RS_WRITE_ERROR:
-        RcError( ERR_WRITTING_FILE, dstname, strerror( err ) );
+        RcError( RCMSG_WRITTING_FILE, dstname, strerror( err ) );
         break;
     case RS_WRITE_ERROR_RES:
-        RcError( ERR_WRITTING_RES, dstname, strerror( err ) );
+        RcError( RCMSG_WRITTING_RES, dstname, strerror( err ) );
         break;
     case RS_WRITE_ERROR_TMP:
-        RcError( ERR_WRITTING_TMP, dstname, strerror( err ) );
+        RcError( RCMSG_WRITTING_TMP, dstname, strerror( err ) );
         break;
     default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
+        RcError( RCMSG_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
         break;
     }
     return( true );

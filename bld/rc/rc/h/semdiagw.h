@@ -54,13 +54,11 @@ typedef struct FullDialogOptions {
     } Opt;
 } FullDialogOptions;
 
-extern FullDialogBoxHeader  *SemWINNewDiagOptions( FullDialogOptions *opt );
-extern FullDialogBoxHeader  *SemWINDiagOptions( FullDialogBoxHeader *head, FullDialogOptions *opt );
-extern FullDiagCtrlList     *SemWINNewDiagCtrlList( FullDialogBoxControl *ctrl, DataElemList * );
-extern FullDiagCtrlList     *SemWINAddDiagCtrlList( FullDiagCtrlList *list, FullDialogBoxControl *ctrl, DataElemList * );
-extern FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions opts );
-extern void                 SemWINWriteDialogBox( WResID *res_id, ResMemFlags, DialogSizeInfo, FullDialogBoxHeader *, FullDiagCtrlList *, DlgHelpId, YYTOKENTYPE );
-extern FullDiagCtrlList     *SemWINEmptyDiagCtrlList( void );
-extern FullDialogBoxControl *SemWINSetControlData( IntMask, uint_16, DialogSizeInfo, WResID *res_id, ResNameOrOrdinal *, uint_32, DlgHelpId * );
+extern FullDialogBoxHeader      *SemWINDialogOptions( FullDialogBoxHeader *head, FullDialogOptions *opt );
+extern FullDialogCtrlListWIN    *SemWINAddDialogCtrlList( FullDialogCtrlListWIN *list, FullDialogBoxControlWIN *ctrl, DataElemList * );
+extern FullDialogBoxControlWIN  *SemWINNewDialogCtrl( YYTOKENTYPE token, FullDialogCtrlOptionsWIN opts );
+extern void                     SemWINWriteDialogBox( WResID *res_id, ResMemFlags res_flags, DialogSizeInfo, FullDialogBoxHeader *, FullDialogCtrlListWIN *, help_id, bool is_dialogex );
+extern FullDialogCtrlListWIN    *SemWINEmptyDialogCtrlList( void );
+extern FullDialogBoxControlWIN  *SemWINSetControlData( IntMask, uint_16, DialogSizeInfo, WResID *res_id, ResNameOrOrdinal *, uint_32, help_id );
 
 #endif

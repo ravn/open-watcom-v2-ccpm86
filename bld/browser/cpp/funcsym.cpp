@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,8 +32,9 @@
 
 
 #include "module.h"
-#include "brmem.h"
+#include "memfuncs.h"
 #include "funcsym.h"
+
 
 const int POOLSIZE = 32;
 
@@ -46,8 +47,8 @@ struct FuncSearchData {
     WVList *        list;
 };
 
-void * FunctionSym::operator new( size_t )
-//----------------------------------------
+void * FunctionSym::operator new( std::size_t )
+//---------------------------------------------
 {
     return( _pool.alloc() );
 }
@@ -127,7 +128,7 @@ static bool FunctionSym::callHook( drmem_hdl, dr_ref_info * ref, char * name,
         sym = Symbol::defineSymbol(stype, other, DRMEM_HDL_NULL, data->me->getModule(),name);
         data->list->add( sym );
     } else {
-        WBRFree( name );
+        MemFree( name );
     }
     return true;    // continue
 }

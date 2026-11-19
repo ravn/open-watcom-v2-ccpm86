@@ -83,8 +83,8 @@ WINEXPORT LRESULT CALLBACK WdeSBarSuperClassProc( HWND, UINT, WPARAM, LPARAM );
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static OBJPTR   WdeMakeSBar( OBJPTR, RECT *, OBJPTR, DialogStyle, char *, OBJ_ID );
-static OBJPTR   WdeSBCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl * );
+static OBJPTR   WdeMakeSBar( OBJPTR, RECT *, OBJPTR, DialogStyle, const char *, OBJ_ID );
+static OBJPTR   WdeSBCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl *control );
 static void     WdeSBarSetDefineInfo( WdeDefineObjectInfo *, HWND );
 static void     WdeSBarGetDefineInfo( WdeDefineObjectInfo *, HWND );
 static bool     WdeSBarDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
@@ -136,12 +136,14 @@ bool WdeSBNoodleSize( OBJPTR obj, bool recreate )
     }
 
     if( Forward( sb_obj->object_handle, GET_WINDOW_HANDLE, &hWnd, NULL ) ) {
-        WdeResInfo      *rinfo;
-        rinfo = WdeGetCurrentRes();
-        if( rinfo != NULL ) {
+        WdeResInfo      *res_info;
+
+        res_info = WdeGetCurrentRes();
+        if( res_info != NULL ) {
             RECT                rect;
+
             GetWindowRect( hWnd, &rect );
-            MapWindowRect( (HWND)NULL, rinfo->forms_win, &rect );
+            MapWindowRect( (HWND)NULL, res_info->forms_win, &rect );
             HideSelectBoxes();
             Resize( sb_obj->control, &rect, false );
             WdeUpdateCDialogUnits( sb_obj->control, &rect, NULL );
@@ -163,7 +165,7 @@ OBJPTR CALLBACK WdeSBarCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle )
 }
 
 OBJPTR WdeMakeSBar( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
-                    DialogStyle style, char *text, OBJ_ID id )
+                    DialogStyle style, const char *text, OBJ_ID id )
 {
     OBJPTR new;
 
@@ -184,7 +186,7 @@ OBJPTR WdeMakeSBar( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 }
 
 OBJPTR WdeSBCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
-                    OBJ_ID id, WdeDialogBoxControl *info )
+                    OBJ_ID id, WdeDialogBoxControl *control )
 {
     WdeSBarObject       *new;
 
@@ -223,7 +225,7 @@ OBJPTR WdeSBCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
+    if( !Forward( new->object_handle, SET_OBJECT_INFO, control, NULL ) ) {
         WdeWriteTrail( "WdeSBarCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
         MemFree( new );
@@ -300,7 +302,7 @@ bool WdeSBarInit( bool first )
     SETCTL_SIZEW( WdeDefaultSBar, 0 );
     SETCTL_SIZEH( WdeDefaultSBar, 0 );
     SETCTL_TEXT( WdeDefaultSBar, NULL );
-    SETCTL_CLASSID( WdeDefaultSBar, WdeStrToControlClass( WSTATUSCLASSNAME ) );
+    SETCTL_CLASSID( WdeDefaultSBar, ResStrToNameOrOrdinal( WSTATUSCLASSNAME ) );
 
 #ifdef __WINDOWS__
     WdeSBarDispatch = MakeProcInstance_DISPATCHER( WdeSBarDispatcher, WdeGetAppInstance() );
@@ -405,7 +407,7 @@ bool WdeSBarGetWndProc( WdeSBarObject *obj, WNDPROC *proc, void *p2 )
     return( true );
 }
 
-bool WdeSBarGetWindowClass( WdeSBarObject *obj, char **class, void *p2 )
+bool WdeSBarGetWindowClass( WdeSBarObject *obj, const char **class, void *p2 )
 {
     /* unused parameters */ (void)obj; (void)p2;
 
@@ -437,7 +439,7 @@ void WdeSBarSetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     DialogStyle mask;
 
     // set the status bar options
-    mask = GETCTL_STYLE( o_info->info.c.info ) & 0x0000ff00;
+    mask = GETCTL_STYLE( o_info->info.c.control ) & 0x0000ff00;
     if( mask & SBT_OWNERDRAW ) {
         CheckDlgButton( hDlg, IDB_SBT_OWNERDRAW, BST_CHECKED );
     }
@@ -473,8 +475,8 @@ void WdeSBarGetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
         mask |= SBT_POPOUT;
     }
 
-    SETCTL_STYLE( o_info->info.c.info,
-                  (GETCTL_STYLE( o_info->info.c.info ) & 0xffff0000) | mask );
+    SETCTL_STYLE( o_info->info.c.control,
+                  (GETCTL_STYLE( o_info->info.c.control ) & 0xffff0000) | mask );
 
     // get the extended control settings
     WdeEXGetDefineInfo( o_info, hDlg );

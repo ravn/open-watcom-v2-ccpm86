@@ -42,8 +42,6 @@ crwatpro_gsp = crwatpro.gsp
 
 mh_dir = ../include
 
-!include ../deps.mif
-
 inc_dirs = -I"../$(host_os)" -I"../h"
 
 rc_inc_dirs = -I"../$(host_os)" -I"../h"
@@ -347,20 +345,18 @@ all : $($(what_to_build)) .SYMBOLIC
     $(noecho)*wsplice $(wsplice_opts) tmp.tmp $@
     @rm -f tmp.tmp
 
+!include ../deps.mif
+
 $(libname).lib: $(objs) $(static_objs) $(__MAKEFILES__)
     @%make echo_lib
-    $(librarian) $(libflags) $(objs) $(static_objs)
+    $(librarian) -n $(libflags) $@ $(objs) $(static_objs)
 
 $(intname).lib: $(objs) $(__MAKEFILES__)
     @%make echo_lib
-    $(librarian) -z=tmp.gdf $(libflags) $(objs)
-    @%make echo_sed
-    $(noecho)sed -f $(lib_misc_dir)/sed/export.sed tmp.gdf > tmp2.gdf
-    sort < tmp2.gdf > tmp3.gdf
-    uniq tmp3.gdf > export.gdf
+    $(librarian) -z=tmp.gdf -n $(libflags) $@ $(objs)
+    @%make echo_awk
+    $(noecho)awk -f $(build_dir)/export.awk tmp.gdf > export.gdf
     @rm tmp.gdf
-    @rm tmp2.gdf
-    @rm tmp3.gdf
 
 extra_l_flags_dll = export @export.gdf
 
@@ -372,11 +368,11 @@ dlltarg_name = $(dllname)
 
 $(dllname).lib: $(dllname).dll $(__MAKEFILES__)
     @%make echo_lib
-    $(librarian) $(libflags) +$(dllname).dll
+    $(librarian) -n $(libflags) $@ +$(dllname).dll
 
 $(statname).lib: $(static_objs) $(__MAKEFILES__)
     @%make echo_lib
-    $(librarian) $(libflags) $(static_objs)
+    $(librarian) -n $(libflags) $@ $(static_objs)
 
 $(dllname).res: ../h/owf.rc ../$(host_os)/afxprint.rc ../$(host_os)/afxres.rc $(__MAKEFILES__) .AUTODEPEND
     @%make echo_rc

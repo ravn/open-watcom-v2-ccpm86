@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,59 +31,19 @@
 ****************************************************************************/
 
 
-#ifndef __MEMPOOL_H__
-#define __MEMPOOL_H__
-
-#include <cstddef>
-#include <cstring>
-
-#ifdef DEBUG
-#  include "debuglog.h"
-#endif
-
-//
-// MemoryPool provides a simple memory pool.
-//
-// Memory is grabbed in hunks and then alloc() parcels out bits from a
-// hunk when it is called.
-//
-// free() puts memory into a free list of blocks which are used from
-// alloc() in preference to bits of hunks.
-//
-// All hunks are freed when the object is destroyed or ragnarok() is called.
-//
-
-class MemoryPool {
-
-public:
-                    MemoryPool( const char * owner );
-                    MemoryPool( size_t elemSize, const char * owner,
-                                int elemsPerBlock = 10 );
-                    ~MemoryPool();
-
-            void *  alloc();
-            void    free( void * );
-            void    ragnarok();         // free entire pool
-            void    setSize( size_t elemSize, int elemsPerBlock = 10 );
-
-protected:
-            void        grow();
-
-            size_t      _blockSize;
-            size_t      _elemSize;
-            int         _elemsPerBlock;
-            char *      _lastElement;
-            char *      _currElement;
-            char *      _currBlock;
-            void *      _freeList;
+#include "layer0.h"
+#include "filefmt.h"
+#include "reserr.h"
+#include "resraw.h"
+#include "wresrtns.h"
 
 
-#ifdef DEBUG
-            const char *    _poolOwner; // name of owner
-            int             _numAllocs;
-            int             _numFrees;
-    static  DebuggingLog    _log;
-#endif
-};
+bool ResRead( void *buffer, size_t len, FILE *fp )
+/************************************************/
+{
+    size_t          numread;
 
-#endif // __MEMPOOL_H__
+    if( (numread = WRESREAD( fp, buffer, len )) != len )
+        return( WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE ) );
+    return( false );
+}

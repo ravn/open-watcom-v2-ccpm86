@@ -283,16 +283,16 @@ int CALLBACK WdeEnumFontsProc( const LOGFONT FAR *lf, const TEXTMETRIC FAR *tm, 
     return( TRUE );
 }
 
-bool WdeDialogToScreen( void *obj, WdeResizeRatio *r, WdeDialogSizeInfo *sizeinfo, RECT *s )
+bool WdeDialogToScreen( void *obj, WdeResizeRatio *r, DialogSizeInfo *SizeInfo, RECT *s )
 {
     WdeResizeRatio  resizer;
 
-    if( sizeinfo == NULL || s == NULL ) {
-        return( FALSE );
+    if( SizeInfo == NULL || s == NULL ) {
+        return( false );
     }
 
     if( r == NULL && obj == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     if( r != NULL ) {
@@ -300,31 +300,31 @@ bool WdeDialogToScreen( void *obj, WdeResizeRatio *r, WdeDialogSizeInfo *sizeinf
     } else {
         if( !Forward( obj, GET_RESIZER, &resizer, NULL ) ) {
             WdeWriteTrail( "WdeDialogToScreen: GET_RESIZER failed!" );
-            return( FALSE );
+            return( false );
         }
     }
 
-    s->left = MulDiv( sizeinfo->x, resizer.xmap, 4 );
-    s->top = MulDiv( sizeinfo->y, resizer.ymap, 8 );
-    s->right = MulDiv( sizeinfo->width, resizer.xmap, 4 );
-    s->bottom = MulDiv( sizeinfo->height, resizer.ymap, 8 );
+    s->left = MulDiv( SizeInfo->x, resizer.xmap, 4 );
+    s->top = MulDiv( SizeInfo->y, resizer.ymap, 8 );
+    s->right = MulDiv( SizeInfo->width, resizer.xmap, 4 );
+    s->bottom = MulDiv( SizeInfo->height, resizer.ymap, 8 );
     s->right += s->left;
     s->bottom += s->top;
 
-    return( TRUE );
+    return( true );
 }
 
-bool WdeScreenToDialog( void *obj, WdeResizeRatio *r, RECT *s, WdeDialogSizeInfo *sizeinfo )
+bool WdeScreenToDialog( void *obj, WdeResizeRatio *r, RECT *s, DialogSizeInfo *SizeInfo )
 {
     WdeResizeRatio  resizer;
     RECT            screen;
 
-    if( sizeinfo == NULL ) {
-        return( FALSE );
+    if( SizeInfo == NULL ) {
+        return( false );
     }
 
     if( (r == NULL || s == NULL) && obj == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     if( r != NULL ) {
@@ -332,7 +332,7 @@ bool WdeScreenToDialog( void *obj, WdeResizeRatio *r, RECT *s, WdeDialogSizeInfo
     } else {
         if( !Forward( obj, GET_RESIZER, &resizer, NULL ) ) {
             WdeWriteTrail( "WdeScreenToDialog: GET_RESIZER failed!" );
-            return( FALSE );
+            return( false );
         }
     }
 
@@ -342,12 +342,12 @@ bool WdeScreenToDialog( void *obj, WdeResizeRatio *r, RECT *s, WdeDialogSizeInfo
         Location( obj, &screen );
     }
 
-    sizeinfo->x = MulDiv( screen.left, 4, resizer.xmap );
-    sizeinfo->y = MulDiv( screen.top, 8, resizer.ymap );
-    sizeinfo->width = MulDiv( screen.right - screen.left, 4, resizer.xmap );
-    sizeinfo->height = MulDiv( screen.bottom - screen.top, 8, resizer.ymap );
+    SizeInfo->x = MulDiv( screen.left, 4, resizer.xmap );
+    SizeInfo->y = MulDiv( screen.top, 8, resizer.ymap );
+    SizeInfo->width = MulDiv( screen.right - screen.left, 4, resizer.xmap );
+    SizeInfo->height = MulDiv( screen.bottom - screen.top, 8, resizer.ymap );
 
-    return( TRUE );
+    return( true );
 }
 
 HFONT WdeGetFont( char *facename, int pointsize, int weight )

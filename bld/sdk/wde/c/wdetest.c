@@ -66,26 +66,26 @@ static bool     WdeSetDefaultTestControlEntries( HWND );
 /* static variables                                                         */
 /****************************************************************************/
 static HWND             WdeTestDialogHandle = NULL;
-static bool             WdeTestMode = FALSE;
-static WdeResInfo       *WdeTestResource = FALSE;
+static bool             WdeTestMode = false;
+static WdeResInfo       *WdeTestResource = NULL;
 
-bool WdeHandleTestModeMenu( WdeResInfo *info )
+bool WdeHandleTestModeMenu( WdeResInfo *res_info )
 {
     HWND   main_window;
     bool   ret;
 
-    if( info == NULL ) {
-        return( FALSE );
+    if( res_info == NULL ) {
+        return( false );
     }
 
     main_window = WdeGetMainWindowHandle();
 
     if( WdeTestMode ) {
-        WdeTestMode = FALSE;
+        WdeTestMode = false;
         if( WdeTestDialogHandle != NULL ) {
             DestroyWindow( WdeTestDialogHandle );
         }
-        WdeSetTestModeMenu( FALSE );
+        WdeSetTestModeMenu( false );
         WdeSetStatusReadyText();
         WdeShowResourceWindows( SW_SHOWNA );
         if( WdeTestResource != NULL ) {
@@ -93,16 +93,16 @@ bool WdeHandleTestModeMenu( WdeResInfo *info )
             //SendMessage( WdeTestResource->res_win, WM_MDIRESTORE, 0, 0 );
             WdeTestResource = NULL;
         }
-        ret = TRUE;
+        ret = true;
     } else {
         WdeSetStatusText( NULL, "", false );
         WdeSetStatusByID( WDE_TESTMODE, 0 );
         ret = WdeTestCurrentObject();
         if( ret ) {
             WdeShowResourceWindows( SW_HIDE );
-            WdeSetTestModeMenu( TRUE );
-            WdeTestMode = TRUE;
-            WdeTestResource = info;
+            WdeSetTestModeMenu( true );
+            WdeTestMode = true;
+            WdeTestResource = res_info;
         } else {
             WdeSetStatusReadyText();
         }
@@ -182,31 +182,31 @@ static bool WdeSetDefaultTestControlEntries( HWND win )
     char        *str;
     char        cname[20];
     int         len;
-    uint_8      class;
+    uint_16     ordinal;
 
     len = GetClassName( win, cname, sizeof( cname ) );
     if( len == 0 ) {
-        return( TRUE );
+        return( true );
     }
 
-    class = WdeGetClassFromClassName( cname );
+    ordinal = WdeGetClassOrdinalFromName( cname );
 
-    if( class == CLASS_LISTBOX || class == CLASS_COMBOBOX ) {
+    if( ordinal == CLASS_LISTBOX || ordinal == CLASS_COMBOBOX ) {
         str = NULL;
         text = WdeAllocRCString( WDE_TESTITEM );
         if( text != NULL ) {
             str = MemAlloc( strlen( text ) + 10 + 1 );
             if( str == NULL ) {
                 WdeFreeRCString( text );
-                return( TRUE );
+                return( true );
             }
         } else {
-            return( TRUE );
+            return( true );
         }
         SendMessage( win, WM_SETREDRAW, FALSE, 0 );
         for( index = 1; index <= TEST_DEFAULT_ENTRIES; index++ ) {
             sprintf( str, text, index );
-            if( class == CLASS_LISTBOX ) {
+            if( ordinal == CLASS_LISTBOX ) {
                 SendMessage( win, LB_ADDSTRING, 0, (LPARAM)(LPCSTR)str );
             } else {
                 SendMessage( win, CB_ADDSTRING, 0, (LPARAM)(LPCSTR)str );
@@ -218,7 +218,7 @@ static bool WdeSetDefaultTestControlEntries( HWND win )
         WdeFreeRCString( text );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 INT_PTR CALLBACK WdeTestDlgProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam )

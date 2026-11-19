@@ -124,35 +124,28 @@ static bool WriteOS2DialogBoxHeader( DialogHeaderOS2 *header, FILE *fp )
     return( error );
 }
 
-static FullDiagCtrlListOS2 *SemOS2EmptyDiagCtrlList( void )
-/*********************************************************/
+static FullDialogCtrlListOS2 *SemOS2EmptyDialogCtrlList( void )
+/*************************************************************/
 {
-    FullDiagCtrlListOS2     *newlist;
+    FullDialogCtrlListOS2     *newlist;
 
-    newlist = MemAllocSafe( sizeof( FullDiagCtrlListOS2 ) );
+    newlist = MemAllocSafe( sizeof( FullDialogCtrlListOS2 ) );
     newlist->head = NULL;
     newlist->tail = NULL;
     newlist->numctrls = 0;
     return( newlist );
 }
 
-FullDiagCtrlListOS2 *SemOS2NewDiagCtrlList( FullDialogBoxControlOS2 *ctrl,
-                               DataElemList *list, PresParamListOS2 *presparams )
-/*******************************************************************************/
-{
-    FullDiagCtrlListOS2     *newlist;
-
-    newlist = SemOS2EmptyDiagCtrlList();
-    return( SemOS2AddDiagCtrlList( newlist, ctrl, list, presparams ) );
-}
-
-FullDiagCtrlListOS2 *SemOS2AddDiagCtrlList( FullDiagCtrlListOS2 *list,
+FullDialogCtrlListOS2 *SemOS2AddDialogCtrlList( FullDialogCtrlListOS2 *list,
                     FullDialogBoxControlOS2 *ctrl, DataElemList *dataList,
                     PresParamListOS2 *presparams )
 /***************************************************************************/
 {
     /* unused parameters */ (void)presparams;
 
+    if( list == NULL ) {
+        list = SemOS2EmptyDialogCtrlList();
+    }
     if( ctrl != NULL ) {
         ctrl->dataListHead = dataList;
 //        ctrl->presParams   = presparams;
@@ -162,8 +155,8 @@ FullDiagCtrlListOS2 *SemOS2AddDiagCtrlList( FullDiagCtrlListOS2 *list,
     return( list );
 }
 
-static FullDialogBoxControlOS2 *SemOS2InitDiagCtrl( void )
-/********************************************************/
+static FullDialogBoxControlOS2 *SemOS2InitDialogCtrl( void )
+/**********************************************************/
 {
     FullDialogBoxControlOS2     *newctrl;
 
@@ -202,8 +195,24 @@ static FullDialogBoxControlOS2 *SemOS2InitDiagCtrl( void )
 #define DEF_SPINBUTTON       (OS2_WS_VISIBLE|OS2_WS_TABSTOP)
 #define DEF_VALUESET         (OS2_WS_VISIBLE|OS2_WS_TABSTOP)
 
-FullDialogBoxControlOS2 *SemOS2NewDiagCtrl( YYTOKENTYPE token,
-                                    FullDiagCtrlOptionsOS2 opts,
+static ResNameOrOrdinal *OS2CanonicalControlClass( ResNameOrOrdinal *cclass )
+{
+    ResNameOrOrdinal    *new_cclass;
+
+    if( cclass->ord.fFlag == 0xff ) {
+        new_cclass = ResNumToNameOrOrdinal( cclass->ord.wOrdinalID );
+    } else {
+        /*
+         * Code for converting from a Control class name to an ordinal
+         * can be placed here.
+         */
+        new_cclass = ResStrToNameOrOrdinal( cclass->name );
+    }
+    return( new_cclass );
+}
+
+FullDialogBoxControlOS2 *SemOS2NewDialogCtrl( YYTOKENTYPE token,
+                                    FullDialogCtrlOptionsOS2 opts,
                                     PresParamListOS2 *presparams )
 /****************************************************************/
 {
@@ -213,7 +222,7 @@ FullDialogBoxControlOS2 *SemOS2NewDiagCtrl( YYTOKENTYPE token,
     uint_32                     defstyle;
     uint_32                     style;
     uint_16                     ctlClass;
-    ControlClass                *cont_class;
+    ResNameOrOrdinal            *cclass;
 
     switch( token ) {
     case Y_AUTOCHECKBOX:
@@ -301,8 +310,8 @@ FullDialogBoxControlOS2 *SemOS2NewDiagCtrl( YYTOKENTYPE token,
         ctlClass = defstyle = 0;
     }
 
-    newctrl = SemOS2InitDiagCtrl();
-    cont_class = ResNumToControlClass( ctlClass );
+    newctrl = SemOS2InitDialogCtrl();
+    cclass = ResNumToNameOrOrdinal( ctlClass );
 
     style_mask  = opts.Style.Mask;
     style_value = opts.Style.Value;
@@ -311,7 +320,7 @@ FullDialogBoxControlOS2 *SemOS2NewDiagCtrl( YYTOKENTYPE token,
     newctrl->ctrl.ID         = opts.ID;
     newctrl->ctrl.SizeInfo   = opts.SizeInfo;
     newctrl->ctrl.Text       = opts.Text;
-    newctrl->ctrl.ClassID    = cont_class;
+    newctrl->ctrl.ClassID    = cclass;
     newctrl->ctrl.Style      = style;
     /*
      * ExtraBytes is 0 for all predefined controls
@@ -320,20 +329,19 @@ FullDialogBoxControlOS2 *SemOS2NewDiagCtrl( YYTOKENTYPE token,
     newctrl->presParams      = presparams;
 
     return( newctrl );
-} /* SemOS2NewDiagCtrl */
+} /* SemOS2NewDialogCtrl */
 
 
 static void SemOS2FreePresParamList( PresParamListOS2 *list )
 /***********************************************************/
 {
     PresParamsOS2       *currparam;
-    PresParamsOS2       *nextparam;
 
     if( list == NULL )
         return;
 
-    for( currparam = list->head; currparam != NULL; currparam = nextparam ) {
-        nextparam = currparam->next;
+    while( (currparam = list->head) != NULL ) {
+        list->head = currparam->next;
         MemFree( currparam->Name );
         SemFreeDataElemList( currparam->dataList );
         MemFree( currparam );
@@ -341,14 +349,13 @@ static void SemOS2FreePresParamList( PresParamListOS2 *list )
     MemFree( list );
 }
 
-static void SemOS2FreeDiagCtrlList( FullDiagCtrlListOS2 *list )
-/*************************************************************/
+static void SemOS2FreeDialogCtrlList( FullDialogCtrlListOS2 *list )
+/*****************************************************************/
 {
     FullDialogBoxControlOS2     *ctrl;
-    FullDialogBoxControlOS2     *next;
 
-    for( ctrl = list->head; ctrl != NULL; ctrl = next ) {
-        next = ctrl->next;
+    while( (ctrl = list->head) != NULL ) {
+        list->head = ctrl->next;
         /*
          * free the contents of pointers within the structure
          */
@@ -359,15 +366,15 @@ static void SemOS2FreeDiagCtrlList( FullDiagCtrlListOS2 *list )
             MemFree( ctrl->ctrl.Text );
         }
         if( ctrl->children != NULL )
-            SemOS2FreeDiagCtrlList( ctrl->children );
+            SemOS2FreeDialogCtrlList( ctrl->children );
 
         SemFreeDataElemList( ctrl->dataListHead );
         SemOS2FreePresParamList( ctrl->presParams );
         MemFree( ctrl );
     }
-
     MemFree( list );
-} /* SemOS2FreeDiagCtrlList */
+
+} /* SemOS2FreeDialogCtrlList */
 
 static size_t SemOS2CountBytes( DataElemList *list )
 /**************************************************/
@@ -405,7 +412,7 @@ static size_t SemOS2CountPresParams( PresParamListOS2 *list )
         size_t  parmsize;
 
         bytes += 4; // Presparam ID or name length
-        if( !(presparams->Name->ord.fFlag == 0xFF) )         // Presparam has name
+        if( presparams->Name->ord.fFlag != 0xFF )         // Presparam has name
             bytes += strlen( presparams->Name->name ) + 1 + 8;
 
         bytes += 4; // Size of presparams data that follow
@@ -447,7 +454,7 @@ static size_t SemOS2DumpPresParams( char *ptr, PresParamListOS2 *list )
 
     for( presparams = list->head; presparams != NULL; presparams = presparams->next ) {
         // Presparam ID or name length
-        if( !(presparams->Name->ord.fFlag == 0xFF) ) {       // Presparam has name
+        if( presparams->Name->ord.fFlag != 0xFF ) {       // Presparam has name
             len     = strlen( presparams->Name->name ) + 1;
             MPUT_32_UN( ptr, 0 );           // First ULONG is 0 to indicate this isn't numeric ID
             ptr += 4;
@@ -455,7 +462,13 @@ static size_t SemOS2DumpPresParams( char *ptr, PresParamListOS2 *list )
             ptr += 4;
             strcpy( ptr, presparams->Name->name );
             ptr += len;
-            MPUT_32_UN( ptr, 0xffffffff );  // Not sure what this is
+            /*
+             * A named presentation parameter is stored as a name prefix
+             * followed by the normal PARAM structure.  PARAM.id is
+             * initialized to -1; the preceding name is converted to a
+             * string atom when the dialog template is loaded.
+             */
+            MPUT_32_UN( ptr, -1 );
             ptr    += 4;
             bytes  += len + 12;
         } else {
@@ -494,7 +507,6 @@ static size_t SemOS2DumpCtlData( char *ptr, DataElemList *list )
 {
     DataElemList        *travptr;
     size_t              bytes;
-    uint_16             *data;
     size_t              len;
     unsigned            i;
 
@@ -507,8 +519,7 @@ static size_t SemOS2DumpCtlData( char *ptr, DataElemList *list )
                 bytes += len;
                 ptr   += len;
             } else {
-                data   = (uint_16*)ptr;
-                *data  = (uint_16)travptr->data[i].Item.Num;
+                MPUT_16_UN( ptr, travptr->data[i].Item.Num );
                 bytes += 2;
                 ptr   += 2;
             }
@@ -518,8 +529,8 @@ static size_t SemOS2DumpCtlData( char *ptr, DataElemList *list )
     return( bytes );
 }
 
-static size_t SemOS2CalcControlSize( FullDiagCtrlListOS2 *ctrls )
-/***************************************************************/
+static size_t SemOS2CalcControlSize( FullDialogCtrlListOS2 *ctrls )
+/*****************************************************************/
 {
     FullDialogBoxControlOS2 *ctrl;
     DialogBoxControl        *control;
@@ -529,8 +540,8 @@ static size_t SemOS2CalcControlSize( FullDiagCtrlListOS2 *ctrls )
     for( ctrl = ctrls->head; ctrl != NULL; ctrl = ctrl->next ) {
         control = &(ctrl->ctrl);
         size += sizeof( DialogTemplateItemOS2 );
-        if( (control->ClassID->Class & 0x80) == 0 ) // Class name length if provided
-            size += strlen( control->ClassID->ClassName ) + 1;
+        if( control->ClassID->ord.fFlag != 0xff )   // Class name length if provided
+            size += strlen( control->ClassID->name ) + 1;
         if( control->Text != NULL ) {               // Conrol text if provided
             if( control->Text->ord.fFlag == 0xFF ) {        // We have ID
                 size += 3;
@@ -551,8 +562,8 @@ static size_t SemOS2CalcControlSize( FullDiagCtrlListOS2 *ctrls )
     return( size );
 }
 
-static char *SemOS2BuildTemplateItemsArray( char *ptr, FullDiagCtrlListOS2 *ctrls )
-/****************************************************************************/
+static char *SemOS2BuildTemplateItemsArray( char *ptr, FullDialogCtrlListOS2 *ctrls )
+/***********************************************************************************/
 {
     FullDialogBoxControlOS2     *ctrl;
     DialogBoxControl            *control;
@@ -577,11 +588,11 @@ static char *SemOS2BuildTemplateItemsArray( char *ptr, FullDiagCtrlListOS2 *ctrl
         tmpl->offPresParams = (uint_16)-1;
         tmpl->offCtlData    = (uint_16)-1;
 
-        if( (control->ClassID->Class & 0x80) == 0 ) {
-            tmpl->cchClassName = strlen( control->ClassID->ClassName );
+        if( control->ClassID->ord.fFlag != 0xff ) {
+            tmpl->cchClassName = strlen( control->ClassID->name );
         } else {
             tmpl->cchClassName = 0;
-            tmpl->offClassName = control->ClassID->Class & 0x7F;
+            tmpl->offClassName = control->ClassID->ord.wOrdinalID;
         }
 
         if( control->Text != NULL ) {
@@ -609,7 +620,7 @@ static char *SemOS2BuildTemplateItemsArray( char *ptr, FullDiagCtrlListOS2 *ctrl
 }
 
 static char *SemOS2DumpTemplateItemsData( char *base, char *ptr,
-                                     FullDiagCtrlListOS2 *ctrls )
+                                FullDialogCtrlListOS2 *ctrls )
 /***************************************************************/
 {
     FullDialogBoxControlOS2     *ctrl;
@@ -626,8 +637,8 @@ static char *SemOS2DumpTemplateItemsData( char *base, char *ptr,
         /*
          * Write out class name if provided
          */
-        if( (control->ClassID->Class & 0x80) == 0 ) {
-            strcpy( ptr, control->ClassID->ClassName );
+        if( control->ClassID->ord.fFlag != 0xff ) {
+            strcpy( ptr, control->ClassID->name );
             tmpl->offClassName = (uint_16)( ptr - base + DialogHeaderOS2_FILESIZE );
             ptr += tmpl->cchClassName + 1;
         }
@@ -684,9 +695,9 @@ static char *SemOS2DumpTemplateItemsData( char *base, char *ptr,
  * resource (the size must be < 64K) and then dump the entire resource
  * into the file - which certainly shouldn't hurt performance either.
  */
-void SemOS2WriteDialogTemplate( WResID *res_id, ResMemFlags flags,
+void SemOS2WriteDialogTemplate( WResID *res_id, ResMemFlags res_flags,
                                        uint_32 codepage,
-                                       FullDiagCtrlListOS2 *ctrls )
+                                       FullDialogCtrlListOS2 *ctrls )
 /*********************************************************************/
 {
     ResLocation              loc;
@@ -720,32 +731,32 @@ void SemOS2WriteDialogTemplate( WResID *res_id, ResMemFlags flags,
     }
     if( error ) {
         err_code = LastWresErr();
-        RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code )  );
+        RcError( RCMSG_WRITTING_RES, CurrResFile.filename, strerror( err_code )  );
         ErrorHasOccured = true;
     } else {
         loc.len = SemEndResource( loc.start );
-        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_DIALOG ), flags, loc );
+        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_DIALOG ), res_flags, loc );
     }
     MemFree( tmpl );
-    SemOS2FreeDiagCtrlList( ctrls );
+    SemOS2FreeDialogCtrlList( ctrls );
 
 } /* SemOS2WriteDialogTemplate */
 
 
 FullDialogBoxControlOS2 *SemOS2SetControlData( ResNameOrOrdinal *name,
-                    uint_16 id, DialogSizeInfo sizeinfo, ResNameOrOrdinal *ctlclassname,
-                    IntMask style, FullDiagCtrlListOS2 *childctls,
+                    uint_16 id, DialogSizeInfo SizeInfo, ResNameOrOrdinal *ctlclassname,
+                    IntMask style, FullDialogCtrlListOS2 *childctls,
                     PresParamListOS2 *presparams )
-/**********************************************************************************/
+/**************************************************************************************/
 {
     FullDialogBoxControlOS2     *control;
 
-    control = SemOS2InitDiagCtrl();
+    control = SemOS2InitDialogCtrl();
 
     control->ctrl.ID         = id;
-    control->ctrl.SizeInfo   = sizeinfo;
+    control->ctrl.SizeInfo   = SizeInfo;
     control->ctrl.Text       = name;
-    control->ctrl.ClassID    = ResNameOrOrdinalToControlClass( ctlclassname );
+    control->ctrl.ClassID    = OS2CanonicalControlClass( ctlclassname );
     control->ctrl.Style      = style.Value;
     control->children        = childctls;
     control->ctrl.ExtraBytes = 0;
@@ -756,19 +767,19 @@ FullDialogBoxControlOS2 *SemOS2SetControlData( ResNameOrOrdinal *name,
 }
 
 FullDialogBoxControlOS2 *SemOS2SetWndData( ResNameOrOrdinal *name,
-                    uint_32 id, DialogSizeInfo sizeinfo, ResNameOrOrdinal *ctlclassname,
+                    uint_32 id, DialogSizeInfo SizeInfo, ResNameOrOrdinal *ctlclassname,
                     IntMask style, IntMask framectl, PresParamListOS2 *presparams,
-                    FullDiagCtrlListOS2 *childctls )
-/**********************************************************************************/
+                    FullDialogCtrlListOS2 *childctls )
+/**************************************************************************************/
 {
     FullDialogBoxControlOS2     *control;
 
-    control = SemOS2InitDiagCtrl();
+    control = SemOS2InitDialogCtrl();
 
     control->ctrl.ID         = id;
-    control->ctrl.SizeInfo   = sizeinfo;
+    control->ctrl.SizeInfo   = SizeInfo;
     control->ctrl.Text       = name;
-    control->ctrl.ClassID    = ResNameOrOrdinalToControlClass( ctlclassname );
+    control->ctrl.ClassID    = OS2CanonicalControlClass( ctlclassname );
     control->ctrl.Style      = style.Value;
     control->children        = childctls;
     control->ctrl.ExtraBytes = 4;
@@ -779,10 +790,10 @@ FullDialogBoxControlOS2 *SemOS2SetWndData( ResNameOrOrdinal *name,
     return( control );
 }
 
-FullDialogBoxControlOS2 *SemOS2SetWindowData( FullDiagCtrlOptionsOS2 opts,
+FullDialogBoxControlOS2 *SemOS2SetWindowData( FullDialogCtrlOptionsOS2 opts,
                     IntMask framectl, PresParamListOS2 *presparams,
-                    FullDiagCtrlListOS2 *childctls, YYTOKENTYPE token )
-/*******************************************************************************/
+                    FullDialogCtrlListOS2 *childctls, YYTOKENTYPE token )
+/**************************************************************************/
 {
     FullDialogBoxControlOS2 *control;
     uint_32                 style;
@@ -790,7 +801,7 @@ FullDialogBoxControlOS2 *SemOS2SetWindowData( FullDiagCtrlOptionsOS2 opts,
     uint_32                 style_mask; /* for the style of the control */
     uint_32                 style_value;
 
-    control = SemOS2InitDiagCtrl();
+    control = SemOS2InitDialogCtrl();
 
     if( token == Y_FRAME ) {
         defstyle = OS2_WS_VISIBLE;
@@ -812,7 +823,7 @@ FullDialogBoxControlOS2 *SemOS2SetWindowData( FullDiagCtrlOptionsOS2 opts,
     control->ctrl.ID         = opts.ID;
     control->ctrl.SizeInfo   = opts.SizeInfo;
     control->ctrl.Text       = opts.Text;
-    control->ctrl.ClassID    = ResNumToControlClass( OS2_WC_FRAME );
+    control->ctrl.ClassID    = ResNumToNameOrOrdinal( OS2_WC_FRAME );
     control->ctrl.Style      = style;
     control->children        = childctls;
     control->ctrl.ExtraBytes = 4;   // Frame control data
@@ -830,28 +841,16 @@ void SemOS2AddDlgincResource( WResID *res_id, char *filename )
     int         err_code;
 
     loc.start = SemStartResource();
-    error = ResWriteString( filename, false, CurrResFile.fp );
+    error = ResWriteString( filename, CurrResFile.fp );
     if( error ) {
         err_code = LastWresErr();
-        RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
+        RcError( RCMSG_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
         ErrorHasOccured = true;
     } else {
         loc.len = SemEndResource( loc.start );
-        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_DLGINCLUDE ),
-                        MEMFLAG_DISCARDABLE | MEMFLAG_MOVEABLE | MEMFLAG_PURE, loc );
+        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_DLGINCLUDE ), DEFAULT_FLAGS_MDP, loc );
     }
     MemFree( filename );
-}
-
-PresParamListOS2 *SemOS2NewPresParamList( PresParamsOS2 presparams )
-/******************************************************************/
-{
-    PresParamListOS2    *newlist;
-
-    newlist = MemAllocSafe( sizeof( PresParamListOS2 ) );
-    newlist->head = NULL;
-    newlist->tail = NULL;
-    return( SemOS2AppendPresParam( newlist, presparams ) );
 }
 
 PresParamListOS2 *SemOS2AppendPresParam( PresParamListOS2 *list, PresParamsOS2 presparams )
@@ -859,6 +858,11 @@ PresParamListOS2 *SemOS2AppendPresParam( PresParamListOS2 *list, PresParamsOS2 p
 {
     PresParamsOS2       *params;
 
+    if( list == NULL ) {
+        list = MemAllocSafe( sizeof( PresParamListOS2 ) );
+        list->head = NULL;
+        list->tail = NULL;
+    }
     params = MemAllocSafe( sizeof( PresParamsOS2 ) );
     *params = presparams;
     ResAddLLItemAtEnd( (void **)&(list->head), (void **)&(list->tail), params );

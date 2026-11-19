@@ -56,7 +56,7 @@
 
 #ifdef DEVBUILD
     #define __location " (" __FILE__ "," __xstr(__LINE__) ")"
-    #define DbgNever()  (RcFatalError( ERR_TEXT_FROM_CPP, "should never execute this" __location ))
+    #define DbgNever()  (RcFatalError( RCMSG_TEXT_FROM_CPP, "should never execute this" __location ))
 #else
     #define DbgNever()
 #endif
@@ -150,32 +150,32 @@ static void BadCmdLine( int error_code )
 // BAD CHAR DETECTED
 void BadCmdLineChar( void )
 {
-    BadCmdLine( ERR_UNKNOWN_MULT_OPTION );
+    BadCmdLine( RCMSG_UNKNOWN_MULT_OPTION );
 }
 // BAD ID DETECTED
 void BadCmdLineId( void )
 {
-    BadCmdLine( ERR_UNKNOWN_MULT_OPTION );
+    BadCmdLine( RCMSG_UNKNOWN_MULT_OPTION );
 }
 // BAD NUMBER DETECTED
 void BadCmdLineNumber( void )
 {
-    BadCmdLine( ERR_UNKNOWN_MULT_OPTION );
+    BadCmdLine( RCMSG_UNKNOWN_MULT_OPTION );
 }
 // BAD PATH DETECTED
 void BadCmdLinePath( void )
 {
-    BadCmdLine( ERR_UNKNOWN_MULT_OPTION );
+    BadCmdLine( RCMSG_UNKNOWN_MULT_OPTION );
 }
 // BAD FILE DETECTED
 void BadCmdLineFile( void )
 {
-    BadCmdLine( ERR_UNKNOWN_MULT_OPTION );
+    BadCmdLine( RCMSG_UNKNOWN_MULT_OPTION );
 }
 // BAD TEXT DETECTED
 void BadCmdLineOption( void )
 {
-    BadCmdLine( ERR_UNKNOWN_MULT_OPTION );
+    BadCmdLine( RCMSG_UNKNOWN_MULT_OPTION );
 }
 
 static void SetMBRange( unsigned from, unsigned to, char data )
@@ -237,7 +237,7 @@ static size_t NativeDBStringToUnicode( const char *str, size_t len, char *buf, s
 
 #endif
 
-static void LoadCodePageFile( const char *cpfile )
+static void LoadCodepageFile( const char *cpfile )
 {
     RcStatus            ret;
     char                path[_MAX_PATH];
@@ -245,20 +245,20 @@ static void LoadCodePageFile( const char *cpfile )
     ret = LoadCharTable( cpfile, path );
     switch( ret ) {
     case RS_FILE_NOT_FOUND:
-        RcFatalError( ERR_CANT_FIND_CHAR_FILE, cpfile );
+        RcFatalError( RCMSG_CANT_FIND_CHAR_FILE, cpfile );
         /* never return */
     case RS_READ_ERROR:
-        RcFatalError( ERR_READING_CHAR_FILE, path, strerror( errno ) );
+        RcFatalError( RCMSG_READING_CHAR_FILE, path, strerror( errno ) );
         /* never return */
     case RS_READ_INCMPLT:
     case RS_BAD_FILE_FMT:
-        RcFatalError( ERR_BAD_CHAR_FILE, path );
+        RcFatalError( RCMSG_BAD_CHAR_FILE, path );
         /* never return */
     case RS_WRONG_VER:
-        RcFatalError( ERR_WRONG_CHAR_FILE_VER, path );
+        RcFatalError( RCMSG_WRONG_CHAR_FILE_VER, path );
         /* never return */
     case RS_OPEN_ERROR:
-        RcFatalError( ERR_CANT_OPEN_CHAR_FILE, path, strerror( errno ) );
+        RcFatalError( RCMSG_CANT_OPEN_CHAR_FILE, path, strerror( errno ) );
         /* never return */
     case RS_OK:
         SetMBChars( GetLeadBytes() );
@@ -267,7 +267,7 @@ static void LoadCodePageFile( const char *cpfile )
     }
 }
 
-static void initMBCodePage( void )
+static void initMBCodepage( void )
 /********************************/
 {
     /*
@@ -305,23 +305,23 @@ static void initMBCodePage( void )
     case DB_TRADITIONAL_CHINESE:
         SetMBRange( 0x81, 0xfe, 1 );
         if( CmdLineParms.iswin32 )
-            LoadCodePageFile( "950.uni" );
+            LoadCodepageFile( "950.uni" );
         break;
     case DB_WANSUNG_KOREAN:
         SetMBRange( 0x81, 0xfe, 1 );
         if( CmdLineParms.iswin32 )
-            LoadCodePageFile( "949.uni" );
+            LoadCodepageFile( "949.uni" );
         break;
     case DB_SIMPLIFIED_CHINESE:
         SetMBRange( 0xA1, 0xfe, 1 );
         if( CmdLineParms.iswin32 )
-            LoadCodePageFile( "936.uni" );
+            LoadCodepageFile( "936.uni" );
         break;
     case DB_KANJI:
         SetMBRange( 0x81, 0x9f, 1 );
         SetMBRange( 0xe0, 0xfc, 1 );
         if( CmdLineParms.iswin32 )
-            LoadCodePageFile( "kanji.uni" );
+            LoadCodepageFile( "kanji.uni" );
         break;
     case MB_UTF8:
     case MB_UTF8_KANJI:
@@ -338,8 +338,8 @@ static void initMBCodePage( void )
         }
         break;
     case MB_NONE:
-        if( CmdLineParms.CodePageFile != NULL ) {
-            LoadCodePageFile( CmdLineParms.CodePageFile );
+        if( CmdLineParms.CodepageFile != NULL ) {
+            LoadCodepageFile( CmdLineParms.CodepageFile );
 #ifdef __NT__
         } else {
             SetNativeLeadBytes();
@@ -418,11 +418,11 @@ static int SetParms( void )
     const char  *defext;
 
     if( nofilenames == 0 ) {
-        RcError( ERR_FILENAME_NEEDED );
+        RcError( RCMSG_FILENAME_NEEDED );
         return( 1 );
     }
     if( nofilenames > 2 ) {
-        RcError( ERR_TOO_MANY_FILENAMES );
+        RcError( RCMSG_TOO_MANY_FILENAMES );
     }
 
     CheckExtension( &CmdLineParms.InFileName, "rc" );
@@ -466,26 +466,26 @@ static int SetParms( void )
     if( !( CmdLineParms.Pass2Only
       && CmdLineParms.NoResFile ) ) {
         if( access( CmdLineParms.InFileName, F_OK ) != 0 ) {
-            RcError( ERR_CANT_FIND_FILE, CmdLineParms.InFileName );
+            RcError( RCMSG_CANT_FIND_FILE, CmdLineParms.InFileName );
             return( 1 );
         }
     }
     if( !CmdLineParms.Pass1Only
       && !CmdLineParms.PreprocessOnly ) {
         if( access( CmdLineParms.InExeFileName, F_OK ) != 0 ) {
-            RcError( ERR_CANT_FIND_FILE, CmdLineParms.InExeFileName );
+            RcError( RCMSG_CANT_FIND_FILE, CmdLineParms.InExeFileName );
             return( 1 );
         }
     }
 
     if( CmdLineParms.GenAutoDep
       && CmdLineParms.MSResFormat ) {
-        RcError( ERR_OPT_NOT_VALID_TOGETHER, "-ad", "-zm" );
+        RcError( RCMSG_OPT_NOT_VALID_TOGETHER, "-ad", "-zm" );
         return( 1 );
     }
     if( CmdLineParms.PreprocessOnly
       && CmdLineParms.NoPreprocess ) {
-        RcError( ERR_OPT_NOT_VALID_TOGETHER, "-o", "-zn" );
+        RcError( RCMSG_OPT_NOT_VALID_TOGETHER, "-o", "-zn" );
         return( 1 );
     }
     return( 0 );
@@ -514,7 +514,7 @@ void ScanParamFini( void )
     FreeCharTable();
 
     while( (tmpres = CmdLineParms.ExtraResFiles) != NULL ) {
-        CmdLineParms.ExtraResFiles = CmdLineParms.ExtraResFiles->next;
+        CmdLineParms.ExtraResFiles = tmpres->next;
         MemFree( tmpres );
     }
     MemFree( CmdLineParms.InFileName );
@@ -525,13 +525,13 @@ void ScanParamFini( void )
     CmdLineParms.OutResFileName = NULL;
     MemFree( CmdLineParms.OutExeFileName );
     CmdLineParms.OutExeFileName = NULL;
-    if( CmdLineParms.CodePageFile != NULL ) {
-        MemFree( CmdLineParms.CodePageFile );
-        CmdLineParms.CodePageFile = NULL;
+    if( CmdLineParms.CodepageFile != NULL ) {
+        MemFree( CmdLineParms.CodepageFile );
+        CmdLineParms.CodepageFile = NULL;
     }
 #ifndef NO_REPLACE
     while( (strings = CmdLineParms.FindReplaceStrings) != NULL ) {
-        CmdLineParms.FindReplaceStrings = CmdLineParms.FindReplaceStrings->next;
+        CmdLineParms.FindReplaceStrings = strings->next;
         MemFree( strings );
     }
     if( CmdLineParms.PrependString != NULL ) {
@@ -553,7 +553,9 @@ char *FindAndReplace( char *stringFromFile, FRStrings *frStrings )
     size_t              lenOfReplaceString;
     size_t              diffInLen;
     size_t              newMemSize;
-    size_t              i, j, k;
+    size_t              i;
+    size_t              j;
+    size_t              k;
     int                 noOfInstances; //this is the number of instances
                                        //of the find string in the string
                                        //from the file
@@ -677,12 +679,6 @@ static char *ReadIndirectFile( char *name )
             if( ch == '\r' || ch == '\n' ) {
                 *str = ' ';
             }
-#if !defined(__UNIX__)
-            if( ch == 0x1A ) {      // if end of file
-                *str = '\0';        // - mark end of str
-                break;
-            }
-#endif
         }
     }
     return( env );
@@ -707,26 +703,30 @@ static bool scanDefine( OPT_STRING **h )
     return( false );
 }
 
-static bool scanTarget( unsigned *p )
+static bool scanTarget( unsigned *value )
 {
     const char  *str;
     size_t      len;
     char        buff[16];
+    char        *p;
+    int         c;
 
     CmdRecogEquals();
     len = CmdScanId( &str );
     if( len > sizeof( buff ) - 1 ) {
         len = sizeof( buff ) - 1;
     }
-    strncpy( buff, str, len );
+    p = strncpy( buff, str, len );
     buff[len] = '\0';
-    strupr( buff );
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
     if( strcmp( buff, "WINDOWS" ) == 0 || strcmp( buff, "WIN" ) == 0 ) {
-        *p = RC_TARGET_OS_WIN16;
+        *value = RC_TARGET_OS_WIN16;
     } else if( strcmp( buff, "NT" ) == 0 ) {
-        *p = RC_TARGET_OS_WIN32;
+        *value = RC_TARGET_OS_WIN32;
     } else if( strcmp( buff, "OS2" ) == 0 ) {
-        *p = RC_TARGET_OS_OS2;
+        *value = RC_TARGET_OS_OS2;
     } else {
         BadCmdLineId();
         return( false );
@@ -924,24 +924,31 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
 #endif
     switch( data->win16_ver ) {
     case OPT_ENUM_win16_ver__10:
-        CmdLineParms.Win16VerStamp = VERSION_10_STAMP;
+        CmdLineParms.winver = 10;
+        CmdLineParms.win16stamp = 0x0100;
         break;
     case OPT_ENUM_win16_ver__20:
-        CmdLineParms.Win16VerStamp = VERSION_20_STAMP;
+        CmdLineParms.winver = 20;
+        CmdLineParms.win16stamp = 0x0200;
         break;
     case OPT_ENUM_win16_ver__30:
-        CmdLineParms.Win16VerStamp = VERSION_30_STAMP;
+        CmdLineParms.winver = 30;
+        CmdLineParms.win16stamp = 0x0300;
         break;
     case OPT_ENUM_win16_ver__31:
     case OPT_ENUM_win16_ver_default:
-        CmdLineParms.Win16VerStamp = VERSION_31_STAMP;
+        CmdLineParms.winver = 31;
+        CmdLineParms.win16stamp = 0x030A;
         break;
     default:
         DbgNever();
         break;
     }
+    if( CmdLineParms.TargetOS != RC_TARGET_OS_WIN16 ) {
+        CmdLineParms.winver = 40; /* WIN32 */
+    }
     if( data->c ) {
-        SetStringOption( &CmdLineParms.CodePageFile, &(data->c_value) );
+        SetStringOption( &CmdLineParms.CodepageFile, &(data->c_value) );
     }
     if( data->d ) {
         OPT_STRING *s;
@@ -1002,14 +1009,14 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
             frStrings->findString = strtok( frStrings->buf, "," );
             if( frStrings->findString == NULL ) {
                 PrintBanner();
-                RcError( ERR_SYNTAX_STR, "-g=" );
+                RcError( RCMSG_SYNTAX_STR, "-g=" );
                 MemFree( frStrings );
                 continue;
             }
             frStrings->replaceString = strtok( NULL, "," );
             if( frStrings->replaceString == NULL ) {
                 PrintBanner();
-                RcError( ERR_SYNTAX_STR, "-g=" );
+                RcError( RCMSG_SYNTAX_STR, "-g=" );
                 MemFree( frStrings );
                 continue;
             }
@@ -1109,6 +1116,9 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
     if( data->xc ) {
         CmdLineParms.IgnoreCWD = true;
     }
+    if( data->xs ) {
+        CmdLineParms.StrictWin16 = true;
+    }
     if( data->zm ) {
         CmdLineParms.MSResFormat = true;
     }
@@ -1183,7 +1193,7 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
     /*
      * initialize character input/output encoding
      */
-    initMBCodePage();
+    initMBCodepage();
 
     return( SetParms() );
 

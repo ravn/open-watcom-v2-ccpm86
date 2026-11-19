@@ -81,8 +81,8 @@ WINEXPORT LRESULT CALLBACK WdeProgSuperClassProc( HWND, UINT, WPARAM, LPARAM );
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static OBJPTR   WdeMakeProg( OBJPTR, RECT *, OBJPTR, DialogStyle, char *, OBJ_ID );
-static OBJPTR   WdeProgressCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl * );
+static OBJPTR   WdeMakeProg( OBJPTR, RECT *, OBJPTR, DialogStyle, const char *, OBJ_ID );
+static OBJPTR   WdeProgressCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl *control );
 static void     WdeProgSetDefineInfo( WdeDefineObjectInfo *, HWND );
 static void     WdeProgGetDefineInfo( WdeDefineObjectInfo *, HWND );
 static bool     WdeProgDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
@@ -122,7 +122,7 @@ OBJPTR CALLBACK WdeProgCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle )
     }
 }
 
-OBJPTR WdeMakeProg( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle style, char *text, OBJ_ID id )
+OBJPTR WdeMakeProg( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle style, const char *text, OBJ_ID id )
 {
     OBJPTR new;
 
@@ -143,7 +143,7 @@ OBJPTR WdeMakeProg( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle st
 }
 
 OBJPTR WdeProgressCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
-                          OBJ_ID id, WdeDialogBoxControl *info )
+                          OBJ_ID id, WdeDialogBoxControl *control )
 {
     WdeProgObject *new;
 
@@ -180,7 +180,7 @@ OBJPTR WdeProgressCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
+    if( !Forward( new->object_handle, SET_OBJECT_INFO, control, NULL ) ) {
         WdeWriteTrail( "WdeProgCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
         MemFree( new );
@@ -255,7 +255,7 @@ bool WdeProgInit( bool first )
     SETCTL_SIZEW( WdeDefaultProg, 0 );
     SETCTL_SIZEH( WdeDefaultProg, 0 );
     SETCTL_TEXT( WdeDefaultProg, NULL );
-    SETCTL_CLASSID( WdeDefaultProg, WdeStrToControlClass( WPROGRESS_CLASS ) );
+    SETCTL_CLASSID( WdeDefaultProg, ResStrToNameOrOrdinal( WPROGRESS_CLASS ) );
 
 #ifdef __WINDOWS__
     WdeProgDispatch = MakeProcInstance_DISPATCHER( WdeProgDispatcher, WdeGetAppInstance() );
@@ -350,7 +350,7 @@ bool WdeProgGetWndProc( WdeProgObject *obj, WNDPROC *proc, void *p2 )
     return( true );
 }
 
-bool WdeProgGetWindowClass( WdeProgObject *obj, char **class, void *p2 )
+bool WdeProgGetWindowClass( WdeProgObject *obj, const char **class, void *p2 )
 {
     /* unused parameters */ (void)obj; (void)p2;
 
@@ -386,8 +386,8 @@ void WdeProgSetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
 void WdeProgGetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
 {
     // clear the style flags, since there are none for a progress bar
-    SETCTL_STYLE( o_info->info.c.info,
-                  GETCTL_STYLE( o_info->info.c.info ) & 0xffff0000 );
+    SETCTL_STYLE( o_info->info.c.control,
+                  GETCTL_STYLE( o_info->info.c.control ) & 0xffff0000 );
 
     // get the extended control settings
     WdeEXGetDefineInfo ( o_info, hDlg );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -133,7 +133,7 @@ static void dmp_symtab( unsigned long offset, unsigned long num_syms )
     unsigned_32     strsize;
     unsigned_32     symidx;
     unsigned        num_aux;
-    int             i;
+    unsigned        i;
 
     if( num_syms == 0 ) {
         Wdputslc( "No symbols in object file\n" );
@@ -155,7 +155,7 @@ static void dmp_symtab( unsigned long offset, unsigned long num_syms )
     } else {
         strtab = NULL;
     }
-    Wdputs( "Idx  Value    Sec  Type Class # Aux Name\n" );
+    Wdputslc( "Idx  Value    Sec  Type Class # Aux Name\n" );
     for( symidx = 0; symidx < num_syms; symidx++ ) {
         Puthex( symidx + 1, 4 );
         Wdputs( " " );
@@ -264,6 +264,9 @@ bool Dmp_coff_head( void )
         }
         Dump_header( (char *)&header, templ, 4 );
         Dump_header( (char *)&header + 2, coff_hdr_msg, 4 );
+        Wdputs( "Module Flags = " );
+        Puthex( header.o.flags, 4 );
+        Wdputs( ": " );
         DumpCoffHdrFlags( header.o.flags );
         load_string_table( &header.o );
         Wlseek( Coff_off + sizeof(coff_file_header) + header.o.opt_hdr_size );
@@ -290,7 +293,8 @@ bool Dmp_ar_head( void )
     filesize = WFileSize();
     Coff_off = AR_IDENT_LEN;
     for(;;) {
-        if( Coff_off + sizeof(ar_header) >= filesize ) break;
+        if( Coff_off + sizeof(ar_header) >= filesize )
+            break;
         Wread( &hdr, sizeof(ar_header) );
         Coff_off += sizeof(ar_header);
         hdr.date[0]='\0';
@@ -299,8 +303,8 @@ bool Dmp_ar_head( void )
         Wdputslc( "\n" );
         hdr.header_ident[0] = '\0';
         size = strtoul( hdr.size, NULL, 10 );
-        if( strcmp( hdr.name, "/               " ) == 0 ||
-                        strcmp( hdr.name, "//              " ) == 0 ) {
+        if( strcmp( hdr.name, "/               " ) == 0
+          || strcmp( hdr.name, "//              " ) == 0 ) {
             Dmp_seg_data( Coff_off, size );
         } else if( !Dmp_coff_head() ) {
             // then try and see if it's ELF

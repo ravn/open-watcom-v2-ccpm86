@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,100 +38,89 @@
 #include "wdfunc.h"
 
 /*
- * Dump Segment Flag word
+ * Dump Segment flags word
  */
-static void dmp_seg_flag( unsigned_16 flag )
-/******************************************/
+static void dmp_seg_flags( unsigned_16 flags )
+/********************************************/
 {
-    if( flag & SEG_DATA ) {
-        Wdputs( "  DATA" );
-    } else {
-        Wdputs( "  CODE" );
+    char            buffer[128];
+    char            *p;
+
+    p = buffer;
+    if( flags & SEG_DATA ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "DATA" );
+    } else if( Options_dmp & ZERO_BITS ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "CODE" );
     }
-    if( flag & SEG_FLAG_1 ) {
-        Wdputs( "|BIT1" );
+    if( flags & SEG_FLAG_1 ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "BIT1" );
     }
-    if( flag & SEG_FLAG_2 ) {
-        Wdputs( "|BIT2" );
+    if( flags & SEG_FLAG_2 ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "BIT2" );
     }
-    if( flag & SEG_FLAG_1 ) {
-        Wdputs( "|BIT3" );
+    if( flags & SEG_ITERATED ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "ITER" );
     }
-    if( flag & SEG_FLAG_2 ) {
-        Wdputs( "|BIT4" );
+    if( flags & SEG_MOVABLE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "MOVABLE" );
+    } else if( Options_dmp & ZERO_BITS ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "FIXED" );
     }
-    if( flag & SEG_ITERATED ) {
-        Wdputs( "|ITER" );
+    if( flags & SEG_PURE ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "SHARE" );
+    } else if( Options_dmp & ZERO_BITS ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "NOSHARE" );
     }
-    if( flag & SEG_MOVABLE ) {
-        Wdputs( "|MOVABLE" );
-    } else {
-        Wdputs( "|FIXED" );
+    if( flags & SEG_PRELOAD ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PRELOAD" );
+    } else if( Options_dmp & ZERO_BITS ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "LOADONCALL" );
     }
-    if( flag & SEG_PURE ) {
-        Wdputs( "|SHARE" );
-    } else {
-        Wdputs( "|NOSHARE" );
-    }
-    if( flag & SEG_PRELOAD ) {
-        Wdputs( "|PRELOAD" );
-    } else {
-        Wdputs( "|LOADONCALL" );
-    }
-    if( flag & SEG_DATA ) {
-        if( flag & SEG_READ_ONLY ) {
-            Wdputs( "|READONLY" );
-        } else {
-            Wdputs( "|READWRITE" );
+    if( flags & SEG_DATA ) {
+        if( flags & SEG_READ_ONLY ) {
+            p += sprintf( p, GET_OR_FMT( p == buffer ), "READONLY" );
+        } else if( Options_dmp & ZERO_BITS ) {
+            p += sprintf( p, GET_OR_FMT( p == buffer ), "READWRITE" );
         }
     } else {
-        if( flag & SEG_READ_ONLY ) {
-            Wdputs( "|EXECONLY" );
-        } else {
-            Wdputs( "|EXECREAD" );
+        if( flags & SEG_READ_ONLY ) {
+            p += sprintf( p, GET_OR_FMT( p == buffer ), "EXECONLY" );
+        } else if( Options_dmp & ZERO_BITS ) {
+            p += sprintf( p, GET_OR_FMT( p == buffer ), "EXECREAD" );
         }
     }
-    if( flag & SEG_RELOC ) {
-        Wdputs( "|RELOCS" );
+    if( flags & SEG_RELOC ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "RELOCS" );
     }
-    if( flag & SEG_CONFORMING ) {
-        Wdputs( "|DEBUG" );
+    if( flags & SEG_CONFORMING ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "DEBUG" );
     }
-    if( flag & SEG_DISCARD ) {
-        Wdputs( "|DISCARDABLE" );
-    }
-    if( flag & SEG_32_BIT ) {
-        Wdputs( "|32 BIT SEG" );
-    }
-    if( flag & SEG_HUGE ) {
-        Wdputs( "|PART OF HUGE" );
-    }
+    *p = '\0';
+    Wdputs( buffer );
 }
 
 /*
  * Dump Segment Table Entry
  */
-static void dmp_seg_ent( struct segment_record *seg_ent )
-/*******************************************************/
+static void dmp_seg_ent( segment_record *seg_ent )
+/************************************************/
 {
-    Wdputc( ' ' );
-    Puthex( (unsigned_32)seg_ent->address
-        << Os2_head.align, 8 );
+    unsigned_16     flags;
+
+    Puthex( (unsigned_32)seg_ent->address << Os2_head.align, 8 );
     Wdputc( ' ' );
     Puthex( seg_ent->size, 4 );
     Wdputc( ' ' );
     Puthex( seg_ent->min, 4 );
-    Wdputc( ' ' );
-    Wdputc( ' ' );
-    Puthex( seg_ent->info >> SEG_SHIFT_PRI_LVL , 4 );
-    Wdputc( ' ' );
-    Wdputc( ' ' );
-    Puthex( seg_ent->info >> SEG_SHIFT_PMODE_LVL, 4 );
-    Wdputc( ' ' );
-    Puthex( seg_ent->info, 4 );
-    Wdputslc( "\n" );
-    dmp_seg_flag( seg_ent->info );
-    Wdputslc( "\n" );
+    Wdputs( "    " );
+    flags = seg_ent->info;
+    Putdecl( GET_SEG_DISCARD_PRIORITY( flags ), 2 );
+    Wdputs( "    " );
+    Putdec( GET_SEG_PMODE_DPL( flags ) );
+    Wdputs( "  " );
+    Puthex( flags, 4 );
+    Wdputs( "  " );
+    dmp_seg_flags( flags );
 }
 
 /*
@@ -140,10 +129,10 @@ static void dmp_seg_ent( struct segment_record *seg_ent )
 void Dmp_seg_tab( void )
 /**********************/
 {
-    unsigned_16                     num_segs;
-    struct segment_record           *segtab;
-    unsigned_16                     segtabsize;
-    unsigned_16                     segnum;
+    unsigned_16     num_segs;
+    segment_record  *segtab;
+    unsigned_16     segtabsize;
+    unsigned_16     segnum;
 
     Banner( "Segment Table" );
     num_segs = Os2_head.segments;
@@ -151,16 +140,18 @@ void Dmp_seg_tab( void )
         return;
     }
     Wlseek( New_exe_off + Os2_head.segment_off );
-    segtabsize = sizeof( struct segment_record ) * num_segs;
+    segtabsize = sizeof( segment_record ) * num_segs;
     Int_seg_tab = Wmalloc( segtabsize );
     segtab = Int_seg_tab;
     Wread( segtab, segtabsize );
     ++num_segs;
-    Wdputslc( "seg  fileoff  len  alloc prior priv flag\n" );
+    Wdputslc( "seg  fileoff  len  alloc prior priv flags\n" );
     Wdputslc( "==== ======== ==== ====  ====  ==== ====\n" );
     for( segnum = 1; segnum != num_segs; segnum++ ) {
         Puthex( segnum, 4 );
+        Wdputc( ' ' );
         dmp_seg_ent( segtab++ );
+        Wdputslc( "\n" );
     }
     Wdputslc( "\n" );
 }

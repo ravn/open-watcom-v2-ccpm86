@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,14 +35,8 @@
 #include <string.h>
 #include <ctype.h>
 
-char    buf[2048];
 
-static char *skipwhite( char *s )
-{
-    while( *s && isspace( (unsigned char)*s ) )
-        s++;
-    return *s ? s : NULL;
-}
+char    buf[2048];
 
 int main( int argc, char *argv[] )
 {
@@ -62,10 +56,12 @@ int main( int argc, char *argv[] )
         printf( "Unable to open input file %s!\n", argv[1] );
         return -1;
     }
-    while( fgets( buf, sizeof( buf ), in ) != NULL ) {
+    while( (p = fgets( buf, sizeof( buf ), in )) != NULL ) {
+        /* Skip white spaces */
+        while( isspace( *(unsigned char *)p ) )
+            p++;
         /* Skip comment and blank lines */
-        p = skipwhite( buf );
-        if( p == NULL || *p == '#' )
+        if( *p == '\0' || *p == '#' )
             continue;
         if( argc == 3 )
             fputs( argv[2], stdout );

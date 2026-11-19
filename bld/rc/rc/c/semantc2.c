@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,41 +34,27 @@
 #include "global.h"
 #include "rcerrors.h"
 #include "rcmem.h"
+#include "yydriver.h"
 #include "semantic.h"
 #include "semantc2.h"
 
 
-static uint_32  curCodepage = 850;  // default resource codepage
+static uint_32  curCodepage = 0;
 
-uint_32 SemOS2DefaultCodepage( void )
-/***********************************/
+uint_32 SemOS2GetDefaultCodepage( void )
+/**************************************/
 {
     return( curCodepage );
 }
 
-void SemOS2SetCodepage( uint_32 codepage )
-/****************************************/
+void SemOS2SetDefaultCodepage( uint_32 codepage )
+/***********************************************/
 {
     curCodepage = codepage;
 }
 
-FullOptFlagsOS2 SemOS2AddFirstResOption( YYTOKENTYPE token, uint_32 value )
-/*************************************************************************/
-{
-    FullOptFlagsOS2     newflags;
-
-    newflags.flags = 0;
-    newflags.codePage = curCodepage;
-    newflags.loadOptGiven   = false;
-    newflags.memOptGiven    = false;
-    newflags.purityOptGiven = false;
-    newflags.cpOptGiven     = false;
-
-    return( SemOS2AddResOption( newflags, token, value ) );
-}
-
-FullOptFlagsOS2 SemOS2AddResOption( FullOptFlagsOS2 currflags, YYTOKENTYPE token, uint_32 value )
-/************************************************************************************************
+ResMemFlags SemOS2AddResOption( ResMemFlags res_flags, YYTOKENTYPE token )
+/*************************************************************************
  * IBM's RC has a tendency to add PURE flag when other memory flags
  * are specified. The flag will be ignored by OS but we do the same
  * for compatibility.
@@ -76,70 +62,33 @@ FullOptFlagsOS2 SemOS2AddResOption( FullOptFlagsOS2 currflags, YYTOKENTYPE token
 {
     switch( token ) {
     case Y_PRELOAD:
-        currflags.flags |= MEMFLAG_PRELOAD | MEMFLAG_PURE;
-        currflags.loadOptGiven = true;
+        res_flags |= RESFLAG_PRELOAD | RESFLAG_PURE;
         break;
     case Y_LOADONCALL:
-        currflags.flags &= ~MEMFLAG_PRELOAD;
-        currflags.flags |= MEMFLAG_PURE;
-        currflags.loadOptGiven = true;
+        res_flags &= ~RESFLAG_PRELOAD;
+        res_flags |= RESFLAG_PURE;
         break;
     case Y_FIXED:
-        currflags.flags &= ~MEMFLAG_MOVEABLE;
-        currflags.flags |= MEMFLAG_PURE;
-        currflags.memOptGiven = true;
+        res_flags &= ~RESFLAG_MOVEABLE;
+        res_flags |= RESFLAG_PURE;
         break;
     case Y_MOVEABLE:
-        currflags.flags |= MEMFLAG_MOVEABLE | MEMFLAG_PURE;
-        currflags.memOptGiven = true;
+        res_flags |= RESFLAG_MOVEABLE | RESFLAG_PURE;
         break;
     case Y_DISCARDABLE:
-        currflags.flags |= MEMFLAG_DISCARDABLE | MEMFLAG_PURE | MEMFLAG_MOVEABLE;
-        currflags.memOptGiven = true;
+        res_flags |= RESFLAG_DISCARDABLE | RESFLAG_PURE | RESFLAG_MOVEABLE;
         break;
     case Y_PURE:
-        currflags.flags |= MEMFLAG_PURE;
-        currflags.purityOptGiven = true;
+        res_flags |= RESFLAG_PURE;
         break;
     case Y_IMPURE:
-        currflags.flags &= ~MEMFLAG_PURE;
-        currflags.purityOptGiven = true;
+        res_flags &= ~RESFLAG_PURE;
         break;
     case Y_SEGALIGN:    // This one is OS/2 2.x specific
-        currflags.flags |= MEMFLAG_SEGALIGN;
-        break;
-    case Y_INTEGER:    // Is this OS/2 2.x specific too?
-        currflags.codePage = value;
-        currflags.cpOptGiven = true;
+        res_flags |= RESFLAG_SEGALIGN;
         break;
     }
-
-    return( currflags );
-}
-
-void SemOS2CheckResFlags( FullOptFlagsOS2 *currflags, ResMemFlags loadopts,
-            ResMemFlags memopts, ResMemFlags pureopts )
-/*************************************************************************/
-{
-    if( !currflags->loadOptGiven ) {
-        currflags->flags |= loadopts;
-    }
-    if( !currflags->memOptGiven ) {
-        currflags->flags |= memopts;
-    }
-    if( !currflags->purityOptGiven ) {
-        currflags->flags |= pureopts;
-    }
-    /*
-     * If the user set the resource to be IMPURE but doesn't give a mem option
-     * set the resource to be non-discardable.
-     */
-    if( currflags->purityOptGiven
-      && !currflags->memOptGiven ) {
-        if( !(currflags->flags & MEMFLAG_PURE) ) {
-            currflags->flags &= ~MEMFLAG_DISCARDABLE;
-        }
-    }
+    return( res_flags );
 }
 
 char *SemOS2TokenToString( YYTOKENTYPE token )
@@ -371,9 +320,6 @@ char *SemOS2TokenToString( YYTOKENTYPE token )
     case Y_RCDATA:
         return( "RCDATA" );
         break;
-    case Y_RCINCLUDE:
-        return( "RCINCLUDE" );
-        break;
     case Y_RTEXT:
         return( "RTEXT" );
         break;
@@ -410,5 +356,5 @@ char *SemOS2TokenToString( YYTOKENTYPE token )
 void SemanticInitStaticsOS2( void )
 /*********************************/
 {
-    curCodepage = 850;
+    curCodepage = 850;  /* Latin-1 Western Europe */
 }

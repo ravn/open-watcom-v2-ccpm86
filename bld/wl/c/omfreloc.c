@@ -75,12 +75,12 @@ static void GetFrame( unsigned method, frame_spec *frame )
 {
     extnode     *ext;
     grpnode     *group;
-    segnode     *seg;
+    segnode     *snode;
 
     switch( method ) {
     case FRAME_SEG:
-        seg = (segnode *) FindNode( SegNodes, GetIdx() );
-        frame->u.sdata = seg->entry;
+        snode = (segnode *)FindNode( SegNodes, GetIdx() );
+        frame->u.sdata = snode->entry;
         frame->type = FIX_FRAME_SEG;
         break;
     case FRAME_GRP:
@@ -122,12 +122,12 @@ static void GetTarget( unsigned method, target_spec *target )
 {
     extnode             *ext;
     grpnode             *group;
-    segnode             *seg;
+    segnode             *snode;
 
     switch( method ) {
     case TARGET_SEG:
-        seg = (segnode *) FindNode( SegNodes, GetIdx() );
-        target->u.sdata = seg->entry;
+        snode = (segnode *)FindNode( SegNodes, GetIdx() );
+        target->u.sdata = snode->entry;
         target->type = FIX_TARGET_SEG;
         break;
     case TARGET_GRP:
@@ -156,12 +156,12 @@ void DoRelocs( void )
     unsigned    typ;
     offset      location;
     offset      addend;
-    frame_spec  fthread;
-    target_spec tthread;
+    frame_spec  frame;
+    target_spec target;
 
-    if( ObjFormat & OBJ_FMT_IGNORE_FIXUPP )
+    if( ObjFormat & OBJFMT_IGNORE_FIXUPP )
         return;
-    if( ObjFormat & OBJ_FMT_IS_LIDATA ) {
+    if( ObjFormat & OBJFMT_IS_LIDATA ) {
         LnkMsg( WRN+LOC_REC+MSG_REL_IN_LIDATA, NULL );
         return;
     }
@@ -189,14 +189,14 @@ void DoRelocs( void )
                 fixtype = FIX_HIGH_OFFSET_8;
                 break;
             case LOC_OFFSET_LOADER:
-                if( ObjFormat & OBJ_FMT_EASY_OMF ) {
+                if( ObjFormat & OBJFMT_EASY_OMF ) {
                     fixtype = FIX_OFFSET_32;                    /* Pharlap only */
                 } else {
                     fixtype = FIX_OFFSET_16 | FIX_LOADER_RES;   /* OMF standard */
                 }
                 break;
             case LOC_PHARLAP_BASE_OFFSET_32:
-                if( ObjFormat & OBJ_FMT_EASY_OMF ) {
+                if( ObjFormat & OBJFMT_EASY_OMF ) {
                     fixtype = FIX_BASE_OFFSET_32;               /* Pharlap only */
                 }
                 break;
@@ -221,24 +221,24 @@ void DoRelocs( void )
              * frame processing
              */
             if( typ & FIXDAT_FTHREAD ) {
-                fthread = FrameThreads[( typ >> 4 ) & 3];
+                frame = FrameThreads[( typ >> 4 ) & 3];
             } else {
-                GetFrame( ( typ >> 4 ) & 7, &fthread );
+                GetFrame( ( typ >> 4 ) & 7, &frame );
             }
             /*
              * target processing
              */
             if( typ & FIXDAT_TTHREAD ) {
-                tthread = TargThreads[typ & 3];
+                target = TargThreads[typ & 3];
             } else {
-                GetTarget( typ & 3, &tthread );
+                GetTarget( typ & 3, &target );
             }
             /*
              * target addend processing
              */
             addend = 0;
             if( (typ & FIXDAT_PBIT) == 0 ) {
-                if( ObjFormat & OBJ_FMT_32BIT_REC ) {
+                if( ObjFormat & OBJFMT_32BIT_REC ) {
                     addend = MGET_LE_U32_UN( ObjBuff );
                     ObjBuff += sizeof( unsigned_32 );
                 } else {
@@ -246,7 +246,7 @@ void DoRelocs( void )
                     ObjBuff += sizeof( unsigned_16 );
                 }
             }
-            StoreFixup( location, fixtype, &fthread, &tthread, addend );
+            StoreFixup( location, fixtype, &frame, &target, addend );
         } else {
             /*
              * thread
@@ -274,7 +274,7 @@ static void StoreBakPat( segdata *sdata, byte loctype )
     bkptr->len = len;
     bkptr->loctype = loctype;
     bkptr->sdata = sdata;   /* We don't know the data offset yet. */
-    bkptr->is32bit = (ObjFormat & OBJ_FMT_32BIT_REC) != 0;
+    bkptr->is32bit = (ObjFormat & OBJFMT_32BIT_REC) != 0;
     memcpy( bkptr->data, ObjBuff, len );
     AppendList( (void **)&BakPats, bkptr );
 }
@@ -283,14 +283,14 @@ void ProcBakpat( void )
 /****************************/
 /* store the bakpat record away for future processing */
 {
-    segnode             *seg;
+    segnode             *snode;
     byte                loctype;
 
-    seg = (segnode *) FindNode( SegNodes, GetIdx() );
-    if( seg->info & SEG_DEAD )
+    snode = (segnode *)FindNode( SegNodes, GetIdx() );
+    if( snode->info & SEGINF_DEAD )
         return;
     loctype = *ObjBuff++;
-    StoreBakPat( seg->entry, loctype );
+    StoreBakPat( snode->entry, loctype );
 }
 
 void DoBakPats( void )

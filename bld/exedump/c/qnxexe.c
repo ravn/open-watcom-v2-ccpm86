@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -69,26 +70,27 @@ static  const_string_table qnx_data_msg[] = {
 /*
  * Dump the flags.
  */
-static void dmp_flag( unsigned_16 flag )
-/**************************************/
+static void dmp_prog_flags( unsigned_16 flags )
+/*********************************************/
 {
-    if( !flag ) {
-        return;
+    char            buffer[128];
+    char            *p;
+
+    p = buffer;
+    if( flags & _TCF_LONG_LIVED ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "LONG_LIVED" );
     }
-    Wdputs( "flags                                       =" );
-    if( flag & _TCF_LONG_LIVED ) {
-        Wdputs( " LONG_LIVED" );
+    if( flags & _TCF_32BIT ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "32BIT" );
     }
-    if( flag & _TCF_32BIT ) {
-        Wdputs( " 32BIT" );
+    if( flags & _TCF_PRIV_MASK ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "PRIV_MASK" );
     }
-    if( flag & _TCF_PRIV_MASK ) {
-        Wdputs( " PRIV_MASK" );
+    if( flags & _TCF_FLAT ) {
+        p += sprintf( p, GET_OR_FMT( p == buffer ), "FLAT" );
     }
-    if( flag & _TCF_FLAT ) {
-        Wdputs( " FLAT" );
-    }
-    Wdputslc( "\n" );
+    *p = '\0';
+    Wdputs( buffer );
 }
 
 /*
@@ -100,7 +102,7 @@ static void dmp_seg( unsigned_16 size )
     unsigned_16     i;
     unsigned_32     seg;
 
-    if( !size ) {
+    if( size == 0 ) {
         return;
     }
     Wdputslc( "segments = type:size\n" );
@@ -244,7 +246,8 @@ static void dmp_data( unsigned_16 size, unsigned_32 offset )
     Wdputslc( "H\n" );
     offset += sizeof( lmf_data );
     if( Options_dmp & (DOS_SEG_DMP | OS2_SEG_DMP) ) {
-        if( Segspec == 0 || Segspec == Data_count ) {
+        if( Segspec == 0
+          || Segspec == Data_count ) {
             Dmp_seg_data( offset, size );
         }
     }
@@ -342,7 +345,11 @@ bool Dmp_qnx_head( void )
         }
         Banner( "QNX EXE Header" );
         Dump_header( (char *)&Qnx_head.version, qnx_def_msg, 4 );
-        dmp_flag( Qnx_head.cflags );
+        if( Qnx_head.cflags ) {
+            Wdputs( "flags                                       =" );
+            dmp_prog_flags( Qnx_head.cflags );
+            Wdputslc( "\n" );
+        }
         size = ( qnx_rec.data_nbytes - sizeof( lmf_header ) ) / 4;
         dmp_seg( size );
         offset = qnx_rec.data_nbytes + sizeof( lmf_record );

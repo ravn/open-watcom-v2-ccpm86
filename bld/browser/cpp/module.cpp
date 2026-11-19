@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -45,10 +45,11 @@
 #include "module.h"
 #include "util.h"
 #include "death.h"
-#include "brmem.h"
+#include "memfuncs.h"
 #include "symbol.h"
 #include "referenc.h"
 #include "fileinfo.h"
+
 
 struct FindSymData {
     KeySymbol *         keysym;
@@ -141,7 +142,7 @@ static bool searchHook( dr_sym_context * symctxt, void *data )
 
     if( accept ) {
         if( info->numItems == 0 ) {
-            WBRFree( symctxt->name );
+            MemFree( symctxt->name );
             symctxt->name = NULL;
             info->context = new SearchContext( *symctxt->context );
             return false;   // <----- early return -- stop search
@@ -165,7 +166,7 @@ static bool searchHook( dr_sym_context * symctxt, void *data )
         }
 #endif
     } else {
-        WBRFree( symctxt->name );
+        MemFree( symctxt->name );
     }
 
     return true;    // continue searching
@@ -218,8 +219,8 @@ static bool referenceHook( drmem_hdl, dr_ref_info * refinfo, char * name,
     for( int i = 0; i < list->count(); i++ ) {
         ref = (Reference *) (*list)[i];
         if( ref->line() == refinfo->line && ref->column() == refinfo->column
-                && strcmp( ref->sourceFile(), refinfo->file ) == 0 ) {
-            WBRFree( name );
+                && std::strcmp( ref->sourceFile(), refinfo->file ) == 0 ) {
+            MemFree( name );
             return true;
         }
     }
@@ -252,7 +253,7 @@ static bool refSymHook( drmem_hdl drhdl, dr_ref_info *, char * name,
 
     for( i = 0; i < data->list->count(); i += 1 ) {
         if( ((Symbol *)(*data->list)[ i ])->getHandle() == drhdl ) {
-            WBRFree( name );
+            MemFree( name );
             return true;        // <---- early return
         }
     }
@@ -282,8 +283,8 @@ bool Module::findRefSyms( WVList *list, Symbol * sym )
  * these are the routines which are called by the debug reading library
 */
 
-static void dbgReadHook( void * obj, dr_section sect, void * buf, size_t len )
-//-------------------------------------------------------------------------
+static void dbgReadHook( void * obj, dr_section sect, void * buf, std::size_t len )
+//---------------------------------------------------------------------------------
 {
     ((Module *)obj)->readSect( sect, buf, len );
 }
@@ -302,7 +303,7 @@ static void dbgExceptHook( dr_except type )
 
 extern "C" {
 
-DRSetRtns(dbgReadHook,dbgSeekHook,WBRAlloc,WBRRealloc,WBRFree,dbgExceptHook)
+DRSetRtns(dbgReadHook,dbgSeekHook,MemAlloc,MemRealloc,MemFree,dbgExceptHook)
 
 };
 

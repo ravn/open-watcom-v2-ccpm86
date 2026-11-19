@@ -572,7 +572,7 @@ static void CVAddAddrAdd( segdata *sdata, offset delta, offset size, void *cooki
 void CVAddAddrInfo( seg_leader *seg )
 /***********************************/
 {
-    if( seg->info & SEG_CODE ) {
+    if( seg->info & SEGINF_CODE ) {
         DBIAddrInfoScan( seg, CVAddAddrInit, CVAddAddrAdd, NULL );
     }
 }
@@ -603,7 +603,7 @@ void CVGenAddrInfo( seg_leader *seg )
 {
     cv_seginfo          info;
 
-    if( seg->info & SEG_CODE ) {
+    if( seg->info & SEGINF_CODE ) {
         DBIAddrInfoScan( seg, CVGenAddrInit, CVGenAddrAdd, &info );
     }
 }
@@ -613,12 +613,12 @@ void CVDefClass( class_entry *class, unsigned_32 size )
 {
     group_entry *group;
 
-    if( class->flags & CLASS_DWARF )
+    if( class->flags & (CLASS_DWARF | CLASS_HLL_LINE) )
         return;
     SectAddrs[CVSECT_MISC].u.vm_offs += size;
     group = AllocGroup( AutoGrpName, &DBIGroups );
     group->g.class = class;
-    group->grp_addr.seg = 0;
+    group->addr.seg = 0;
 }
 
 static void DefLocal( void *_sdata )
@@ -715,29 +715,29 @@ void CVFini( section *sect )
     map.cSegLog = NumGroups;
     DumpInfo( CVSECT_MISC, &map, sizeof( cv_sst_seg_map ) - sizeof( seg_desc ) );
     memset( &desc, 0, sizeof( seg_desc ) );
-    desc.u.b.fSel = 1;
-    desc.u.b.fRead = 1;
+    desc.u.b.fSel = true;
+    desc.u.b.fRead = true;
     desc.iSegName = 0xFFFF;
     desc.iClassName = 0xFFFF;
     for( group = Groups; group != NULL; group = group->next ) {
-        desc.frame = group->grp_addr.seg;
-        desc.offset = group->grp_addr.off;
+        desc.frame = group->addr.seg;
+        desc.offset = group->addr.off;
         desc.cbseg = group->totalsize;
         if( (group->segflags & SEG_DATA) == 0 ) {
-            desc.u.b.fExecute = 1;
+            desc.u.b.fExecute = true;
         } else {
-            desc.u.b.fExecute = 0;
+            desc.u.b.fExecute = false;
         }
         if( (group->segflags & (SEG_DATA | SEG_READ_ONLY)) == SEG_DATA ) {
-            desc.u.b.fWrite = 1;
+            desc.u.b.fWrite = true;
         } else {
-            desc.u.b.fWrite = 0;
+            desc.u.b.fWrite = false;
         }
         leader = Ring2First( group->leaders );
-        if( leader->info & USE_32 ) {
-            desc.u.b.f32Bit = 1;
+        if( leader->info & SEGINF_USE_32 ) {
+            desc.u.b.f32Bit = true;
         }
-//        desc.u.b.fSel = 1;
+//        desc.u.b.fSel = true;
         DumpInfo( CVSECT_MISC, &desc, sizeof( seg_desc ) );
     }
 }

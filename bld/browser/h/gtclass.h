@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,10 +34,11 @@
 #ifndef __GTCLASS_H__
 #define __GTCLASS_H__
 
-#include "brmem.h"
+#include "memfuncs.h"
 #include "classlat.h"
 #include "gtwin.h"
 #include "mempool.h"
+
 
 class TreeClassNode;
 class TreeClassOptions;
@@ -54,7 +56,7 @@ public:
                           TreeClassNode * to, dr_access, dr_virtuality );
            ~TreeClassPtr() {};
 
-    void *              operator new( size_t );
+    void *              operator new( std::size_t );
     void                operator delete( void * );
 
     virtual void        adjustTo( ClassLattice * cls );
@@ -74,9 +76,9 @@ public:
 
     virtual ~TreeClassNode() {};
 
-    void *                  operator new( size_t , TreeClassNode * );
-    void *                  operator new( size_t, MemoryPool & );
-    void *                  operator new( size_t );
+    void *                  operator new( std::size_t , TreeClassNode * );
+    void *                  operator new( std::size_t, MemoryPool & );
+    void *                  operator new( std::size_t );
     void                    operator delete( void * );
 
     virtual char *          name()  { return ClassLattice::name(); }

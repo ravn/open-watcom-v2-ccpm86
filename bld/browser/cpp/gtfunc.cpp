@@ -31,7 +31,7 @@
 ****************************************************************************/
 
 
-#include <string.h>
+#include <cstring>
 #include <string.hpp>
 
 #include <wpopmenu.hpp>
@@ -43,9 +43,10 @@
 #include "gtfunc.h"
 #include "gtfnopt.h"
 #include "keysym.h"
-#include "brmem.h"
+#include "memfuncs.h"
 #include "module.h"
 #include "brwhelp.h"
+
 
 const int PTRPOOLSIZE = 128;
 const int NODEPOOLSIZE = 64;
@@ -56,6 +57,29 @@ MemoryPool TreeFuncPtr::_pool( sizeof( TreeFuncPtr ), "TreeFuncPtr",
 MemoryPool TreeFuncNode::_pool( sizeof( TreeFuncNode ), "TreeFuncNode",
                                 NODEPOOLSIZE );
 #pragma enable_message( P549 )
+
+static char *my_strrev( char *str )
+/**********************************
+ * reverse characters in string
+ */
+{
+    char       *p1;
+    char       *p2;
+    char       c1;
+    char       c2;
+
+    p1 = str;
+    p2 = p1 + std::strlen( p1 ) - 1;
+    while( p1 < p2 ) {
+        c1 = *p1;
+        c2 = *p2;
+        *p1 = c2;
+        *p2 = c1;
+        ++p1;
+        --p2;
+    }
+    return( str );
+}
 
 /*---------------------------- TreeFuncPtr --------------------------*/
 
@@ -69,8 +93,8 @@ TreeFuncPtr::TreeFuncPtr( TreeFuncWindow * prt, TreeNode * from,
 {
 }
 
-void * TreeFuncPtr::operator new( size_t )
-//-----------------------------------------
+void * TreeFuncPtr::operator new( std::size_t )
+//---------------------------------------------
 {
     return( _pool.alloc() );
 }
@@ -116,32 +140,32 @@ TreeFuncNode::TreeFuncNode( TreeWindow * prt, dr_sym_type stp,
 
     container = DRGetContaining( drhdl );
     if( container != DRMEM_HDL_NULL ) {
-        accum = strrev( _name );
-        strrev( _name );
+        accum = my_strrev( _name );
+        my_strrev( _name );
 
         while( container != DRMEM_HDL_NULL ) {
             Symbol contSym( drhdl, NULL, mod, DRGetName( container ) );
-            name = WBRStrdup( contSym.name() );
+            name = MemStrdup( contSym.name() );
             accum += "::";
-            accum += strrev( name );
-            WBRFree( name );
+            accum += my_strrev( name );
+            MemFree( name );
 
             container = DRGetContaining( container );
         }
 
-        _decName = WBRStrdup( (const char *)accum );
-        strrev( _decName );
+        _decName = MemStrdup( (const char *)accum );
+        my_strrev( _decName );
     }
 }
 
 TreeFuncNode::~TreeFuncNode()
 {
-    WBRFree( _name );
-    WBRFree( _decName );
+    MemFree( _name );
+    MemFree( _decName );
 }
 
-void * TreeFuncNode::operator new( size_t )
-//-----------------------------------------
+void * TreeFuncNode::operator new( std::size_t )
+//----------------------------------------------
 {
     return( _pool.alloc() );
 }
@@ -183,7 +207,7 @@ void TreeFuncNode::sortPrtKids()
 Symbol * TreeFuncNode::makeSymbol( void )
 //---------------------------------------
 {
-    char * name = WBRStrdup( _name );
+    char * name = MemStrdup( _name );
     return Symbol::defineSymbol( _symType, _drhandle, DRMEM_HDL_NULL, _module, name );
 }
 
@@ -246,7 +270,7 @@ bool TreeFuncNode::TreeFuncHook( drmem_hdl owner, dr_ref_info * ref,
 
     depName = DRGetName( ref->dependent );
     accept = data->key->matches( ref->dependent, depName );
-    WBRFree( depName ); // OPTIMIZE -- could use this later
+    MemFree( depName ); // OPTIMIZE -- could use this later
 
     if( !accept ) {
         return true;    // <---- early return -- discard symbol, keep looking
@@ -277,7 +301,7 @@ bool TreeFuncNode::TreeFuncHook( drmem_hdl owner, dr_ref_info * ref,
     }
 
     if( child != NULL && parent != NULL ) {
-        WBRFree( ownerName );
+        MemFree( ownerName );
 
         if( parentRoot == childRoot ) {
             int prtIdx = child->findParent( parent );
@@ -359,7 +383,7 @@ bool TreeFuncNode::TreeFuncHook( drmem_hdl owner, dr_ref_info * ref,
                     new TreeFuncPtr( data->parentWin, child, parent, *ref ) );
         } else {
             if( parent != NULL ) {
-                WBRFree( ownerName );
+                MemFree( ownerName );
 
                 child = new TreeFuncNode( data->parentWin,
                                           DRGetSymType( ref->dependent ),

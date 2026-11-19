@@ -33,10 +33,8 @@
 #ifndef SEMMENUW_INCLUDED
 #define SEMMENUW_INCLUDED
 
-extern MenuFlags    SemWINAddFirstMenuOption( YYTOKENTYPE token );
 extern MenuFlags    SemWINAddMenuOption( MenuFlags oldflags, YYTOKENTYPE token );
-extern FullMenu     *SemWINNewMenu( FullMenuItem firstitem );
-extern FullMenu     *SemWINAddMenuItem( FullMenu *currmenu, FullMenuItem curritem );
-extern void         SemWINWriteMenu( WResID *res_id, ResMemFlags flags, FullMenu *menu, YYTOKENTYPE );
+extern FullMenuWIN  *SemWINAddMenuItem( FullMenuWIN *menu, FullMenuItemWIN menuitem );
+extern void         SemWINWriteMenu( WResID *res_id, ResMemFlags res_flags, FullMenuWIN *menu, bool );
 
 #endif

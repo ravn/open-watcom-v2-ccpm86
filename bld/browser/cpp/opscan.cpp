@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,21 +31,22 @@
 ****************************************************************************/
 
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <assert.h>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <cctype>
+#include <cassert>
 
 #include <wmsgdlg.hpp>
 
-#include "brmem.h"
+#include "memfuncs.h"
 #include "util.h"
 #include "browse.h"
 #include "opterms.h"
 #include "opscan.h"
 #include "opstream.h"
 #include "opgram.h"
+
 
 ScannerList  Scanner::ActiveScanners;
 int          Scanner::CurrentScanner = -1;
@@ -183,7 +185,7 @@ int Scanner::getToken( YYSTYPE & lval )
                         if( ambigs != NULL ) {
                             msg.printf( "[%s] is ambiguous -- try %s --",
                                         _buffer, ambigs );
-                            WBRFree( ambigs );
+                            MemFree( ambigs );
                         } else {
                             msg.printf( "Unrecognized symbol [%s]", _buffer );
                         }
@@ -197,7 +199,7 @@ int Scanner::getToken( YYSTYPE & lval )
                     }
                 }
             } else {
-                _stringTable.add( strdup( _buffer ));
+                _stringTable.add( MemStrdup( _buffer ));
                 lval = _stringTable.count() - 1;
                 if( _lookFor == LF_String ) {
                     _lastToken = T_String;
@@ -300,7 +302,7 @@ bool Scanner::error( const char * err )
     ret = WMessageDialog::message( browseTop, MsgError, MsgOkCancel,
                                     msg, title );
 
-    WBRFree( name );
+    MemFree( name );
 
     if( ret == MsgRetCancel ) {
         return true;

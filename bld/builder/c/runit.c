@@ -100,6 +100,18 @@ typedef struct dd {
     char        name[1];
 } iolist;
 
+typedef struct rm_pattern {
+    struct rm_pattern   *next;
+    char                text[1];
+} rm_pattern;
+
+typedef struct rm_group {
+    struct rm_group     *next;
+    rm_pattern          *patterns;
+    rm_pattern          *pattern_tail;
+    char                path[1];
+} rm_group;
+
 char            tmp_buf[MAX_LINE];
 
 static int      rm_rflag;
@@ -255,9 +267,8 @@ static int BuildList( char *src, char *dst, bool test_abit, bool cond_copy, copy
 
     *list = NULL;
     dst_end = &dst[strlen( dst ) - 1];
-    while( IS_BLANK( dst_end[0] ) ) {
+    while( isspace( *(unsigned char *)dst_end ) )
         --dst_end;
-    }
     dst_end[1] = '\0';
     if( strpbrk( src, WILD_METAS ) == NULL ) {
         /*
@@ -638,6 +649,172 @@ static int remove_item( const char *name, bool dir )
     return( 0 );
 }
 
+static void SplitRMSpec( const char *spec, char *path, char *pattern )
+{
+    size_t      i;
+    size_t      j;
+    size_t      len;
+
+    len = strlen( spec );
+    for( i = len; i > 0; --i ) {
+        char ch = spec[i - 1];
+
+        if( ch == '/'
+          || ch == '\\'
+          || ch == ':' ) {
+            break;
+        }
+    }
+    j = i;
+    if( i == 0 ) {
+        path[i++] = '.';
+        path[i++] = '/';
+    } else {
+        memcpy( path, spec, i );
+    }
+    path[i] = '\0';
+#ifdef __UNIX__
+    memcpy( pattern, spec + j, len - j + 1 );
+#else
+    if( strcmp( spec + j, MASK_ALL_ITEMS ) == 0 ) {
+        pattern[0] = '*';
+        pattern[1] = '\0';
+    } else {
+        memcpy( pattern, spec + j, len - j + 1 );
+    }
+#endif
+}
+
+static rm_group *FindRMGroup( rm_group *groups, const char *path )
+{
+    rm_group    *group;
+
+    for( group = groups; group != NULL; group = group->next ) {
+        if( strcmp( group->path, path ) == 0 ) {
+            return( group );
+        }
+    }
+    return( NULL );
+}
+
+static rm_group *AddRMGroup( rm_group **head, rm_group **tail, const char *path )
+{
+    rm_group    *group;
+    size_t      len;
+
+    len = strlen( path ) + 1;
+    group = MemAllocSafe( offsetof( rm_group, path ) + len );
+    group->next = NULL;
+    group->patterns = NULL;
+    group->pattern_tail = NULL;
+    memcpy( group->path, path, len );
+    if( *tail == NULL ) {
+        *head = group;
+    } else {
+        (*tail)->next = group;
+    }
+    *tail = group;
+    return( group );
+}
+
+static void AddRMPattern( rm_group *group, const char *pattern )
+{
+    rm_pattern  *item;
+    size_t      len;
+
+    len = strlen( pattern ) + 1;
+    item = MemAllocSafe( offsetof( rm_pattern, text ) + len );
+    item->next = NULL;
+    memcpy( item->text, pattern, len );
+    if( group->pattern_tail == NULL ) {
+        group->patterns = item;
+    } else {
+        group->pattern_tail->next = item;
+    }
+    group->pattern_tail = item;
+}
+
+static bool RMMatchAny( const rm_pattern *patterns, const struct dirent *dire )
+{
+    const rm_pattern    *pattern;
+
+    for( pattern = patterns; pattern != NULL; pattern = pattern->next ) {
+        if( !ENTRY_NOMATCH( pattern->text, dire ) ) {
+            return( true );
+        }
+    }
+    return( false );
+}
+
+static int DoRMMasks( const rm_group *group )
+{
+    char                fpath[_MAX_PATH];
+    char                *fpathend;
+    size_t              path_len;
+    size_t              len;
+    DIR                 *dirp;
+    struct dirent       *dire;
+    const rm_pattern    *pattern;
+    int                 rc;
+    int                 retval = 0;
+
+    path_len = strlen( group->path );
+    memcpy( fpath, group->path, path_len + 1 );
+    fpathend = fpath + path_len;
+    dirp = opendir( group->path );
+    if( dirp == NULL ) {
+        for( pattern = group->patterns; pattern != NULL; pattern = pattern->next ) {
+            Log( false, "File (%s%s) not found.\n", group->path, pattern->text );
+        }
+        return( ENOENT );
+    }
+
+    while( (dire = readdir( dirp )) != NULL ) {
+        if( ENTRY_INVALID( dire ) )
+            continue;
+        if( !RMMatchAny( group->patterns, dire ) )
+            continue;
+        len = strlen( dire->d_name );
+        if( path_len + len >= sizeof( fpath ) ) {
+            retval = ENAMETOOLONG;
+            continue;
+        }
+        memcpy( fpathend, dire->d_name, len + 1 );
+        if( ENTRY_SUBDIR( fpath, dire ) ) {
+            Log( false, "%s is a directory, use -r\n", fpath );
+            retval = EACCES;
+        } else if( !rm_fflag
+          && ENTRY_RDONLY( fpath, dire ) ) {
+            Log( false, "%s is read-only, use -f\n", fpath );
+            retval = EACCES;
+        } else {
+            rc = remove_item( fpath, false );
+            if( rc != 0 ) {
+                retval = rc;
+            }
+        }
+    }
+    closedir( dirp );
+    return( retval );
+}
+
+static void FreeRMGroups( rm_group *groups )
+{
+    rm_group    *next_group;
+    rm_pattern  *pattern;
+    rm_pattern  *next_pattern;
+
+    while( groups != NULL ) {
+        next_group = groups->next;
+        for( pattern = groups->patterns; pattern != NULL; pattern = next_pattern ) {
+            next_pattern = pattern->next;
+            MemFree( pattern );
+        }
+        MemFree( groups );
+        groups = next_group;
+    }
+}
+
 static int DoRM( const char *f )
 /*******************************
  * DoRM - perform RM on a specified file
@@ -792,12 +969,12 @@ static int ProcRm( const char *cmd )
     rm_fflag = false;
     rm_sflag = true;
     for( ;; ) {
-        while( isspace( (unsigned char)*cmd ) )
+        while( isspace( *(unsigned char *)cmd ) )
             ++cmd;
         if( *cmd != '-' )
             break;
         ++cmd;
-        while( isalpha( (unsigned char)*cmd ) ) {
+        while( isalpha( *(unsigned char *)cmd ) ) {
             switch( *cmd++ ) {
             case 'f':
                 rm_fflag = true;
@@ -819,102 +996,163 @@ static int ProcRm( const char *cmd )
         /*
          * process -r option
          */
-        while( (cmd = GetPathOrFile( cmd, buffer )) != NULL ) {
-            if( strcmp( buffer, MASK_ALL_ITEMS ) == 0 ) {
-                int rc = RecursiveRM( "." );
-                if( rc != 0 ) {
-                    retval = rc;
-                }
-            } else if( strpbrk( buffer, WILD_METAS ) != NULL ) {
-                /*
-                 * wild cards is not processed for directories
-                 */
-                continue;
-            } else {
-                struct stat buf;
-                if( stat( buffer, &buf ) == 0 ) {
-                    if( S_ISDIR( buf.st_mode ) ) {
-                        int rc = RecursiveRM( buffer );
-                        if( rc != 0 ) {
-                            retval = rc;
-                        }
-                    } else {
-                        int rc = DoRM( buffer );
-                        if( rc != 0 ) {
-                            retval = rc;
+        while( cmd[0] != '\0' ) {
+            cmd = GetPathOrFile( cmd, buffer );
+            if( *buffer != '\0' ) {
+                if( strcmp( buffer, MASK_ALL_ITEMS ) == 0 ) {
+                    int rc = RecursiveRM( "." );
+                    if( rc != 0 ) {
+                        retval = rc;
+                    }
+                } else if( strpbrk( buffer, WILD_METAS ) != NULL ) {
+                    /*
+                     * wild cards is not processed for directories
+                     */
+                    continue;
+                } else {
+                    struct stat buf;
+                    if( stat( buffer, &buf ) == 0 ) {
+                        if( S_ISDIR( buf.st_mode ) ) {
+                            int rc = RecursiveRM( buffer );
+                            if( rc != 0 ) {
+                                retval = rc;
+                            }
+                        } else {
+                            int rc = DoRM( buffer );
+                            if( rc != 0 ) {
+                                retval = rc;
+                            }
                         }
                     }
                 }
             }
         }
     } else {
+        rm_group    *groups = NULL;
+        rm_group    *group_tail = NULL;
+        rm_group    *group;
+        char        path[_MAX_PATH];
+        char        pattern[_MAX_PATH];
+
         /*
          * run through all specified files
          */
-        while( (cmd = GetPathOrFile( cmd, buffer )) != NULL ) {
-            int rc = DoRM( buffer );
+        while( cmd[0] != '\0' ) {
+            int rc;
+
+            cmd = GetPathOrFile( cmd, buffer );
+            if( *buffer != '\0' ) {
+                if( strpbrk( buffer, WILD_METAS ) == NULL ) {
+                    rc = DoRM( buffer );
+                    if( rc != 0 ) {
+                        retval = rc;
+                    }
+                } else {
+                    SplitRMSpec( buffer, path, pattern );
+                    group = FindRMGroup( groups, path );
+                    if( group == NULL ) {
+                        group = AddRMGroup( &groups, &group_tail, path );
+                    }
+                    AddRMPattern( group, pattern );
+                }
+            }
+        }
+        for( group = groups; group != NULL; group = group->next ) {
+            int rc;
+
+            rc = DoRMMasks( group );
             if( rc != 0 ) {
                 retval = rc;
             }
         }
+        FreeRMGroups( groups );
     }
     return( retval );
 }
 
+#define BUILTIN_CMD_MAX     10
+static bool BuiltIn( const char **ptr, const char *cmd )
+{
+    size_t          len;
+    const char      *p;
+    bool            found;
+    char            cmd_buf[BUILTIN_CMD_MAX + 1];  /* must be enoght long to hold longst command */
+    int             c;
+
+    found = false;
+    p = *ptr;
+    len = 0;
+    while( len < BUILTIN_CMD_MAX && (c = p[len]) != '\0' )
+        cmd_buf[len++] = toupper( c );
+    cmd_buf[len] = '\0';
+    len = strlen( cmd );
+    if( strncmp( cmd_buf, cmd, len ) == 0 ) {
+        p += len;
+        if( *p == '\0' ) {
+            *ptr = p;
+            found = true;
+        } else if( isspace( *(unsigned char *)p ) ) {
+            while( isspace( *(unsigned char *)p ) )
+                p++;
+            *ptr = p;
+            found = true;
+        }
+    }
+    return( found );
+}
+#undef BUILTIN_CMD_MAX
+
 int RunIt( const char *cmd, bool ignore_errors, bool *res_nolog )
 {
     int     res;
-
-    #define BUILTIN( c, b )     (strnicmp( (c), b, sizeof( b ) - 1 ) == 0 && (c)[sizeof( b ) - 1] == ' ')
-    #define SKIP_CMD( c, b )    SkipBlanks( c + sizeof( b ) )
+    char    path[_MAX_PATH];
 
     *res_nolog = false;
-    if( BUILTIN( cmd, "CD" ) ) {
-        char    path[_MAX_PATH];
-
-        cmd = GetPathOrFile( SKIP_CMD( cmd, "CD" ), path );
+    if( BuiltIn( &cmd, "CD" ) ) {
+        cmd = GetPathOrFile( cmd, path );
         res = SysChdir( path );
         if( res == 0 ) {
             SetIncludeCWD();
         }
-    } else if( BUILTIN( cmd, "CDSAY" ) ) {
-        char    path[_MAX_PATH];
-
-        cmd = GetPathOrFile( SKIP_CMD( cmd, "CDSAY" ), path );
+    } else if( BuiltIn( &cmd, "CDSAY" ) ) {
+        cmd = GetPathOrFile( cmd, path );
         res = SysChdir( path );
         if( res == 0 ) {
             SetIncludeCWD();
             LogDir( GetIncludeCWD() );
         }
-    } else if( BUILTIN( cmd, "SET" ) ) {
-        res = ProcSet( SKIP_CMD( cmd, "SET" ) );
-    } else if( BUILTIN( cmd, "ECHO" ) ) {
-        Log( Quiet, "%s\n", SKIP_CMD( cmd, "ECHO" ) );
+    } else if( BuiltIn( &cmd, "SET" ) ) {
+        res = ProcSet( cmd );
+    } else if( BuiltIn( &cmd, "ECHO" ) ) {
+        Log( Quiet, "%s\n", cmd );
         res = 0;
-    } else if( BUILTIN( cmd, "ERROR" ) ) {
-        Log( Quiet, "%s\n", SKIP_CMD( cmd, "ERROR" ) );
+    } else if( BuiltIn( &cmd, "ERROR" ) ) {
+        Log( Quiet, "%s\n", cmd );
         res = 1;
-    } else if( BUILTIN( cmd, "COPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "COPY" ), false, false, ignore_errors );
+    } else if( BuiltIn( &cmd, "COPY" ) ) {
+        res = ProcCopy( cmd, false, false, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "ACOPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "ACOPY" ), true, false, ignore_errors );
+    } else if( BuiltIn( &cmd, "ACOPY" ) ) {
+        res = ProcCopy( cmd, true, false, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "CCOPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "CCOPY" ), false, true, ignore_errors );
+    } else if( BuiltIn( &cmd, "CCOPY" ) ) {
+        res = ProcCopy( cmd, false, true, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "ACCOPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "ACCOPY" ), true, true, ignore_errors );
+    } else if( BuiltIn( &cmd, "ACCOPY" ) ) {
+        res = ProcCopy( cmd, true, true, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "MKDIR" ) ) {
-        res = ProcMkdir( SKIP_CMD( cmd, "MKDIR" ) );
-    } else if( BUILTIN( cmd, "PMAKE" ) ) {
-        res = ProcPMake( SKIP_CMD( cmd, "PMAKE" ), ignore_errors );
+    } else if( BuiltIn( &cmd, "MKDIR" ) ) {
+        res = ProcMkdir( cmd );
+    } else if( BuiltIn( &cmd, "PMAKE" ) ) {
+        res = ProcPMake( cmd, ignore_errors );
         *res_nolog = ignore_errors;
-    } else if( BUILTIN( cmd, "RM" ) ) {
-        res = ProcRm( SKIP_CMD( cmd, "RM" ) );
+    } else if( BuiltIn( &cmd, "RM" ) ) {
+        res = ProcRm( cmd );
     } else if( cmd[0] == '!' ) {
-        res = SysRunCommand( SkipBlanks( cmd + 1 ) );
+        cmd++;
+        while( isspace( *(unsigned char *)cmd ) )
+            cmd++;
+        res = SysRunCommand( cmd );
     } else {
         res = SysRunCommand( cmd );
     }

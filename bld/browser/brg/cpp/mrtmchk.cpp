@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -52,7 +53,7 @@ struct MergeComponent {
                             return *this;
                         }
 
-    time_t          _time;
+    std::time_t     _time;
     bool            _enabled;
 };
 
@@ -130,8 +131,8 @@ bool CheckUpToDate( FileInfo & inf, WCValSList<String> & en,
             // different time stamps on files
 #ifdef INSTRUMENTS
             Log.printf( "\n%s: .mbr in database different time: (database, disk)\n", file->name );
-            Log.printf( "%s", ctime( &file->time ) );
-            Log.printf( "%s\n\n", ctime( &compFile._time ) );
+            Log.printf( "%s", std::ctime( &file->time ) );
+            Log.printf( "%s\n\n", std::ctime( &compFile._time ) );
 #endif
             dict.clear();
             return false;

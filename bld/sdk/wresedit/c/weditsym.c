@@ -47,13 +47,6 @@
 #include "clibext.h"
 
 
-#if defined( _M_IX86 ) && defined( __NT__ )
-#define _XSTR(s)    # s
-#define TRMEMAPI(x)     _Pragma(_XSTR(aux x __frame))
-#else
-#define TRMEMAPI(x)
-#endif
-
 typedef struct {
     WRHashTable    *table;
     bool            dup;
@@ -183,7 +176,7 @@ bool WEditSymbols( HWND parent, WRHashTable **symbol_table,
     /* unused parameters */ (void)inst;
 
     if( symbol_table == NULL || *symbol_table == NULL ) {
-        return( FALSE );
+        return( false );
     }
     flags = WR_HASHENTRY_ALL;
 #ifdef __WINDOWS__

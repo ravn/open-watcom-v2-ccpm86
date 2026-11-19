@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -88,14 +88,14 @@
 #define LAST_LINE           (UINT_MAX - 1)
 
 /* default filename extensions */
-#define DEF_EXT             "def"
-#define ERR_EXT             "err"
-#define GML_EXT             "gml"
-#define LAY_EXT             "lay"
-#define OPT_EXT             "opt"
-#define COP_EXT             "cop"
-#define PCD_EXT             "pcd"
-#define FON_EXT             "fon"
+#define FEXT_DEF            "def"
+#define FEXT_ERR            "err"
+#define FEXT_GML            "gml"
+#define FEXT_LAY            "lay"
+#define FEXT_OPT            "opt"
+#define FEXT_COP            "cop"
+#define FEXT_PCD            "pcd"
+#define FEXT_FON            "fon"
 
 #define CONT_CHAR_DEFAULT   0x03        // cont character
 #define GML_CHAR_DEFAULT    ':'         // start of GML tag
@@ -813,12 +813,12 @@ typedef enum ju_enum {                  // for .ju(stify)
 /****************************************************************************/
 
 typedef enum functs {
-    FUNC_escape          = '\xfd',
-    FUNC_end             = '\x01',
-    FUNC_subscript_beg   = '\x02',
-    FUNC_subscript_end   = '\x03',
-    FUNC_superscript_beg = '\x04',
-    FUNC_superscript_end = '\x05',
+    FUNC_escape          = 0xfd,
+    FUNC_end             = 0x01,
+    FUNC_subscript_beg   = 0x02,
+    FUNC_subscript_end   = 0x03,
+    FUNC_superscript_beg = 0x04,
+    FUNC_superscript_end = 0x05,
 } functs;
 
 /***************************************************************************/
@@ -878,9 +878,9 @@ typedef struct tag_cb {
     uint8_t         headhi;             // current attribute value
     uint8_t         termhi;             // current attribute value
     font_number     font;               // font on entry
-    bool            compact  : 1;       // current attribute value
-    bool            dl_break : 1;       // current attribute value
-    bool            in_list  : 1;       // true if inside a list, including current tag
+    bool            compact;            // current attribute value
+    bool            dl_break;           // current attribute value
+    bool            in_list;            // true if inside a list, including current tag
     g_tags          gtag;               // enum of tag
 } tag_cb;
 

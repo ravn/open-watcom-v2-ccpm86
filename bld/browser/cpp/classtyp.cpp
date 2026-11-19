@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,9 +34,10 @@
 #include <wtptlist.hpp>
 #include "assure.h"
 #include "classtyp.h"
-#include "brmem.h"
+#include "memfuncs.h"
 #include "optmgr.h"
 #include "util.h"
+
 
 const int POOLSIZE = 32;
 
@@ -50,8 +51,8 @@ struct MemberSearchData {
     dr_access       access;
 };
 
-void * ClassType::operator new( size_t )
-//--------------------------------------
+void * ClassType::operator new( std::size_t )
+//-------------------------------------------
 {
     return( _pool.alloc() );
 }
@@ -129,7 +130,7 @@ static bool ClassType::memberHook( dr_sym_type symtype, drmem_hdl drhdl,
     }
 
     if( quit ) {
-        WBRFree( name );
+        MemFree( name );
     } else {
         sym = defineSymbol( symtype, drhdl, drhdl_prt, data->me->getModule(), name );
         data->list->add( sym );

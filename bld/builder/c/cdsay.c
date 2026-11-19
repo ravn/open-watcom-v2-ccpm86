@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -69,24 +69,30 @@ static void LogDir( const char *dir )
 
 static unsigned ChgDir( char *dir )
 {
-    char        *end;
     size_t      len;
+#ifndef __UNIX__
+    int         drive;
+#endif
 
     if( dir[0] == '\0' )
         return( 0 );
-    len = strlen( dir );
-    end = dir + len - 1;
-    if( len > 1 && ( *end == '\\' || *end == '/' ) ) {
+    if( dir[1] != '\0' ) {
+        len = strlen( dir );
 #ifdef __UNIX__
-        *end = '\0';
-#else
-        if( len != 3 || dir[1] != ':' ) {
-            *end = '\0';
-            --len;
+        if( dir[len - 1] == '/' ) {
+            dir[len - 1] = '\0';
         }
-    }
-    if( len > 1 && dir[1] == ':' ) {
-        _chdrive( toupper( dir[0] ) - 'A' + 1 );
+#else
+        if( dir[len - 1] == '\\' || dir[len - 1] == '/' ) {
+            if( len > 3 || dir[1] != ':' ) {
+                dir[len - 1] = '\0';
+                --len;
+            }
+        }
+        drive = DRIVE_NUM( dir );
+        if( drive ) {
+            _chdrive( drive );
+        }
 #endif
     }
     return( chdir( dir ) );
@@ -104,11 +110,7 @@ int main( int argc, char **argv )
         if( getcwd( cwd, sizeof( cwd ) ) == NULL ) {
             cwd[0] = '\0';
         }
-#ifdef __UNIX__
         LogDir( cwd );
-#else
-        LogDir( strupr( cwd ) );
-#endif
     } else {
         printf( "Error! CDSAY: invalid directory\n" );
     }

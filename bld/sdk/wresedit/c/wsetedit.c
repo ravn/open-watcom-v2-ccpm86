@@ -69,18 +69,17 @@ char *WConvertStringTo( char *str, char *to, char *from )
 
 bool WSetEditWithSINT32( HWND edit, int_32 val, int base )
 {
-    char temp[35];
+    char    temp[35];
+    char    *p;
 
-    ltoa( val, temp, base );
-
+    p = temp;
     if( base == 16 ) {
-        memmove( temp + 2, temp, 33 );
-        temp[0] = '0';
-        temp[1] = 'x';
+        *p++ = '0';
+        *p++ = 'x';
     } else if( base == 8 ) {
-        memmove( temp + 1, temp, 34 );
-        temp[0] = '0';
+        *p++ = '0';
     }
+    ltoa( val, p, base );
 
     return( WSetEditWithStr( edit, temp ) );
 }
@@ -190,9 +189,9 @@ char *WGetStrFromEdit( HWND edit, bool *mod )
     if( mod != NULL ) {
         /* find out if the edit field has changed */
         if( SendMessage( edit, EM_GETMODIFY, 0, 0 ) ) {
-            *mod = TRUE;
+            *mod = true;
         } else {
-            *mod = FALSE;
+            *mod = false;
         }
     }
 
@@ -264,7 +263,7 @@ int_32 WGetSINT32FromEdit( HWND edit, bool *mod )
         val = (int_32)strtol( cp, &ep, 0 );
         if( *ep != '\0' ) {
             if( mod != NULL ) {
-                *mod = FALSE;
+                *mod = false;
             }
             val = 0;
         }

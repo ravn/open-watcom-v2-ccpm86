@@ -25,22 +25,39 @@
 *
 *  ========================================================================
 *
-* Description:  WHEN YOU FIGURE OUT WHAT THIS FILE DOES, PLEASE
-*               DESCRIBE IT HERE!
+:segment OS2
+* Description:  YACC driver for resource script parser, OS/2 grammar variant.
+:elsesegment WIN16
+* Description:  YACC driver for resource script parser, WIN16 grammar variant.
+:elsesegment WIN32
+* Description:  YACC driver for resource script parser, WIN32 grammar variant.
+:endsegment
 *
 ****************************************************************************/
 
 
+#include <stdio.h>
 #include "global.h"
 #include "yydriver.h"
+:segment OS2
+#include "yydrivr2.gh"
+:elsesegment WIN16
+#include "yydrivr6.gh"
+:elsesegment WIN32
+#include "yydrivrw.gh"
+:endsegment
 #include "semantic.h"
+:segment OS2
+#include "semantc2.h"
+:elsesegment
 #include "semantcw.h"
+:endsegment
 #include "rcmem.h"
 #include "rcerrors.h"
 #include "errprt.h"
-#include "wresdefn.h"
 #include "rccore.h"
 #include "memfuncs.h"
+#include "wresdefn.h"
 
 
 #define YYCHKTYPE       uint_16
@@ -48,7 +65,11 @@
 #define YYPLHSTYPE      uint_16
 #define YYPLENTYPE      uint_8
 
-#define YYFAR
+#ifdef _M_I86
+    #define YYFAR       __far
+#else
+    #define YYFAR
+#endif
 
 #define STACK_MAX       100
 
@@ -62,49 +83,76 @@ typedef enum {
 /*
  * definitions and tables here
  */
-
+
+%%YACC%%
 
 typedef union {
-    ScanInt                     intinfo;
-    unsigned long               integral;
-    IntMask                     maskint;
-    ScanString                  string;
-    WResID                      *resid;
-    FullAccelEntry              accelfullentry;
-    FullAccelFlags              accflags;
-    AccelEvent                  accevent;
-    ResLocation                 resloc;
-    FullMemFlags                fullmemflags;
-    MenuFlags                   menuflags;
-    FullMenuPtr                 menuptr;
-    FullMenuItem                menuitem;
-    FullMenuItemPopup           popupmenuitem;
-    MenuItemNormalData          normalmenuitem;
-    DialogSizeInfo              sizeinfo;
-    FullDialogOptions           diagopts;
-    ResNameOrOrdinal            *nameorord;
-    FullDialogBoxHeader         *diaghead;
-    FullDialogBoxControl        *diagctrl;
-    FullDiagCtrlList            *diagctrllist;
-    FullDiagCtrlOptions         diagctrlopts;
-    StringItem                  stritem;
-    FullStringTable             *strtable;
-    RawDataItem                 rawitem;
-    VersionPair                 verpair;
-    VerFixedOption              verfixedoption;
-    FullVerValueList            *valuelist;
-    VerValueItem                valueitem;
-    FullVerBlockNest            *verblocknest;
-    FullVerBlock                *verblock;
-    VerFixedInfo                *verinforoot;
-    YYTOKENTYPE                 token;
-    WResLangType                langinfo;
-    DlgHelpId                   dlghelpid;
-    DataElemList                *dataelem;
-    ToolBar                     *toolbar;
-    uint_16                     residnum;
-    uint_16                     ressizenum;
-    uint_8                      resbyte;
+    ScanInt                         intinfo;
+    unsigned long                   integral;
+    IntMask                         maskint;
+    ScanString                      string;
+    WResID                          *resid;
+    AccelEvent                      accevent;
+:segment OS2
+    FullAccelEntryOS2               accelfullentry;
+    FullAccelFlagsOS2               accflags;
+    FullAccelTableOS2               *acceltable;
+:elsesegment
+    FullAccelEntryWIN               accelfullentry;
+    FullAccelFlagsWIN               accflags;
+:endsegment
+    ResLocation                     resloc;
+    ResMemFlags                     resmemflags;
+    MenuFlags                       menuflags;
+:segment OS2
+    FullMenuOS2                     *menuptr;
+    FullMenuItemOS2                 menufull;
+    MenuItemOS2                     menuitem;
+:elsesegment
+    FullMenuWIN                     *menuptr;
+    FullMenuItemWIN                 menufull;
+    MenuItemWIN                     menuitem;
+:endsegment
+    DialogSizeInfo                  sizeinfo;
+    FullDialogOptions               diagopts;
+    ResNameOrOrdinal                *nameorord;
+    FullDialogBoxHeader             *diaghead;
+:segment OS2
+    FullDialogBoxControlOS2         *diagctrl;
+    FullDialogCtrlListOS2           *diagctrllist;
+    FullDialogCtrlOptionsOS2        diagctrlopts;
+:elsesegment
+    FullDialogBoxControlWIN         *diagctrl;
+    FullDialogCtrlListWIN           *diagctrllist;
+    FullDialogCtrlOptionsWIN        diagctrlopts;
+:endsegment
+    StringItem                      stritem;
+    FullStringTable                 *strtable;
+    RawDataItem                     rawitem;
+    YYTOKENTYPE                     token;
+    DataElemList                    *dataelem;
+    uint_16                         residnum;
+    uint_16                         ressizenum;
+    uint_8                          resbyte;
+:segment OS2
+    FullHelpTableOS2                *helptable;
+    FullHelpEntryOS2                helpfullentry;
+    FullHelpSubTableOS2             *helpsubtable;
+    PresParamsOS2                   presparams;
+    PresParamListOS2                *presparamlist;
+    uint_16                         resword;
+    uint_16                         codepage;
+:elsesegment
+    VersionPair                     verpair;
+    VerFixedOption                  verfixedoption;
+    FullVerValueList                *valuelist;
+    VerValueItem                    valueitem;
+    FullVerBlockNest                *verblocknest;
+    FullVerBlock                    *verblock;
+    VerFixedInfo                    *verinforoot;
+    WResLangType                    langinfo;
+    ToolBar                         *toolbar;
+:endsegment
 } yystype;
 #define YYSTYPE         yystype
 
@@ -131,14 +179,14 @@ static void dump_rule( unsigned rule )
     const char YYFAR        *p;
 
     if( CmdLineParms.DebugParser ) {
-        for( p = yytoknames[yyplhstab[rule]]; *p; ++p ) {
+        for( p = yytoknames[yyplhstab[rule]]; *p != '\0'; ++p ) {
             RcMsgFprintf( NULL, "%c", *p );
         }
         RcMsgFprintf( NULL, " <-" );
         yytoken = &yyrhstoks[yyrulebase[rule]];
         for( i = yyplentab[rule]; i != 0; --i ) {
             RcMsgFprintf( NULL, " " );
-            for( p = yytoknames[*yytoken]; *p; ++p ) {
+            for( p = yytoknames[*yytoken]; *p != '\0'; ++p ) {
                 RcMsgFprintf( NULL, "%c", *p );
             }
             ++yytoken;
@@ -146,12 +194,13 @@ static void dump_rule( unsigned rule )
         RcMsgFprintf( NULL, "\n" );
     }
 }
+
 static void puts_far( const char YYFAR *string )
 {
     const char YYFAR            *p;
 
     if( CmdLineParms.DebugParser ) {
-        for( p = string; *p; ++p ) {
+        for( p = string; *p != '\0'; ++p ) {
             RcMsgFprintf( NULL, "%c", *p );
         }
         RcMsgFprintf( NULL, "%c", '\n' );
@@ -160,13 +209,19 @@ static void puts_far( const char YYFAR *string )
 
 #endif
 
-static YYTOKENTYPE yylexWIN( void )
-/*********************************/
+static YYTOKENTYPE yylex( void )
+/******************************/
 {
     YYTOKENTYPE curtoken;
     ScanValue   value;
 
+:segment OS2
+    curtoken = ScanOS2( &value );
+:elsesegment WIN16
+    curtoken = ScanW16( &value );
+:elsesegment WIN32
     curtoken = ScanWIN( &value );
+:endsegment
 
     while( RcIoIsCOrHFile() ) {
         switch( curtoken ) {
@@ -187,7 +242,13 @@ static YYTOKENTYPE yylexWIN( void )
             break;
         }
 
+:segment OS2
+        curtoken = ScanOS2( &value );
+:elsesegment WIN16
+        curtoken = ScanW16( &value );
+:elsesegment WIN32
         curtoken = ScanWIN( &value );
+:endsegment
     }
     END_LOOP:
 
@@ -201,7 +262,7 @@ static YYTOKENTYPE yylexWIN( void )
         yylval.string = value.string;
         break;
     case Y_SCAN_ERROR:
-        RcError( ERR_UNKNOWN_CHAR, value.UnknownChar );
+        RcError( RCMSG_UNKNOWN_CHAR, value.UnknownChar );
         break;
     default:
         break;
@@ -269,7 +330,7 @@ static p_action doAction( YYTOKENTYPE yytoken, parse_stack *state )
 #endif
         if( !yysyntaxerror ) {
             switch( rule ) {
-
+%%YACC%%
             default:
                 yyval = yyvp[0];
             }
@@ -278,16 +339,41 @@ static p_action doAction( YYTOKENTYPE yytoken, parse_stack *state )
     }
 }
 
+:segment OS2
+void ParseInitOS2( void )
+:elsesegment WIN16
+void ParseInitW16( void )
+:elsesegment WIN32
 void ParseInitWIN( void )
+:endsegment
 /***********************/
 {
     SemSetDefLang();
+:segment OS2
+    ScanInitOS2();
+:elsesegment WIN16
+    ScanInitW16();
+:elsesegment WIN32
     ScanInitWIN();
+:endsegment
 }
 
+:segment OS2
+void ParseFiniOS2( void )
+:elsesegment WIN16
+void ParseFiniW16( void )
+:elsesegment WIN32
 void ParseFiniWIN( void )
+:endsegment
 /***********************/
 {
+:segment OS2
+    ScanFiniOS2();
+:elsesegment WIN16
+    ScanFiniW16();
+:elsesegment WIN32
+    ScanFiniWIN();
+:endsegment
 }
 
 static void initParseStack( parse_stack *stack )
@@ -325,19 +411,23 @@ static void handleError( YYTOKENTYPE yytoken, parse_stack *state, bool error_sta
     if( !error_state ) {
         switch( yytoken ) {
         case Y_INTEGER:
-            RcError( ERR_SYNTAX_STR, yylval.intinfo.str );
+            RcError( RCMSG_SYNTAX_STR, yylval.intinfo.str );
             MemFree( yylval.intinfo.str );
             break;
         case Y_NAME:
         case Y_STRING:
         case Y_DOS_FILENAME:
-            RcError( ERR_SYNTAX_STR, yylval.string.string );
+            RcError( RCMSG_SYNTAX_STR, yylval.string.string );
             MemFree( yylval.string.string );
             break;
         case Y_SCAN_ERROR:
             break;
         default:
-            RcError( ERR_SYNTAX_STR, SemWINTokenToString( yytoken ) );
+:segment OS2
+            RcError( RCMSG_SYNTAX_STR, SemOS2TokenToString( yytoken ) );
+:elsesegment
+            RcError( RCMSG_SYNTAX_STR, SemWINTokenToString( yytoken ) );
+:endsegment
             break;
         }
     }
@@ -354,9 +444,8 @@ static p_action doParse( parse_stack *resource_state )
 
     error_state = false;
     token_count = 0;
-
     do {
-        yytoken = yylexWIN();
+        yytoken = yylex();
         if( error_state ) {
             token_count++;
             if( token_count >= YYERRORTHRESHOLD ) {
@@ -381,8 +470,14 @@ static p_action doParse( parse_stack *resource_state )
     return( what );
 }
 
+:segment OS2
+bool ParseOS2( void )
+:elsesegment WIN16
+bool ParseW16( void )
+:elsesegment WIN32
 bool ParseWIN( void )
-/*******************/
+:endsegment
+/*************************/
 {
     parse_stack resource_state;
     p_action    what;
@@ -390,14 +485,20 @@ bool ParseWIN( void )
     newParseStack( &resource_state );
     what = doParse( &resource_state );
     if( what == P_ERROR ) {
-        RcError( ERR_PARSER_INTERNAL );
+        RcError( RCMSG_PARSER_INTERNAL );
         ErrorHasOccured = true;
     }
     deleteStack( &resource_state );
     return( what != P_ACCEPT );
 }
 
+:segment OS2
+void ParseInitStaticsOS2( void )
+:elsesegment WIN16
+void ParseInitStaticsW16( void )
+:elsesegment WIN32
 void ParseInitStaticsWIN( void )
+:endsegment
 /******************************/
 {
     memset( &yylval, 0, sizeof( YYSTYPE ) );

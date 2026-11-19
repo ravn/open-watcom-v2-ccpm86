@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -45,8 +45,8 @@
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static int      WRFreeResNodes( WResTypeNode *tnode );
-static int      WRFreeLangNodes( WResResNode *rnode );
+static int      WRFreeResNodes( WResTypeNode *typenode );
+static int      WRFreeLangNodes( WResResNode *resnode );
 
 /****************************************************************************/
 /* type definitions                                                         */
@@ -56,75 +56,75 @@ static int      WRFreeLangNodes( WResResNode *rnode );
 /* static variables                                                         */
 /****************************************************************************/
 
-bool WRAPI WRRemoveLangNodeFromDir( WResDir dir, WResTypeNode **tnode,
-                                       WResResNode **rnode, WResLangNode **lnode )
+bool WRAPI WRRemoveLangNodeFromDir( WResDir dir, WResTypeNode **typenode,
+                                       WResResNode **resnode, WResLangNode **langnode )
 {
-    if( dir == NULL || tnode == NULL || *tnode == NULL || rnode == NULL ||
-        *rnode == NULL || lnode == NULL || *lnode == NULL ) {
+    if( dir == NULL || typenode == NULL || *typenode == NULL || resnode == NULL ||
+        *resnode == NULL || langnode == NULL || *langnode == NULL ) {
         return( false );
     }
 
-    if( (*rnode)->Head == (*rnode)->Tail ) {
-        if( (*tnode)->Head == (*tnode)->Tail ) {
+    if( (*resnode)->Head == (*resnode)->Tail ) {
+        if( (*typenode)->Head == (*typenode)->Tail ) {
             if( dir->Head == dir->Tail ) {
                 dir->Head = NULL;
                 dir->Tail = NULL;
             } else {
-                if( dir->Head == *tnode ) {
-                    dir->Head = (*tnode)->Next;
+                if( dir->Head == *typenode ) {
+                    dir->Head = (*typenode)->next;
                 }
-                if( dir->Tail == *tnode ) {
-                    dir->Tail = (*tnode)->Prev;
+                if( dir->Tail == *typenode ) {
+                    dir->Tail = (*typenode)->prev;
                 }
-                if( (*tnode)->Prev != NULL ) {
-                    (*tnode)->Prev->Next = (*tnode)->Next;
+                if( (*typenode)->prev != NULL ) {
+                    (*typenode)->prev->next = (*typenode)->next;
                 }
-                if( (*tnode)->Next != NULL ) {
-                    (*tnode)->Next->Prev = (*tnode)->Prev;
+                if( (*typenode)->next != NULL ) {
+                    (*typenode)->next->prev = (*typenode)->prev;
                 }
             }
-            MemFree( *tnode );
-            *tnode = NULL;
+            MemFree( *typenode );
+            *typenode = NULL;
         } else {
-            if( (*tnode)->Head == *rnode ) {
-                (*tnode)->Head = (*rnode)->Next;
+            if( (*typenode)->Head == *resnode ) {
+                (*typenode)->Head = (*resnode)->next;
             }
-            if( (*tnode)->Tail == *rnode ) {
-                (*tnode)->Tail = (*rnode)->Prev;
+            if( (*typenode)->Tail == *resnode ) {
+                (*typenode)->Tail = (*resnode)->prev;
             }
-            if( (*rnode)->Prev != NULL ) {
-                (*rnode)->Prev->Next = (*rnode)->Next;
+            if( (*resnode)->prev != NULL ) {
+                (*resnode)->prev->next = (*resnode)->next;
             }
-            if( (*rnode)->Next != NULL ) {
-                (*rnode)->Next->Prev = (*rnode)->Prev;
+            if( (*resnode)->next != NULL ) {
+                (*resnode)->next->prev = (*resnode)->prev;
             }
         }
-        MemFree( *rnode );
-        *rnode = NULL;
+        MemFree( *resnode );
+        *resnode = NULL;
     } else {
-        if( (*rnode)->Head == *lnode ) {
-            (*rnode)->Head = (*lnode)->Next;
+        if( (*resnode)->Head == *langnode ) {
+            (*resnode)->Head = (*langnode)->next;
         }
-        if( (*rnode)->Tail == *lnode ) {
-            (*rnode)->Tail = (*lnode)->Prev;
+        if( (*resnode)->Tail == *langnode ) {
+            (*resnode)->Tail = (*langnode)->prev;
         }
-        if( (*lnode)->Prev != NULL ) {
-            (*lnode)->Prev->Next = (*lnode)->Next;
+        if( (*langnode)->prev != NULL ) {
+            (*langnode)->prev->next = (*langnode)->next;
         }
-        if( (*lnode)->Next != NULL ) {
-            (*lnode)->Next->Prev = (*lnode)->Prev;
+        if( (*langnode)->next != NULL ) {
+            (*langnode)->next->prev = (*langnode)->prev;
         }
     }
 
-    MemFree( *lnode );
-    *lnode = NULL;
+    MemFree( *langnode );
+    *langnode = NULL;
 
-    if( *rnode != NULL ) {
-        (*rnode)->Info.NumResources--;
+    if( *resnode != NULL ) {
+        (*resnode)->Info.NumResources--;
     }
 
-    if( *tnode != NULL ) {
-        (*tnode)->Info.NumResources--;
+    if( *typenode != NULL ) {
+        (*typenode)->Info.NumResources--;
     } else {
         dir->NumTypes--;
     }
@@ -134,63 +134,63 @@ bool WRAPI WRRemoveLangNodeFromDir( WResDir dir, WResTypeNode **tnode,
     return( true );
 }
 
-bool WRAPI WRRemoveTypeNodeFromDir( WResDir dir, WResTypeNode *tnode )
+bool WRAPI WRRemoveTypeNodeFromDir( WResDir dir, WResTypeNode *typenode )
 {
-    if( dir == NULL || tnode == NULL ) {
+    if( dir == NULL || typenode == NULL ) {
         return( false );
     }
 
-    if( dir->Head == tnode ) {
-        dir->Head = dir->Head->Next;
+    if( dir->Head == typenode ) {
+        dir->Head = dir->Head->next;
     }
-    if( dir->Tail == tnode ) {
-        dir->Tail = dir->Tail->Prev;
+    if( dir->Tail == typenode ) {
+        dir->Tail = dir->Tail->prev;
     }
-    if( tnode->Next != NULL ) {
-        tnode->Next->Prev = tnode->Prev;
+    if( typenode->next != NULL ) {
+        typenode->next->prev = typenode->prev;
     }
-    if( tnode->Prev != NULL ) {
-        tnode->Prev->Next = tnode->Next;
+    if( typenode->prev != NULL ) {
+        typenode->prev->next = typenode->next;
     }
 
-    dir->NumResources -= WRFreeResNodes( tnode );
+    dir->NumResources -= WRFreeResNodes( typenode );
 
-    MemFree( tnode );
+    MemFree( typenode );
 
     dir->NumTypes--;
 
     return( true );
 }
 
-int WRFreeResNodes( WResTypeNode *tnode )
+int WRFreeResNodes( WResTypeNode *typenode )
 {
-    WResResNode         *rnode;
+    WResResNode         *resnode;
     int                 count;
 
     count = 0;
-    while( (rnode = tnode->Head) != NULL ) {
-        tnode->Head = rnode->Next;
-        WRFreeLangNodes( rnode );
-        MemFree( rnode );
+    while( (resnode = typenode->Head) != NULL ) {
+        typenode->Head = resnode->next;
+        WRFreeLangNodes( resnode );
+        MemFree( resnode );
         count++;
     }
-    tnode->Tail = NULL;
+    typenode->Tail = NULL;
 
     return( count );
 }
 
-int WRFreeLangNodes( WResResNode *rnode )
+int WRFreeLangNodes( WResResNode *resnode )
 {
-    WResLangNode        *lnode;
+    WResLangNode        *langnode;
     int                 count;
 
     count = 0;
-    while( (lnode = rnode->Head) != NULL ) {
-        rnode->Head = lnode->Next;
-        MemFree( lnode );
+    while( (langnode = resnode->Head) != NULL ) {
+        resnode->Head = langnode->next;
+        MemFree( langnode );
         count++;
     }
-    rnode->Tail = NULL;
+    resnode->Tail = NULL;
 
     return( count );
 }

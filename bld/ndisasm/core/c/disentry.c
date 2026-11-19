@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -64,9 +64,7 @@ size_t DisGetString( size_t index, char *buff, bool to_upper )
     src = &DisStringTable[index];
     len = *src++ & ~LENGTH_BIT;
     i = len;
-    for( ;; ) {
-        if( i == 0 )
-            break;
+    while( i > 0 ) {
         c = *src++;
         if( !(c & LENGTH_BIT) ) {
             if( to_upper )
@@ -321,10 +319,14 @@ dis_return DisFormat( dis_handle *h, void *d, dis_dec_ins *ins_p,
         if( len == 0 ) {
             DisGetString( DisInstructionTable[ins.type].name, name, false );
         }
-        p = &name[ strlen( name ) ];
+        p = &name[strlen( name )];
         h->d->flag_hook( h, d, &ins, flags, p );
         if( flags & DFF_INS_UP ) {
-            strupr( name );
+            int  c;
+            char *p = name;
+            while( (c = *(unsigned char *)p) != '\0' ) {
+                *p++ = (char)toupper( c );
+            }
         }
     }
     if( opers != NULL ) {

@@ -34,42 +34,6 @@
 #define SEMSTRUCT_INCLUDED
 
 #include "wresall.h"
-
-/**** Semantic structures ****/
-typedef struct FullMemFlags {
-    ResMemFlags         flags;
-    boolbit             loadOptGiven        : 1;
-    boolbit             memOptGiven         : 1;
-    boolbit             purityOptGiven      : 1;
-} FullMemFlags;
-
-typedef struct FullOptFlagsOS2 {
-    ResMemFlags         flags;
-    uint_32             codePage;
-    boolbit             loadOptGiven        : 1;
-    boolbit             memOptGiven         : 1;
-    boolbit             purityOptGiven      : 1;
-    boolbit             cpOptGiven          : 1;
-} FullOptFlagsOS2;
-
-typedef uint_32 SemOffset;
-typedef uint_32 SemLength;
-
-typedef struct ResLocation {
-    SemOffset   start;
-    SemLength   len;
-} ResLocation;
-
-typedef struct IntMask {
-    uint_32     Mask;
-    uint_32     Value;
-    boolbit     longVal :1;
-    boolbit     unsgVal :1;
-} IntMask;
-
-/**** include all the semantic structures and routine prototypes for each ****/
-/**** type of structure ****/
-
 #include "semaccel.h"
 #include "semmenu.h"
 #include "semraw.h"
@@ -78,12 +42,23 @@ typedef struct IntMask {
 #include "semresfl.h"
 #include "semutil.h"
 
+
+/**** Semantic structures ****/
+typedef struct FullResFlags {
+    ResMemFlags         res_flags;
+    uint_32             codePage;
+    boolbit             loadOptGiven        : 1;
+    boolbit             memOptGiven         : 1;
+    boolbit             purityOptGiven      : 1;
+    boolbit             cpOptGiven          : 1;
+} FullResFlags;
+
 /**** Semantic global routines ****/
 extern SemOffset            SemStartResource( void );
 extern SemLength            SemEndResource( SemOffset start );
-extern void                 SemAddResourceAndFree( WResID *res_id, WResID *type_id, ResMemFlags flags, ResLocation loc );
-extern void                 SemAddResource( WResID *res_id, WResID *type_id, ResMemFlags, ResLocation );
-extern void                 SemAddResource2( WResID *res_id, WResID *type_id, ResMemFlags flags, ResLocation loc, const char *filename );
+extern void                 SemAddResourceAndFree( WResID *res_id, WResID *type_id, ResMemFlags res_flags, ResLocation loc );
+extern void                 SemAddResource( WResID *res_id, WResID *type_id, ResMemFlags res_flags, ResLocation );
+extern void                 SemAddResource2( WResID *res_id, WResID *type_id, ResMemFlags res_flags, ResLocation loc, const char *filename );
 extern void                 SemSetDefLang( void );
 extern const WResLangType   *SemGetResourceLanguage( void );
 extern void                 SemanticInitStatics( void );

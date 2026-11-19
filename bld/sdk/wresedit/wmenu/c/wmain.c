@@ -636,7 +636,7 @@ bool WCreateEditWindow( HINSTANCE inst, WMenuEditInfo *einfo )
 
     SetFocus( einfo->edit_dlg );
 
-    return( TRUE );
+    return( true );
 }
 
 WMenuEditInfo *WGetCurrentEditInfo( void )
@@ -959,7 +959,7 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
 
         case IDM_MENU_MEM_FLAGS:
             WSetStatusByID( einfo->wsb, W_CHANGEMENUMEMFLAGS, 0 );
-            einfo->info->modified |= WChangeMemFlags( einfo->win, &einfo->info->MemFlags,
+            einfo->info->modified |= WChangeMemFlags( einfo->win, &einfo->info->res_flags,
                                                       einfo->info->res_name,
                                                       WGetEditInstance(),
                                                       WMenuHelpRoutine );
@@ -1105,11 +1105,11 @@ bool WQuerySaveRes( WMenuEditInfo *einfo, bool force_exit )
                 SendMessage( einfo->info->parent, MENU_PLEASE_SAVEME, 0, (LPARAM)einfo->hndl );
             }
         } else if( ret == IDCANCEL ) {
-            return( FALSE );
+            return( false );
         }
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WQuerySaveSym( WMenuEditInfo *einfo, bool force_exit )
@@ -1120,11 +1120,11 @@ bool WQuerySaveSym( WMenuEditInfo *einfo, bool force_exit )
     char        *text;
 
     if( einfo == NULL || !einfo->info->stand_alone ) {
-        return( TRUE );
+        return( true );
     }
 
     if( !WRIsHashTableDirty( einfo->info->symbol_table ) ) {
-        return( TRUE );
+        return( true );
     }
 
     if( force_exit ) {
@@ -1155,10 +1155,10 @@ bool WQuerySaveSym( WMenuEditInfo *einfo, bool force_exit )
         }
         return( WSaveSymbols( einfo->win, einfo->info->symbol_table, &einfo->info->symbol_file, false ) );
     } else if( ret == IDCANCEL ) {
-        return( FALSE );
+        return( false );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WHandleWM_CLOSE( WMenuEditInfo *einfo, bool force_exit )
@@ -1210,23 +1210,23 @@ static bool WQueryClearRes( WMenuEditInfo *einfo )
             FreeRCString( title );
         }
         if( ret == IDYES ) {
-            return( TRUE );
+            return( true );
         }
     }
 
-    return( FALSE );
+    return( false );
 }
 
 void WHandleClear( WMenuEditInfo *einfo )
 {
-    if( einfo->menu != NULL && einfo->menu->first_entry != NULL ) {
+    if( einfo->menu != NULL && einfo->menu->head != NULL ) {
         if( WQueryClearRes( einfo ) ) {
             WSetEditWindowText( einfo->edit_dlg, 0, NULL );
             WSetEditWindowID( einfo->edit_dlg, 0, TRUE, NULL );
             WResetEditWindowFlags( einfo->edit_dlg );
             SendDlgItemMessage( einfo->edit_dlg, IDM_MENUEDLIST, LB_RESETCONTENT, 0, 0 );
-            WFreeMenuEntries( einfo->menu->first_entry );
-            einfo->menu->first_entry = NULL;
+            WFreeMenuEntries( einfo->menu->head );
+            einfo->menu->head = NULL;
             einfo->current_entry = NULL;
             einfo->current_pos = LB_ERR;
             einfo->first_preview_id = FIRST_PREVIEW_ID;

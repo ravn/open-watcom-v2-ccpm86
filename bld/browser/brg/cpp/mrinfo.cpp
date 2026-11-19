@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,7 +32,7 @@
 
 
 #include <wcvector.h>
-#include <string.h>
+#include <cstring>
 #include "watcom.h"
 #include "dwarf.h"
 
@@ -128,7 +128,7 @@ void MergeInfoSection::writePass( MergeFile * outFile,
     relocPass( postProcess );
 
     block = new char [BufSize];
-    memset( block, 0, BufSize );
+    std::memset( block, 0, BufSize );
     len = _compunitHdr->_infoLength + sizeof(uint_32);
     while( len ) {
         size = (BufSize < len) ? BufSize : len;

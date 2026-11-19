@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <ctype.h>
 #include "linkstd.h"
 #include "exedos.h"
 #include "exe16m.h"
@@ -127,8 +128,8 @@ static void WriteGDT( unsigned_32 reloc_size )
     }
 }
 
-static unsigned_32 Write16MData( unsigned hdr_size )
-/**************************************************/
+static unsigned Write16MData( unsigned hdr_size )
+/***********************************************/
 {
     group_entry     *group;
 
@@ -180,20 +181,20 @@ static int cmp_reloc_entry( const void *a, const void *b )
 }
 
 static unsigned GetRelocBlock( reloc_addr **reloc_data )
-/******************************************************************/
+/******************************************************/
 {
-    RELOC_INFO      *relocs;
+    reloc_info      reloclist;
     size_t          num_relocs;
     context         info;
 
     *reloc_data = NULL;
     if( (LinkState & LS_MAKE_RELOCS) && Root->relocs ) {
-        relocs = Root->reloclist;
+        reloclist = Root->reloclist;
         num_relocs = Root->relocs;
         *reloc_data = MemAllocSafe( sizeof( reloc_addr ) * num_relocs );
         if( *reloc_data != NULL ) {
             info.reloc_data = *reloc_data;
-            WalkRelocList( &relocs, RelocWalkFn, &info );
+            WalkRelocList( &reloclist, RelocWalkFn, &info );
             if( reloc_fmt == 1 ) {
                 return( 2 );
             } else {
@@ -220,7 +221,7 @@ static unsigned GetRelocBlock( reloc_addr **reloc_data )
 // low four bits are unused).
 
 static unsigned_32 Write16MRelocs( reloc_addr *reloc_data )
-/*********************************************************************/
+/*********************************************************/
 {
     unsigned        num_relocs;
     unsigned_32     pos;
@@ -281,21 +282,22 @@ static unsigned_32 WriteStubProg( void )
 void Fini16MLoadFile( void )
 /**************************/
 {
-    unsigned_32         hdr_size;
-    unsigned_32         temp;
-    unsigned_32         exe_size;
+    unsigned            hdr_size;
+    unsigned            temp;
+    unsigned            i;
+    unsigned            exe_size;
     dos16m_exe_header   exe_head;
     unsigned            extra_sels;
-    unsigned_32         stub_size;
-    unsigned_32         reloc_size;
+    unsigned            stub_size;
+    unsigned            reloc_size;
     reloc_addr          *reloc_data;
 
+    memset( &exe_head, 0, sizeof( exe_head ) );
     // TODO: add some parameter for reloc format switching
     // for now it is setup to RSI-2 reloc format
     reloc_fmt = 2;
     extra_sels = GetRelocBlock( &reloc_data );
     stub_size = WriteStubProg();
-    memset( &exe_head, 0, sizeof( exe_head ) );
     hdr_size = sizeof( exe_head ) + (NumGroups + extra_sels) * sizeof( gdt_info );
     hdr_size = __ROUND_UP_SIZE_PARA( hdr_size );
     reloc_size = 0;
@@ -354,9 +356,13 @@ void Fini16MLoadFile( void )
     /*
      * add original EXP name
      */
-    strncpy( exe_head.EXP_path, FmtData.u.d16m.exp_name, sizeof( exe_head.EXP_path ) - 1 );
-    exe_head.EXP_path[sizeof( exe_head.EXP_path ) - 1] = '\0';
-    strupr( exe_head.EXP_path );
+    temp = strlen( FmtData.u.d16m.exp_name );
+    if( temp > sizeof( exe_head.EXP_path ) - 1 )
+        temp = sizeof( exe_head.EXP_path ) - 1;
+    for( i = 0; i < temp; i++ ) {
+        exe_head.EXP_path[i] = toupper( ((unsigned char *)FmtData.u.d16m.exp_name)[i] );
+    }
+    exe_head.EXP_path[temp] = '\0';
 
     WriteLoad( &exe_head, sizeof( exe_head ) );
     WriteGDT( reloc_size );
@@ -386,7 +392,7 @@ segment Find16MSeg( segment selector )
 
     result = 0;
     for( group = Groups; group != NULL; group = group->next ) {
-        if( group->grp_addr.seg == selector ) {
+        if( group->addr.seg == selector ) {
             result = group->u.dos_segment;
             break;
         }
@@ -429,12 +435,12 @@ static void RemapAliasSels( void *_leader )
     seg_leader  *seg;
     section     *sect;
 
-    if( leader->info & SEG_ABSOLUTE ) {
+    if( leader->info & SEGINF_ABSOLUTE ) {
         sect = Root;
         while( (seg = FindSegment( sect, leader->segname.u.ptr )) != NULL ) {
             sect = NULL;
-            if( (seg->info & SEG_ABSOLUTE) == 0 ) {
-                seg->info |= SEG_ABSOLUTE;
+            if( (seg->info & SEGINF_ABSOLUTE) == 0 ) {
+                seg->info |= SEGINF_ABSOLUTE;
                 seg->combine = COMBINE_INVALID;
                 seg->seg_addr = leader->seg_addr;
                 RingWalk( seg->pieces, SetSegDataAbs );

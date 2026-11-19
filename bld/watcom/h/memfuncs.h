@@ -35,15 +35,22 @@
 #define _MEMFUNCS_H_INCLUDED
 
 #ifdef __cplusplus
+    #include <cstddef>
+#else
+    #include <stddef.h>
+#endif
+#include "nsstd.h"
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
-extern void     *MemAlloc( size_t );
-extern void     *MemAllocSafe( size_t );
+extern void     *MemAlloc( NSSTD( size_t ) );
+extern void     *MemAllocSafe( NSSTD( size_t ) );
 extern char     *MemStrdup( const char * );
 extern char     *MemStrdupSafe( const char * );
-extern void     *MemRealloc( void *, size_t );
-extern void     *MemReallocSafe( void *, size_t );
+extern void     *MemRealloc( void *, NSSTD( size_t ) );
+extern void     *MemReallocSafe( void *, NSSTD( size_t ) );
 extern void     MemFree( void * );
 
 #ifdef __cplusplus

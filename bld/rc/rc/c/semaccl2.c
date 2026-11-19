@@ -89,18 +89,18 @@ static void CheckAccelFlags( uint_16 *flags, unsigned long idval )
     /*
      * CHAR is the default
      */
-    if( !( *flags & OS2_ACCEL_VIRTUALKEY )
-      && !( *flags & OS2_ACCEL_CHAR ) )
+    if( (*flags & OS2_ACCEL_VIRTUALKEY) == 0
+      && (*flags & OS2_ACCEL_CHAR) == 0 )
         *flags |= OS2_ACCEL_CHAR;
 #if 0
-    if( !( *flags & OS2_ACCEL_VIRTUALKEY ) ) {
+    if( (*flags & OS2_ACCEL_VIRTUALKEY) == 0 ) {
         if( *flags & OS2_ACCEL_SHIFT ) {
             *flags &= ~OS2_ACCEL_SHIFT;
-            RcWarning( ERR_ACCEL_KEYWORD_IGNORED, "SHIFT", idval );
+            RcWarning( RCMSG_ACCEL_KEYWORD_IGNORED, "SHIFT", idval );
         }
         if( *flags & OS2_ACCEL_CONTROL ) {
             *flags &= ~OS2_ACCEL_CONTROL;
-            RcWarning( ERR_ACCEL_KEYWORD_IGNORED, "CONTROL", idval );
+            RcWarning( RCMSG_ACCEL_KEYWORD_IGNORED, "CONTROL", idval );
         }
     }
 #endif
@@ -125,7 +125,7 @@ FullAccelEntryOS2 SemOS2MakeAccItem( AccelEvent event, unsigned long idval,
         }
 
 //    } else {
-//        RcError( ERR_ACCEL_NO_TYPE, idval );
+//        RcError( RCMSG_ACCEL_NO_TYPE, idval );
 //        ErrorHasOccured = true;
 //        entry.entry.Ascii = 0;
 //        entry.entry.Flags = 0;
@@ -135,46 +135,33 @@ FullAccelEntryOS2 SemOS2MakeAccItem( AccelEvent event, unsigned long idval,
     return( entry );
 }
 
-FullAccelTableOS2 *SemOS2NewAccelTable( FullAccelEntryOS2 firstentry )
-/***************************************************************/
-{
-    FullAccelTableOS2   *newtable;
-    FullAccelEntryOS2   *newentry;
-
-    newtable = MemAllocSafe( sizeof( FullAccelTableOS2 ) );
-    newentry = MemAllocSafe( sizeof( FullAccelEntryOS2 ) );
-
-    *newentry = firstentry;
-    newtable->head = NULL;
-    newtable->tail = NULL;
-
-    ResAddLLItemAtEnd( (void **)&(newtable->head), (void **)&(newtable->tail), newentry );
-
-    return( newtable );
-}
-
-FullAccelTableOS2 *SemOS2AddAccelEntry( FullAccelEntryOS2 currentry, FullAccelTableOS2 *currtable )
-/*************************************************************************************************/
+FullAccelTableOS2 *SemOS2AddAccelEntry( FullAccelEntryOS2 currentry, FullAccelTableOS2 *table )
+/*********************************************************************************************/
 {
     FullAccelEntryOS2     *newentry;
+
+    if( table == NULL ) {
+        table = MemAllocSafe( sizeof( FullAccelTableOS2 ) );
+        table->head = NULL;
+        table->tail = NULL;
+    }
 
     newentry = MemAllocSafe( sizeof( FullAccelEntryOS2 ) );
 
     *newentry = currentry;
 
-    ResAddLLItemAtEnd( (void **)&(currtable->head), (void **)&(currtable->tail), newentry );
+    ResAddLLItemAtEnd( (void **)&(table->head), (void **)&(table->tail), newentry );
 
-    return( currtable );
+    return( table );
 }
 
 static void SemOS2FreeAccelTable( FullAccelTableOS2 *acctable )
 /*************************************************************/
 {
     FullAccelEntryOS2   *currentry;
-    FullAccelEntryOS2   *nextentry;
 
-    for( currentry = acctable->head; currentry != NULL; currentry = nextentry ) {
-        nextentry = currentry->next;
+    while( (currentry = acctable->head) != NULL ) {
+        acctable->head = currentry->next;
         MemFree( currentry );
     }
     MemFree( acctable );
@@ -210,9 +197,9 @@ static bool writeAccelTableEntries( FullAccelTableOS2 *acctable,
     return( error );
 }
 
-void SemOS2WriteAccelTable( WResID *res_id, ResMemFlags flags, uint_32 codepage,
+void SemOS2WriteAccelTable( WResID *res_id, ResMemFlags res_flags, uint_32 codepage,
                                                 FullAccelTableOS2 *acctable )
-/****************************************************************************/
+/**********************************************************************************/
 {
     ResLocation     loc;
     bool            error;
@@ -223,11 +210,11 @@ void SemOS2WriteAccelTable( WResID *res_id, ResMemFlags flags, uint_32 codepage,
         error = writeAccelTableEntries( acctable, CurrResFile.fp, codepage );
         if( error ) {
             err_code = LastWresErr();
-            RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
+            RcError( RCMSG_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
             ErrorHasOccured = true;
         } else {
             loc.len = SemEndResource( loc.start );
-            SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_ACCELTABLE ), flags, loc );
+            SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_ACCELTABLE ), res_flags, loc );
         }
     } else {
         MemFree( res_id );

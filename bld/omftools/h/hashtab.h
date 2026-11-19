@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,11 +35,11 @@
 
 typedef struct symbol {
     struct symbol   *next;
-    char            *name;
     void            *value;
+    char            name[1];
 } symbol, **sym_table;
 
-extern  void        AddSymbol( sym_table tab, const char *name, const void *value, size_t len );
+extern  bool        AddSymbol( sym_table tab, const char *name, const void *value, size_t len );
 extern  void        *SymbolExists( sym_table tab, const char *name );
 extern  sym_table   SymbolInit( void );
 extern  void        SymbolFini( sym_table tab );

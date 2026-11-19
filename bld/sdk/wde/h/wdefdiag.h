@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -59,10 +59,10 @@ typedef struct {
     LIST                *ochildren;
     HFONT               font;
     RECT                nc_size;
-    uint_16             mem_flags;
-    WdeDialogBoxHeader  *dialog_info;
+    ResMemFlags         res_flags;
+    WdeDialogBoxHeader  *header;
     WdeResInfo          *res_info;
-    WdeResDlgItem       *dlg_item;
+    WdeResDlgItem       *ditem;
     WdeResizeRatio      resizer;
     WResID              *name;
 //  WResHelpID          *helpname;
@@ -77,7 +77,7 @@ typedef struct {
 /****************************************************************************/
 extern WdeDialogBoxInfo *WdeAllocDBIFromObject( WdeDialogObject *obj );
 extern OBJPTR           WdeCreateNewDialog( WResID *, bool is32bit );
-extern OBJPTR           WdeCreateDialogFromRes( WdeResInfo *, WdeResDlgItem * );
+extern OBJPTR           WdeCreateDialogFromRes( WdeResInfo *res_info, WdeResDlgItem *ditem );
 WINEXPORT extern CREATE_RTN WdeDialogCreate;
 extern bool             WdeDialogInit( bool );
 extern void             WdeDialogFini( void );

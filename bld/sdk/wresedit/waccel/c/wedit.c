@@ -227,21 +227,21 @@ bool WSetEditWindowKeyEntry( WAccelEditInfo *einfo, WAccelEntry *entry )
 
     if( ok ) {
         if( entry->is32bit ) {
-            key = entry->u.entry32.Ascii;
-            flags = entry->u.entry32.Flags;
-            id = entry->u.entry32.Id;
+            key = entry->entry.Ascii;
+            flags = entry->entry.Flags;
+            id = entry->entry.Id;
         } else {
-            key = entry->u.entry.Ascii;
-            flags = entry->u.entry.Flags;
-            id = (uint_16)entry->u.entry.Id;
+            key = entry->entry.Ascii;
+            flags = entry->entry.Flags;
+            id = (uint_16)entry->entry.Id;
         }
         ok = WSetEditWindowKey( einfo->edit_dlg, key, flags );
         if( !ok ) {
             WSetStatusByID( einfo->wsb, 0, W_INVALIDACCEL );
             memcpy( entry, &DefaultEntry, sizeof( WAccelEntry ) );
-            key = entry->u.entry.Ascii;
-            flags = entry->u.entry.Flags;
-            id = (uint_16)entry->u.entry.Id;
+            key = entry->entry.Ascii;
+            flags = entry->entry.Flags;
+            id = (uint_16)entry->entry.Id;
             ok = WSetEditWindowKey( einfo->edit_dlg, key, flags );
         }
     }
@@ -301,11 +301,11 @@ bool WGetEditWindowKeyEntry( WAccelEditInfo *einfo, WAccelEntry *entry, bool che
             ok = (symbol != NULL && stricmp( entry->symbol, symbol ));
             if( !ok ) {
                 if( entry->is32bit ) {
-                    ok = (entry->u.entry32.Ascii != key || entry->u.entry32.Flags != flags ||
-                          entry->u.entry32.Id != id);
+                    ok = (entry->entry.Ascii != key || entry->entry.Flags != flags ||
+                          entry->entry.Id != id);
                 } else {
-                    ok = (entry->u.entry.Ascii != key || entry->u.entry.Flags != (uint_8)flags ||
-                          entry->u.entry.Id != id);
+                    ok = (entry->entry.Ascii != key || entry->entry.Flags != (uint_8)flags ||
+                          entry->entry.Id != id);
                 }
             }
         }
@@ -316,13 +316,13 @@ bool WGetEditWindowKeyEntry( WAccelEditInfo *einfo, WAccelEntry *entry, bool che
 
     if( ok ) {
         if( entry->is32bit ) {
-            entry->u.entry32.Ascii = key;
-            entry->u.entry32.Flags = flags;
-            entry->u.entry32.Id = id;
+            entry->entry.Ascii = key;
+            entry->entry.Flags = flags;
+            entry->entry.Id = id;
         } else {
-            entry->u.entry.Ascii = key;
-            entry->u.entry.Flags = (uint_8)flags;
-            entry->u.entry.Id = id;
+            entry->entry.Ascii = key;
+            entry->entry.Flags = (uint_8)flags;
+            entry->entry.Id = id;
         }
         if( entry->symbol != NULL ) {
             MemFree( entry->symbol );
@@ -583,7 +583,7 @@ bool WInitEditWindowListBox( WAccelEditInfo *einfo )
         lbox = GetDlgItem( einfo->edit_dlg, IDM_ACCEDLIST );
         SendMessage( lbox, WM_SETREDRAW, FALSE, 0 );
         SendMessage( lbox, LB_RESETCONTENT, 0, 0 );
-        for( entry = einfo->tbl->first_entry; entry != NULL; entry = entry->next ) {
+        for( entry = einfo->tbl->head; entry != NULL; entry = entry->next ) {
             ok = WAddEditWinLBoxEntry( einfo, entry, LB_ERR );
             if( !ok ) {
                  break;
@@ -611,12 +611,12 @@ static bool WInitEditWindow( WAccelEditInfo *einfo )
     }
 
     if( ok ) {
-        if( einfo->tbl->first_entry != NULL ) {
-            ok = WSetEditWindowKeyEntry( einfo, einfo->tbl->first_entry );
+        if( einfo->tbl->head != NULL ) {
+            ok = WSetEditWindowKeyEntry( einfo, einfo->tbl->head );
             if( ok ) {
                 lbox = GetDlgItem( einfo->edit_dlg, IDM_ACCEDLIST );
                 ok = (SendMessage( lbox, LB_SETCURSEL, 0, 0 ) != LB_ERR);
-                einfo->current_entry = einfo->tbl->first_entry;
+                einfo->current_entry = einfo->tbl->head;
                 einfo->current_pos = 0;
             }
         }
@@ -778,10 +778,11 @@ void WDoHandleSelChange( WAccelEditInfo *einfo, bool change, bool reset )
     if( entry != NULL ) {
         if( change ) {
             uint_16 id;
+
             if( entry->is32bit ) {
-                id = entry->u.entry32.Id;
+                id = entry->entry.Id;
             } else {
-                id = (uint_16)entry->u.entry.Id;
+                id = (uint_16)entry->entry.Id;
             }
             WSetEditWindowID( einfo->edit_dlg, entry->symbol, id );
         } else {

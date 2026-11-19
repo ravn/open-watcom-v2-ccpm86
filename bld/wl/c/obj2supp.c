@@ -35,7 +35,6 @@
 #include "pcobj.h"
 #include "newmem.h"
 #include "mapio.h"
-#include "exeos2.h"
 #include "exeflat.h"
 #include "exeqnx.h"
 #include "exeelf.h"
@@ -71,8 +70,8 @@
 typedef struct {
     byte            *data;
     offset          value;      /* value at location being patched */
-    targ_addr       loc_addr;
-    targ_addr       tgt_addr;
+    addr_type       loc_addr;
+    addr_type       target_addr;
     fix_type        type;
     fix_fpp_type    fpp_type;
     boolbit         additive    : 1;
@@ -171,8 +170,8 @@ static void TraceFixup( fix_type type, target_spec *target )
     overlay = ( (FmtData.type & MK_OVERLAYS) && !FmtData.u.dos.noindirect );
     if( (LinkFlags & LF_STRIP_CODE)
       || overlay ) {
-        isovldata = ( (CurrRec.seg->u.leader->info & SEG_OVERLAYED) == 0 );
-        if( ObjFormat & OBJ_FMT_UNSAFE_FIXUPP ) {
+        isovldata = ( (CurrRec.seg->u.leader->info & SEGINF_OVERLAYED) == 0 );
+        if( ObjFormat & OBJFMT_UNSAFE_FIXUPP ) {
             isovldata = true;
         }
 #else
@@ -297,55 +296,55 @@ static void UpdateTargetPtr( target_spec *target )
     }
 }
 
-static void GetFrameAddr( frame_spec *frame, targ_addr *addr,
-                          targ_addr *tgt_addr, offset off )
-/***********************************************************/
+static void GetFrameAddr( frame_spec *frame, addr_type *frame_addr,
+                          addr_type *target_addr, offset off )
+/*****************************************************************/
 {
     switch( frame->type ) {
     case FIX_FRAME_SEG:
         if( frame->u.sdata == NULL ) {
-            LnkMsg( ERR+LOC+MSG_FIXUP_MISSING_THREAD, "dA", frame->type, tgt_addr );
+            LnkMsg( ERR+LOC+MSG_FIXUP_MISSING_THREAD, "dA", frame->type, target_addr );
             break;
         }
-        *addr = frame->u.sdata->u.leader->seg_addr;
-        addr->off += frame->u.sdata->a.delta;
+        *frame_addr = frame->u.sdata->u.leader->seg_addr;
+        frame_addr->off += frame->u.sdata->a.delta;
         break;
     case FIX_FRAME_GRP:
-        *addr = frame->u.group->grp_addr;
+        *frame_addr = frame->u.group->addr;
         break;
     case FIX_FRAME_EXT:
-        *addr = frame->u.sym->addr;
+        *frame_addr = frame->u.sym->addr;
         break;
     case FIX_FRAME_ABS:
-        addr->seg = frame->u.abs;
+        frame_addr->seg = frame->u.abs;
         break;
     case FIX_FRAME_LOC:
-        *addr = CurrRec.addr;
-        addr->off += off;
+        *frame_addr = CurrRec.addr;
+        frame_addr->off += off;
         break;
     case FIX_FRAME_TARG:
     case FIX_FRAME_FLAT:
-        *addr = *tgt_addr;
+        *frame_addr = *target_addr;
         break;
     }
 }
 
-static void GetTargetAddr( target_spec *target, targ_addr *addr )
-/***************************************************************/
+static void GetTargetAddr( target_spec *target, addr_type *target_addr )
+/**********************************************************************/
 {
     switch( target->type ) {
     case FIX_TARGET_SEG:
-        *addr = target->u.sdata->u.leader->seg_addr;
-        addr->off += target->u.sdata->a.delta;
+        *target_addr = target->u.sdata->u.leader->seg_addr;
+        target_addr->off += target->u.sdata->a.delta;
         break;
     case FIX_TARGET_GRP:
-        *addr = target->u.group->grp_addr;
+        *target_addr = target->u.group->addr;
         break;
     case FIX_TARGET_EXT:
-        *addr = target->u.sym->addr;
+        *target_addr = target->u.sym->addr;
         break;
     case FIX_TARGET_ABS:
-        addr->seg = target->u.abs;
+        target_addr->seg = target->u.abs;
         break;
     }
 }
@@ -414,8 +413,8 @@ static bool IsReadOnly( segdata *sdata )
         && (sdata->u.leader->group->segflags & SEG_READ_ONLY) );
 }
 
-static void CheckRWData( target_spec *target, targ_addr *addr )
-/*************************************************************/
+static void CheckRWData( target_spec *target, addr_type *loc_addr )
+/*****************************************************************/
 {
     symbol sym;
 
@@ -427,9 +426,9 @@ static void CheckRWData( target_spec *target, targ_addr *addr )
             if( !IS_DBG_INFO( CurrRec.seg->u.leader ) ) {
                 if( target->type == FIX_TARGET_SEG ) {
                     sym.name.u.ptr = target->u.sdata->u.leader->segname.u.ptr;
-                    LnkMsg( WRN+LOC+MSG_RELOC_TO_RWDATA_SEG, "aS", addr, &sym );
+                    LnkMsg( WRN+LOC+MSG_RELOC_TO_RWDATA_SEG, "aS", loc_addr, &sym );
                 } else if( target->type == FIX_TARGET_EXT ) {
-                    LnkMsg( WRN+LOC+MSG_RELOC_TO_RWDATA_SEG, "aS", addr, target->u.sym );
+                    LnkMsg( WRN+LOC+MSG_RELOC_TO_RWDATA_SEG, "aS", loc_addr, target->u.sym );
                 }
             }
         }
@@ -606,7 +605,7 @@ void StoreFixup( offset off, fix_type type, frame_spec *frame, target_spec *targ
     fixtype = type | FIX_SET_TARGET( target->type ) | FIX_SET_FRAME( frame->type );
     save.u.fixup.off = off + CurrRec.obj_offset;
     save.u.fixup.target = target->u.ptr;
-    if( ObjFormat & OBJ_FMT_UNSAFE_FIXUPP ) {
+    if( ObjFormat & OBJFMT_UNSAFE_FIXUPP ) {
         fixtype |= FIX_UNSAFE;
     }
     if( FRAME_HAS_DATA( frame->type ) ) {
@@ -711,7 +710,7 @@ static unsigned FindGroupIdx( segment seg )
 
     index = 1;
     for( group = Groups; group != NULL; group = group->next ) {
-        if( group->grp_addr.seg == seg ) {
+        if( group->addr.seg == seg ) {
             return( index );
         }
         index++;
@@ -775,8 +774,8 @@ static void MakeWindowsFloatReloc( fix_relo_data *fix )
     InitReloc( &breloc );
     breloc.fix_off = 0;
     os2item = &breloc.item.os2;
-    os2item->addr_type = MapOS2FixType( fix->type );
-    os2item->reloc_offset = fix->loc_addr.off - CurrRec.seg->u.leader->group->grp_addr.off;
+    os2item->fixtype = MapOS2FixType( fix->type );
+    os2item->reloc_offset = fix->loc_addr.off - CurrRec.seg->u.leader->group->addr.off;
     os2item->reloc_type = OSFIXUP | ADDITIVE;
     os2item->put.fltpt = fix->fpp_type;
     DumpReloc( &breloc );
@@ -829,7 +828,7 @@ static bool CheckSpecials( fix_relo_data *fix, target_spec *target )
         }
   #if 0
     XXX: this is not the right thing to do for elf-i386
-        if( fix->loc_addr.seg != fix->tgt_addr.seg ) {
+        if( fix->loc_addr.seg != fix->target_addr.seg ) {
             return( false );
         }
   #endif
@@ -869,7 +868,7 @@ static bool CheckSpecials( fix_relo_data *fix, target_spec *target )
                 pos = FindSymPosInToc( target->u.sym );
             } else {
                 sdata = GetTargetSegData( target );
-                off = fix->tgt_addr.off - GetSegOff( sdata );
+                off = fix->target_addr.off - GetSegOff( sdata );
                 pos = FindSdataOffPosInToc( sdata, off );
             }
         }
@@ -897,7 +896,7 @@ static bool CheckSpecials( fix_relo_data *fix, target_spec *target )
          */
         if( fix->imported )
             return( false );
-        if( fix->loc_addr.seg != fix->tgt_addr.seg ) {
+        if( fix->loc_addr.seg != fix->target_addr.seg ) {
             return( false );
         }
     }
@@ -913,7 +912,7 @@ static bool CheckSpecials( fix_relo_data *fix, target_spec *target )
     }
     if( fix->imported ) {
 #ifdef _OS2
-        if( FmtData.type & (MK_OS2_NE | MK_WIN_NE) ) {  // can not get at a DLL relatively
+        if( FmtData.type & MK_NE ) {  // can not get at a DLL relatively
             LnkMsg( ERR+LOC+MSG_DLL_IN_REL_RELOC, "a", &fix->loc_addr );
             return( true );
         }
@@ -942,7 +941,7 @@ static bool CheckSpecials( fix_relo_data *fix, target_spec *target )
     }
     /* XXX: MK_ELF must not be included for non-i386 */
     if( FmtData.type & (MK_PROT_MODE & ~(MK_OS2_FLAT | MK_WIN_VXD | MK_PE | MK_ELF)) ) {
-        if( ( fix->loc_addr.seg != fix->tgt_addr.seg )
+        if( ( fix->loc_addr.seg != fix->target_addr.seg )
           && (fix->type & FIX_ABS) == 0 ) {
             //must have same file segment.
             if( FmtData.type & MK_ID_SPLIT ) {
@@ -954,7 +953,7 @@ static bool CheckSpecials( fix_relo_data *fix, target_spec *target )
         }
     }
     if( FmtData.type & MK_LINEARIZE ) {
-        group = FindGroup( fix->tgt_addr.seg );
+        group = FindGroup( fix->target_addr.seg );
         if( group == NULL ) {           // can happen for IAT symbols.
             off = 0;
         } else {
@@ -964,18 +963,18 @@ static bool CheckSpecials( fix_relo_data *fix, target_spec *target )
         if( group != NULL ) {
             off -= group->linear;
         }
-        off += fix->tgt_addr.off - fix->loc_addr.off;
+        off += fix->target_addr.off - fix->loc_addr.off;
     } else if( FmtData.type & (MK_32BIT | MK_QNX) ) {
-        off = fix->tgt_addr.off - fix->loc_addr.off;
+        off = fix->target_addr.off - fix->loc_addr.off;
         if( fix->type & FIX_ABS ) {
             off -= FindGroup( fix->loc_addr.seg )->linear;
         }
 #ifdef _DOS16M
     } else if( FmtData.type & MK_DOS16M ) {
-        off = SUB_16M_ADDR( fix->tgt_addr, fix->loc_addr );
+        off = SUB_16M_ADDR( fix->target_addr, fix->loc_addr );
 #endif
     } else {
-        off = SUB_REAL_ADDR( fix->tgt_addr, fix->loc_addr );
+        off = SUB_REAL_ADDR( fix->target_addr, fix->loc_addr );
     }
     fixsize = CalcFixupSize( fix->type );
     if( (fix->type & FIX_NOADJ) == 0 ) {
@@ -1002,8 +1001,11 @@ static offset FindRealAddr( fix_relo_data *fix )
     offset      off;
     bool        dbiflat;
 
-    off = fix->tgt_addr.off;
+    off = fix->target_addr.off;
     dbiflat = DBINoReloc( CurrRec.seg->u.leader );
+    if ( CurrRec.seg->u.leader->dbgtype == HLL_LINE ) { // FIXME! DBINoReloc() abuse here?
+        dbiflat = false;
+    }
     if( (fix->type & FIX_ABS)
       || dbiflat
       && (CurrMod->flags_mod & MOD_FLATTEN_DBI) == 0 ) {
@@ -1019,10 +1021,10 @@ static offset FindRealAddr( fix_relo_data *fix )
          * don't have to be applied if everything loads in the
          * right spot.
         */
-        group = FindGroup( fix->tgt_addr.seg );
+        group = FindGroup( fix->target_addr.seg );
         if( group == NULL )                  // can happen with dbi relocs
             return( off );
-        off += ( group->linear - group->grp_addr.off );
+        off += ( group->linear - group->addr.off );
         if( FmtData.type & MK_LINEARIZE ) {
             if( (fix->type & FIX_NO_BASE) == 0 ) {
                 off += FmtData.base;
@@ -1055,7 +1057,7 @@ static void PatchData( fix_relo_data *fix )
     fix->additive = false;
     if( fix->imported
       && (FmtData.type & (MK_OS2_FLAT | MK_WIN_VXD)) ) {
-        fix->value = fix->tgt_addr.off;
+        fix->value = fix->target_addr.off;
     } else {
         fix->value = 0;
     }
@@ -1087,8 +1089,8 @@ static void PatchData( fix_relo_data *fix )
     isdbi = DBINoReloc( CurrRec.seg->u.leader );
     if( fix->imported ) {
         if( isdbi ) {
-            fix->tgt_addr.off = 0;      // crazy person has imports in the dbi
-            fix->tgt_addr.seg = 0;
+            fix->target_addr.off = 0;      // crazy person has imports in the dbi
+            fix->target_addr.seg = 0;
         } else {
             return;
         }
@@ -1111,7 +1113,7 @@ static void PatchData( fix_relo_data *fix )
     } else {    // its a seg reloc and maybe an offset as well.
         if( (fix->type & FIX_OFFSET_MASK) != FIX_NO_OFFSET ) {
             if( !fix->done
-              && (FmtData.type & (MK_OS2 | MK_WIN_NE | MK_WIN_VXD)) )
+              && (FmtData.type & (MK_NE | MK_OS2_FLAT | MK_WIN_VXD)) )
                 return;
             PatchOffset( fix, FindRealAddr( fix ), false );
             data += OffsetSizes[FIX_GET_OFFSET( fix->type )];
@@ -1135,13 +1137,13 @@ static void PatchData( fix_relo_data *fix )
 #endif
 #if defined( _DOS16M ) || defined( _PHARLAP )
         if( FmtData.type & (MK_DOS16M | MK_PHAR_MULTISEG) ) {
-            MPUT_16_UN( data, fix->tgt_addr.seg );
+            MPUT_16_UN( data, fix->target_addr.seg );
             return;
         }
 #endif
 #ifdef _RDOS
         if( FmtData.type & MK_RDOS ) {
-            segval = fix->tgt_addr.seg;
+            segval = fix->target_addr.seg;
             if( segval == FmtData.u.rdos.code_seg ) {
                 segval = FmtData.u.rdos.code_sel;
             } else if( segval == FmtData.u.rdos.data_seg ) {
@@ -1159,13 +1161,13 @@ static void PatchData( fix_relo_data *fix )
         if( fix->done
           || (FmtData.type & (MK_QNX | MK_DOS)) ) {
             if( isdbi
-              && (LinkFlags & LF_CV_DBI_FLAG) ) {    // FIXME
-                segval = FindGroupIdx( fix->tgt_addr.seg );
+              && (LinkFlags & (LF_CV_DBI_FLAG | LF_HLL_DBI_FLAG)) ) {    // FIXME
+                segval = FindGroupIdx( fix->target_addr.seg );
             } else if( fix->type & FIX_ABS ) {
                 /* MASM 5.1 stuffs abs seg length in displacement; ignore it like LINK. */
-                segval = fix->tgt_addr.seg;
+                segval = fix->target_addr.seg;
             } else {
-                segval = MGET_U16_UN( data ) + fix->tgt_addr.seg;
+                segval = MGET_U16_UN( data ) + fix->target_addr.seg;
             }
             MPUT_16_UN( data, segval );
         }
@@ -1223,7 +1225,7 @@ static bool FarCallOpt( fix_relo_data *fix )
     }
     if( fix->data == CurrRec.data )  // can we assume this?
         return( false );
-    if( fix->loc_addr.seg != fix->tgt_addr.seg )
+    if( fix->loc_addr.seg != fix->target_addr.seg )
         return( false );
     if( !(CurrRec.seg->canfarcall
       || CurrRec.seg->iscode) )
@@ -1238,11 +1240,11 @@ static bool FarCallOpt( fix_relo_data *fix )
         } else {
             temp16 = MGET_U16_UN( code + 1 );
         }
-        if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_WIN_VXD) ) {
+        if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_WIN_VXD) ) {
             if( is32bit ) {
-                temp32 += fix->tgt_addr.off;     // haven't done this for OS/2
+                temp32 += fix->target_addr.off;     // haven't done this for OS/2
             } else {
-                temp16 += fix->tgt_addr.off;     // haven't done this for OS/2
+                temp16 += fix->target_addr.off;     // haven't done this for OS/2
             }
         }
         if( instruction == FAR_JMP_ID ) {
@@ -1311,7 +1313,7 @@ static void MakeBase( fix_relo_data *fix )
 
 #ifdef _OS2
 static ordinal_t ChkOS2IntEntry( group_entry *group, segdata *seg,
-                                target_spec *tthread, fix_relo_data *fix )
+                                target_spec *target, fix_relo_data *fix )
 /***********************************************************************/
 {
     ordinal_t   int_ordinal = 0;    // 0 = no crazy stuff
@@ -1320,15 +1322,15 @@ static ordinal_t ChkOS2IntEntry( group_entry *group, segdata *seg,
     // handling in LX/LE executables. However, conforming IOPL
     // segments do not need that and references between IOPL
     // segments don't either.
-    if( (group->segflags & SEG_LEVEL_MASK) != (seg->u.leader->group->segflags & SEG_LEVEL_MASK) ) {
-        if( (group->segflags & SEG_LEVEL_MASK) == SEG_LEVEL_2
+    if( GET_SEG_PMODE_DPL( group->segflags ) != GET_SEG_PMODE_DPL( seg->u.leader->group->segflags ) ) {
+        if( GET_SEG_PMODE_DPL( group->segflags ) == 2
           && !(group->segflags & SEG_CONFORMING) ) {
 
             // The target has to be in the entry table, otherwise we can't
             // produce the required call gate fixup.
-            if( (tthread->type & FIX_TARGET_EXT)
-              && (tthread->u.sym->info & SYM_EXPORTED) ) {
-                symbol          *sym = tthread->u.sym;
+            if( (target->type & FIX_TARGET_EXT)
+              && (target->u.sym->info & SYM_EXPORTED) ) {
+                symbol          *sym = target->u.sym;
                 entry_export    *exp = sym->e.export;
 
                 int_ordinal = exp->ordinal;
@@ -1350,14 +1352,14 @@ static ordinal_t ChkOS2IntEntry( group_entry *group, segdata *seg,
 }
 #endif
 
-static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *seg, base_reloc *breloc )
-/*******************************************************************************************************/
+static bool formatBaseReloc( fix_relo_data *fix, target_spec *target, segdata *seg, base_reloc *breloc )
+/******************************************************************************************************/
 {
-    targ_addr           target;
-    group_entry         *group;
-    fix_type            ftype;
+    addr_type       target_addr;
+    group_entry     *group;
+    fix_type        ftype;
 
-    /* unused parameters */ (void)tthread;
+    /* unused parameters */ (void)target;
 
     ftype = fix->type & (FIX_OFFSET_MASK | FIX_BASE);
     target = fix->tgt_addr;
@@ -1390,7 +1392,10 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         if( fix->type & FIX_HIGH ) {
             reltype = PE_FIX_HIGHADJ;   // NYI: can be high when objalign == 0x10000
             breloc->rel_size = sizeof( high_pe_reloc_item );
-            breloc->item.hpe.low_off = (unsigned_16)target.off;
+            breloc->item.hpe.low_off = (unsigned_16)target_addr.off;
+        } else if( (LinkState & LS_HAVE_MACHTYPE_MASK) == LS_HAVE_MIPS_CODE
+          && ftype == FIX_OFFSET_26 ) {
+            reltype = PE_FIX_MIPSJMP;
         } else if( ftype == FIX_OFFSET_16 ) {
             if( (FmtData.objalign & 0xFFFF) == 0 ) {
                 save = false;
@@ -1401,7 +1406,7 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         }
         breloc->item.pe = ( off & OSF_PAGE_MASK ) | reltype;
         return( save );
-    } else if( FmtData.type & (MK_OS2_NE | MK_WIN_NE) ) {
+    } else if( FmtData.type & MK_NE ) {
         os2_reloc_item  *os2item;
         offset          off;
         byte            *fixptr;
@@ -1410,34 +1415,34 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         off = fix->loc_addr.off;
         fixptr = fix->data;
         os2item = &(breloc->item.os2);
-        os2item->addr_type = MapOS2FixType( fix->type );
-        os2item->reloc_offset = off - seg->u.leader->group->grp_addr.off;
-        if( !fix->imported ) {
+        os2item->fixtype = MapOS2FixType( fix->type );
+        os2item->reloc_offset = off - seg->u.leader->group->addr.off;
+        if( fix->imported ) {
+            dll = target->u.sym->p.import_dll;
+            if( dll->isordinal ) {
+                os2item->reloc_type = IMPORTED_ORDINAL;
+                os2item->put.ordinal.ord_num = dll->u.ordinal;
+                os2item->put.ordinal.modref_idx = dll->m.modnum->num;
+            } else {
+                os2item->reloc_type = IMPORTED_NAME;
+                os2item->put.name.impnam_off = dll->u.entry->num;
+                os2item->put.name.modref_idx = dll->m.modnum->num;
+            }
+        } else {
             os2item->reloc_type = INTERNAL_REFERENCE;
             os2item->put.internal.rsrvd = 0;
             for( group = Groups; group != NULL; group = group->next ) {
-                if( group->grp_addr.seg == target.seg ) {
+                if( group->addr.seg == target_addr.seg ) {
                     break;
                 }
             }
             if( ( group != NULL )
               && (group->segflags & SEG_MOVABLE) ) {
                 os2item->put.internal.grp_num = MOVABLE_ENTRY_PNT;
-                os2item->put.internal.off = FindEntryOrdinal( target, group );
+                os2item->put.internal.off = FindEntryOrdinal( target_addr, group );
             } else {
-                os2item->put.internal.grp_num = target.seg;
-                os2item->put.internal.off = target.off;
-            }
-        } else {
-            dll = tthread->u.sym->p.import;
-            if( !dll->isordinal ) {
-                os2item->reloc_type = IMPORTED_NAME;
-                os2item->put.name.impnam_off = dll->u.entry->num;
-                os2item->put.name.modref_idx = dll->m.modnum->num;
-            } else {
-                os2item->reloc_type = IMPORTED_ORDINAL;
-                os2item->put.ordinal.ord_num = dll->u.ordinal;
-                os2item->put.ordinal.modref_idx = dll->m.modnum->num;
+                os2item->put.internal.grp_num = target_addr.seg;
+                os2item->put.internal.off = target_addr.off;
             }
         }
         if( fix->additive ) {
@@ -1462,8 +1467,8 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         if( fix->type & FIX_REL ) {
             fixtype = OSF_SOURCE_OFF_32_REL;
             if( fix->os2_selfrel
-              && (tthread->type & FIX_FRAME_EXT) ) {
-                freedll = FindOS2ExportSym( tthread->u.sym, &dll );
+              && (target->type & FIX_TARGET_EXT) ) {
+                freedll = FindOS2ExportSym( target->u.sym, &dll );
                 if( dll != NULL ) {
                     fix->imported = true;
                 }
@@ -1471,10 +1476,10 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         } else {
             fixtype = MapOS2FixType( fix->type );
         }
-        if( IS_SYM_IMPORTED( tthread->u.sym ) ) {
+        if( IS_SYM_IMPORTED( target->u.sym ) ) {
             targseg = NULL;
         } else {
-            targseg = GetTargetSegData( tthread );
+            targseg = GetTargetSegData( target );
         }
         if( ( targseg != NULL )
           && ( targseg->bits == BITS_16 ) ) {
@@ -1490,13 +1495,13 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
                 /* fall through */
             case OSF_SOURCE_OFF_16:     // 16-bit offset
                 for( group = Groups; group != NULL; group = group->next ) {
-                    if( group->grp_addr.seg == target.seg ) {
+                    if( group->addr.seg == target_addr.seg ) {
                         break;
                     }
                 }
                 if( group != NULL ) {
-                    group->u.os2flags |= SEG_16_ALIAS;
-                    int_ordinal = ChkOS2IntEntry( group, seg, tthread, fix );
+                    group->u.os2flags |= OS2_SEG_16_ALIAS;
+                    int_ordinal = ChkOS2IntEntry( group, seg, target, fix );
                 }
                 break;
             }
@@ -1509,7 +1514,7 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         breloc->item.os2f.nr_stype = fixtype;
         breloc->item.os2f.nr_flags = flags;
         group = seg->u.leader->group;
-        breloc->item.os2f.r32_soff = ( fix->loc_addr.off - group->grp_addr.off ) & OSF_PAGE_MASK;
+        breloc->item.os2f.r32_soff = ( fix->loc_addr.off - group->addr.off ) & OSF_PAGE_MASK;
         if( int_ordinal ) {
             // Fixups to an IOPL segment must be done through a call gate
             // and not directly. There is a special fixup type just for this.
@@ -1522,34 +1527,9 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
                 MPUT_8( fixptr, int_ordinal );
                 fixptr += 1;
             }
-        } else if( !fix->imported ) {
-            if( !fix->os2_selfrel ) {
-                target.off += fix->value;
-            }
-            flags = OSF_TARGET_INTERNAL;
-            if( target.seg > 0xFF ) {
-                flags |= OSF_TFLAG_OBJ_MOD_16BIT;
-                MPUT_16_UN( fixptr, target.seg );
-                fixptr += 2;
-            } else {
-                MPUT_8( fixptr, target.seg );
-                fixptr += 1;
-            }
-            group = FindGroup( target.seg );
-            target.off -= group->grp_addr.off;
-            if( ftype != FIX_BASE ) {
-                if( target.off > 0xFFFF ) {
-                    flags |= OSF_TFLAG_OFF_32BIT;
-                    MPUT_32_UN( fixptr, target.off );
-                    fixptr += 4;
-                } else {
-                    MPUT_16_UN( fixptr, target.off );
-                    fixptr += 2;
-                }
-            }
-        } else {
+        } else if( fix->imported ) {
             if( dll == NULL ) {
-                dll = tthread->u.sym->p.import;
+                dll = target->u.sym->p.import_dll;
             }
             if( dll->isordinal ) {
                 flags = OSF_TARGET_EXT_ORD;
@@ -1567,22 +1547,22 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
                 MPUT_8( fixptr, dll->m.modnum->num );
                 fixptr += 1;
             }
-            if( !dll->isordinal ) {
-                if( dll->u.entry->num > 0xFFFF ) {
-                    flags |= OSF_TFLAG_OFF_32BIT;
-                    MPUT_32_UN( fixptr, dll->u.entry->num );
-                    fixptr += 4;
-                } else {
-                    MPUT_16_UN( fixptr, dll->u.entry->num );
+            if( dll->isordinal ) {
+                if( dll->u.ordinal > 0xFF ) {
+                    MPUT_16_UN( fixptr, dll->u.ordinal );
                     fixptr += 2;
+                } else {
+                    flags |= OSF_TFLAG_ORDINAL_8BIT;
+                    MPUT_8( fixptr, dll->u.ordinal );
+                    fixptr += 1;
                 }
-            } else if( dll->u.ordinal > 0xFF ) {
-                MPUT_16_UN( fixptr, dll->u.ordinal );
-                fixptr += 2;
+            } else if( dll->u.entry->num > 0xFFFF ) {
+                flags |= OSF_TFLAG_OFF_32BIT;
+                MPUT_32_UN( fixptr, dll->u.entry->num );
+                fixptr += 4;
             } else {
-                flags |= OSF_TFLAG_ORDINAL_8BIT;
-                MPUT_8( fixptr, dll->u.ordinal );
-                fixptr += 1;
+                MPUT_16_UN( fixptr, dll->u.entry->num );
+                fixptr += 2;
             }
             if( fix->additive ) {
                 flags |= OSF_TFLAG_ADDITIVE_VAL;
@@ -1606,6 +1586,31 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
                     fixptr += 2;
                 }
             }
+        } else {
+            if( !fix->os2_selfrel ) {
+                target_addr.off += fix->value;
+            }
+            flags = OSF_TARGET_INTERNAL;
+            if( target_addr.seg > 0xFF ) {
+                flags |= OSF_TFLAG_OBJ_MOD_16BIT;
+                MPUT_16_UN( fixptr, target_addr.seg );
+                fixptr += 2;
+            } else {
+                MPUT_8( fixptr, target_addr.seg );
+                fixptr += 1;
+            }
+            group = FindGroup( target_addr.seg );
+            target_addr.off -= group->addr.off;
+            if( ftype != FIX_BASE ) {
+                if( target_addr.off > 0xFFFF ) {
+                    flags |= OSF_TFLAG_OFF_32BIT;
+                    MPUT_32_UN( fixptr, target_addr.off );
+                    fixptr += 4;
+                } else {
+                    MPUT_16_UN( fixptr, target_addr.off );
+                    fixptr += 2;
+                }
+            }
         }
         if( freedll )
             MemFree( dll );
@@ -1623,12 +1628,12 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         off = fix->loc_addr.off;
         if( fix->imported ) {
             save = false;
-            AddNovImpReloc( tthread->u.sym, off, (fix->type & FIX_REL) != 0, fix->loc_addr.seg == DATA_SEGMENT );
+            AddNovImpReloc( target->u.sym, off, (fix->type & FIX_REL) != 0, fix->loc_addr.seg == DATA_SEGMENT );
         } else {
             if( fix->loc_addr.seg != DATA_SEGMENT ) {
                 off |= NOV_OFFSET_CODE_RELOC;
             }
-            if( target.seg != DATA_SEGMENT ) {
+            if( target_addr.seg != DATA_SEGMENT ) {
                 off |= NOV_TARGET_CODE_RELOC;
             }
             breloc->item.novell.reloc_offset = off;
@@ -1644,7 +1649,7 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
                 qnx_linear_item qnxl_reloc;
 
                 qnxl_reloc.reloc_offset = fix->loc_addr.off;
-                seg = GetTargetSegData( tthread );
+                seg = GetTargetSegData( target );
                 if( seg->iscode ) {
                     qnxl_reloc.reloc_offset |= 0x80000000;
                 }
@@ -1681,7 +1686,7 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         case LS_HAVE_MIPS_CODE:
             if( fix->type & FIX_HIGH ) {
                 breloc->item.elf.info = R_MIPS_HI16;
-                breloc->item.elf.addend = (unsigned_16)target.off;
+                breloc->item.elf.addend = (unsigned_16)target_addr.off;
             } else if( ftype == FIX_OFFSET_16 ) {
                 breloc->item.elf.info = R_MIPS_LO16;
                 if( (FmtData.objalign & 0xFFFF) == 0 ) {
@@ -1699,7 +1704,7 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         case LS_HAVE_PPC_CODE:
             if( fix->type & FIX_HIGH ) {
                 breloc->item.elf.info = R_PPC_ADDR16_HI;
-                breloc->item.elf.addend = (unsigned_16)target.off;
+                breloc->item.elf.addend = (unsigned_16)target_addr.off;
             } else if( ftype == FIX_OFFSET_16 ) {
                 breloc->item.elf.info = R_PPC_ADDR16_LO;
                 if( (FmtData.objalign & 0xFFFF) == 0 ) {
@@ -1723,21 +1728,21 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         default:
             break;
         }
-        sym = tthread->u.sym;
+        sym = target->u.sym;
         if( IS_SYM_ALIAS( sym )
           && (sym->info & SYM_WAS_LAZY) ) {
             save = false;
-        } else if( (tthread->type & FIX_FRAME_EXT)
+        } else if( (target->type & FIX_TARGET_EXT)
           && IsSymElfImpExp( sym ) ) {
             breloc->item.elf.addend = 0;
         } else {
-            seg = GetTargetSegData( tthread );
+            seg = GetTargetSegData( target );
             if( seg == NULL ) {
                 save = false;
             } else {
                 group = seg->u.leader->group;
                 sym = group->sym;
-                breloc->item.elf.addend = target.off - group->grp_addr.off;
+                breloc->item.elf.addend = target_addr.off - group->addr.off;
             }
         }
         if( save ) {
@@ -1762,7 +1767,7 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
         MakeBase( fix );
         breloc->item.pms.offset = fix->loc_addr.off;
         group = seg->u.leader->group;
-        breloc->item.pms.segment = group->grp_addr.seg;
+        breloc->item.pms.segment = group->addr.seg;
         return( true );
     }
 #endif
@@ -1775,15 +1780,15 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *tthread, segdata *
     MakeBase( fix );
     breloc->item.dos.addr.off = fix->loc_addr.off;
     group = seg->u.leader->group;
-    breloc->item.dos.addr.seg = group->grp_addr.seg;
+    breloc->item.dos.addr.seg = group->addr.seg;
     if( group->section != Root ) {
         breloc->item.dos.addr.seg -= group->section->sect_addr.seg;
     }
     return( true );
 }
 
-static void FmtReloc( fix_relo_data *fix, target_spec *tthread )
-/**************************************************************/
+static void FmtReloc( fix_relo_data *fix, target_spec *target )
+/*************************************************************/
 {
     base_reloc          breloc;
     bool                save;
@@ -1839,7 +1844,7 @@ static void FmtReloc( fix_relo_data *fix, target_spec *tthread )
     InitReloc( &breloc );
     breloc.fix_size = CalcFixupSize( fix->type );
     breloc.fix_off = fix->loc_addr.off;
-    save = formatBaseReloc( fix, tthread, CurrRec.seg, &breloc );
+    save = formatBaseReloc( fix, target, CurrRec.seg, &breloc );
     if( save ) {
         DumpReloc( &breloc );
     }
@@ -1889,15 +1894,15 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
 /********************************************************************************/
 {
     fix_relo_data   fix;
-    targ_addr       faddr;
+    addr_type       frame_addr;
     fix_type        fixtype = save->u.sdata.flags;
     offset          off = save->u.fixup.off;
 
-    faddr.off = 0;
-    faddr.seg = 0;
+    frame_addr.off = 0;
+    frame_addr.seg = 0;
     memset( &fix, 0, sizeof( fix_relo_data ) );        // to get all bitfields 0
-    GetTargetAddr( target, &fix.tgt_addr );
-    GetFrameAddr( frame, &faddr, &fix.tgt_addr, off );
+    GetTargetAddr( target, &fix.target_addr );
+    GetFrameAddr( frame, &frame_addr, &fix.target_addr, off );
     fix.type = fixtype;
     fix.loc_addr = CurrRec.addr;
     fix.loc_addr.off += off;
@@ -1918,8 +1923,8 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
             if( FRAME_HAS_DATA( frame->type )
               && ( target->u.sym != frame->u.sym ) ) {
                 if( FmtData.type & (MK_NOVELL | MK_OS2_FLAT | MK_WIN_VXD | MK_PE) ) {
-                    fix.tgt_addr.seg = faddr.seg;
-                    fix.tgt_addr.off = 0;
+                    fix.target_addr.seg = frame_addr.seg;
+                    fix.target_addr.off = 0;
                 } else {
                     LnkMsg( ERR+LOC+MSG_FRAME_EQ_TARGET, "a", &fix.loc_addr );
                 }
@@ -1929,7 +1934,7 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
     }
     if( fixtype & FIX_BASE ) {
         if( FmtData.type & (MK_PROT_MODE & ~(MK_OS2_FLAT | MK_WIN_VXD | MK_PE)) ) {
-            if( faddr.seg != fix.tgt_addr.seg ) {
+            if( frame_addr.seg != fix.target_addr.seg ) {
                 if( FmtData.type & MK_ID_SPLIT ) {
                     LnkMsg( ERR+LOC+MSG_NOV_NO_CODE_DATA_RELOC, "a", &fix.loc_addr );
                 } else {
@@ -1943,13 +1948,13 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
     }
     if( !fix.imported ) {
         if( fix.fpp_type == FPP_NONE ) {
-            ConvertToFrame( &fix.tgt_addr, faddr.seg, ( (fixtype & (FIX_OFFSET_8 | FIX_OFFSET_16)) != 0 ) );
+            ConvertToFrame( &fix.target_addr, frame_addr.seg, ( (fixtype & (FIX_OFFSET_8 | FIX_OFFSET_16)) != 0 ) );
         } else {
-            fix.tgt_addr.seg = faddr.seg;
+            fix.target_addr.seg = frame_addr.seg;
         }
     }
     if( (fixtype & (FIX_OFFSET_MASK | FIX_HIGH)) == FIX_HIGH_OFFSET_16 ) {
-        fix.tgt_addr.off += FixupOverflow << 16;
+        fix.target_addr.off += FixupOverflow << 16;
     }
     if( IsTargAbsolute( target ) ) {
         fix.type |= FIX_ABS;
@@ -1962,7 +1967,7 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
           && target->u.sym->u.d.ovlref
           && ( (target->u.sym->u.d.ovlstate & OVL_VEC_MASK) == OVL_MAKE_VECTOR ) ) {
             // redirect target to appropriate vector entry
-            OvlGetVecAddr( target->u.sym->u.d.ovlref, &fix.tgt_addr );
+            OvlGetVecAddr( target->u.sym->u.d.ovlref, &fix.target_addr );
         }
     }
 #endif
@@ -1973,7 +1978,7 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
                 Under PE, the imported symbol address is set to the
                 transfer code (JMP [xxxxx]) that is generated by the linker.
             */
-            fix.tgt_addr = target->u.sym->addr;
+            fix.target_addr = target->u.sym->addr;
             fix.imported = false;
         }
     }

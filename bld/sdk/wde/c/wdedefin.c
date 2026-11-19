@@ -90,7 +90,7 @@ bool WdeDefineCurrentObject( WORD w )
 
     if( obj != NULL && obj != GetMainObject() ) {
         if( w != IDM_DEFINEOBJECT ) {
-            old_option = WdeSetOption( WdeOptUseDefDlg, FALSE );
+            old_option = WdeSetOption( WdeOptUseDefDlg, false );
         }
         ret = Define( obj, &pnt, NULL ) != 0;
         if( w != IDM_DEFINEOBJECT ) {
@@ -126,8 +126,6 @@ bool WdeGenericDefine( WdeDefineObjectInfo *info )
         WdeWriteTrail( "WdeGenericDefine: GET_WINDOW_HANDLE failed!" );
         return( false );
     }
-
-    redraw = FALSE;
 
     app_inst = WdeGetAppInstance();
 #ifdef __WINDOWS__
@@ -195,20 +193,20 @@ bool WdeGenericSetDefineInfo( WdeDefineObjectInfo *info, HWND hDlg )
             WdeFreeRCString( text );
         }
     } else {
-        if( !info->info.c.info ) {
-            if( !Forward ( info->obj, GET_OBJECT_INFO, &info->info.c.info, NULL ) ) {
+        if( !info->info.c.control ) {
+            if( !Forward ( info->obj, GET_OBJECT_INFO, &info->info.c.control, NULL ) ) {
                 WdeWriteTrail( "WdeGenericDefine: GET_OBJECT_INFO failed!" );
                 return( false );
             }
         }
-        style = GETCTL_STYLE( info->info.c.info );
+        style = GETCTL_STYLE( info->info.c.control );
         text = WdeAllocRCString( WDE_GENERICTEXT );
         WdeSetEditWithStr( text, hDlg, IDB_CAPTEXT );
         if( text != NULL ) {
             WdeFreeRCString( text );
         }
-        if( GETCTL_TEXT( info->info.c.info ) ) {
-            WdeSetEditWithResNameOr( GETCTL_TEXT( info->info.c.info ), hDlg, IDB_TEXT );
+        if( GETCTL_TEXT( info->info.c.control ) ) {
+            WdeSetEditWithResNameOrOrdinal( GETCTL_TEXT( info->info.c.control ), hDlg, IDB_TEXT );
         }
     }
 
@@ -230,10 +228,9 @@ bool WdeGenericSetDefineInfo( WdeDefineObjectInfo *info, HWND hDlg )
 
 bool WdeGenericGetDefineInfo( WdeDefineObjectInfo *info, HWND hDlg )
 {
-    DialogStyle style;
-    DialogStyle cstyle;
-    void        *vp;
-    bool        mod;
+    DialogStyle         style;
+    DialogStyle         cstyle;
+    bool                modified;
 
     WdeGetWinStyles( hDlg, &style, WdeGenericMask );
 
@@ -245,22 +242,26 @@ bool WdeGenericGetDefineInfo( WdeDefineObjectInfo *info, HWND hDlg )
         WdeWriteTrail( "WdeGenericSetDefineInfo: Attempt to define base object.!" );
         return( false );
     } else if( info->obj_id == DIALOG_OBJ ) {
+        char    *text;
+
         SETHDR_STYLE( info->info.d.header, style );
-        vp = (void *)WdeGetStrFromEdit ( hDlg, IDB_TEXT, &mod );
-        if( mod && vp != NULL ) {
+        text = WdeGetStrFromEdit( hDlg, IDB_TEXT, &modified );
+        if( modified && text != NULL ) {
             if( GETHDR_CAPTION( info->info.d.header ) ) {
                 MemFree( GETHDR_CAPTION( info->info.d.header ) );
             }
-            SETHDR_CAPTION( info->info.d.header, (char *)vp );
+            SETHDR_CAPTION( info->info.d.header, text );
         }
     } else {
-        SETCTL_STYLE( info->info.c.info, style );
-        vp = (void *)WdeGetResNameOrFromEdit ( hDlg, IDB_TEXT, &mod );
-        if ( mod && vp != NULL ) {
-            if( GETCTL_TEXT( info->info.c.info ) ) {
-                MemFree( GETCTL_TEXT( info->info.c.info ) );
+        ResNameOrOrdinal    *text;
+
+        SETCTL_STYLE( info->info.c.control, style );
+        text = WdeGetResNameOrFromEdit( hDlg, IDB_TEXT, &modified );
+        if( modified && text != NULL ) {
+            if( GETCTL_TEXT( info->info.c.control ) ) {
+                MemFree( GETCTL_TEXT( info->info.c.control ) );
             }
-            SETCTL_TEXT( info->info.c.info, (ResNameOrOrdinal *)vp );
+            SETCTL_TEXT( info->info.c.control, text );
         }
     }
 
@@ -300,7 +301,7 @@ INT_PTR CALLBACK WdeGenericDefineDlgProc( HWND hDlg, UINT message, WPARAM wParam
                 id = info->info.d.id;
                 use_id = info->info.d.use_id;
             } else {
-                id = GETCTL_ID( info->info.c.info );
+                id = GETCTL_ID( info->info.c.control );
                 use_id = true;
             }
             ret = WdeProcessSymbolCombo( hDlg, message, wParam, lParam,

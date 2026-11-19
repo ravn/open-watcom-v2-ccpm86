@@ -43,22 +43,22 @@
 #include "wresrtns.h"
 
 
-static bool ResReadDialogSizeInfo( DialogSizeInfo *sizeinfo, FILE *fp )
+static bool ResReadDialogSizeInfo( DialogSizeInfo *SizeInfo, FILE *fp )
 /*********************************************************************/
 {
     bool        error;
 
     error = false;
-    sizeinfo->x = ResReadUint16( &error, fp );
+    SizeInfo->x = ResReadUint16( &error, fp );
     if( error )
         return( true );
-    sizeinfo->y = ResReadUint16( &error, fp );
+    SizeInfo->y = ResReadUint16( &error, fp );
     if( error )
         return( true );
-    sizeinfo->width = ResReadUint16( &error, fp );
+    SizeInfo->width = ResReadUint16( &error, fp );
     if( error )
         return( true );
-    sizeinfo->height = ResReadUint16( &error, fp );
+    SizeInfo->height = ResReadUint16( &error, fp );
     return( error );
 }
 
@@ -118,20 +118,8 @@ bool ResIsDialogBoxEx( FILE *fp )
     return( sign0 == 0x0001 && sign1 == 0xFFFF );
 }
 
-static bool ResReadDialogHeaderCommon32( DialogBoxHeader32 *head, FILE *fp )
-{
-    head->MenuName = ResRead32NameOrOrdinal( fp );
-    if( head->MenuName == NULL )
-        return( true );
-    head->ClassName = ResRead32NameOrOrdinal( fp );
-    if( head->ClassName == NULL )
-        return( true );
-    head->Caption = ResRead32String( fp, NULL );
-    return( head->Caption == NULL );
-}
-
-bool ResReadDialogBoxHeader32( DialogBoxHeader32 *head, FILE *fp )
-/****************************************************************/
+bool ResReadDialogBoxHeader32( DialogBoxHeader *head, FILE *fp )
+/**************************************************************/
 {
     bool            error;
 
@@ -147,7 +135,14 @@ bool ResReadDialogBoxHeader32( DialogBoxHeader32 *head, FILE *fp )
         return( true );
     if( ResReadDialogSizeInfo( &(head->SizeInfo), fp ) )
         return( true );
-    if( ResReadDialogHeaderCommon32( head, fp ) )
+    head->MenuName = ResReadNameOrOrdinal32( fp );
+    if( head->MenuName == NULL )
+        return( true );
+    head->ClassName = ResReadNameOrOrdinal32( fp );
+    if( head->ClassName == NULL )
+        return( true );
+    head->Caption = ResReadString32( fp, NULL );
+    if( head->Caption == NULL )
         return( true );
 
     /* if the font was set input the font name and point size */
@@ -156,7 +151,7 @@ bool ResReadDialogBoxHeader32( DialogBoxHeader32 *head, FILE *fp )
         head->PointSize = ResReadUint16( &error, fp );
         if( error )
             return( true );
-        head->FontName = ResRead32String( fp, NULL );
+        head->FontName = ResReadString32( fp, NULL );
         if( head->FontName == NULL ) {
             return( true );
         }
@@ -165,8 +160,8 @@ bool ResReadDialogBoxHeader32( DialogBoxHeader32 *head, FILE *fp )
     return( ResReadPadDWord( fp ) );
 }
 
-bool ResReadDialogBoxExHeader32( DialogBoxHeader32 *head, DialogBoxExHeader32short *exhead, FILE *fp )
-/****************************************************************************************************/
+bool ResReadDialogBoxExHeader( DialogBoxHeader *head, FILE *fp )
+/**************************************************************/
 {
     bool            error;
 
@@ -174,7 +169,7 @@ bool ResReadDialogBoxExHeader32( DialogBoxHeader32 *head, DialogBoxExHeader32sho
     if( !ResIsDialogBoxEx( fp ) )
         return( true );
     error = false;
-    exhead->HelpId = ResReadUint32( &error, fp );
+    head->HelpId = ResReadUint32( &error, fp );
     if( error )
         return( true );
     head->ExtendedStyle = ResReadUint32( &error, fp );
@@ -188,7 +183,14 @@ bool ResReadDialogBoxExHeader32( DialogBoxHeader32 *head, DialogBoxExHeader32sho
         return( true );
     if( ResReadDialogSizeInfo( &(head->SizeInfo), fp ) )
         return( true );
-    if( ResReadDialogHeaderCommon32( head, fp ) )
+    head->MenuName = ResReadNameOrOrdinal32( fp );
+    if( head->MenuName == NULL )
+        return( true );
+    head->ClassName = ResReadNameOrOrdinal32( fp );
+    if( head->ClassName == NULL )
+        return( true );
+    head->Caption = ResReadString32( fp, NULL );
+    if( head->Caption == NULL )
         return( true );
 
     /* If the font was set, write the font information */
@@ -197,16 +199,16 @@ bool ResReadDialogBoxExHeader32( DialogBoxHeader32 *head, DialogBoxExHeader32sho
         head->PointSize = ResReadUint16( &error, fp );
         if( error )
             return( true );
-        exhead->FontWeight = ResReadUint16( &error, fp );
+        head->FontWeight = ResReadUint16( &error, fp );
         if( error )
             return( true );
-        exhead->FontItalic = ResReadUint8( &error, fp );
+        head->FontItalic = ResReadUint8( &error, fp );
         if( error )
             return( true );
-        exhead->FontCharset = ResReadUint8( &error, fp );
+        head->FontCharset = ResReadUint8( &error, fp );
         if( error )
             return( true );
-        head->FontName = ResRead32String( fp, NULL );
+        head->FontName = ResReadString32( fp, NULL );
         if( head->FontName == NULL ) {
             return( true );
         }
@@ -215,25 +217,25 @@ bool ResReadDialogBoxExHeader32( DialogBoxHeader32 *head, DialogBoxExHeader32sho
     return( ResReadPadDWord( fp ) );
 }
 
-static ControlClass *ReadControlClass( FILE *fp )
-/***********************************************/
+static ResNameOrOrdinal *readControlClass( FILE *fp )
+/***************************************************/
 {
-    ControlClass    *class_id;
-    uint_8          class;
-    bool            error;
-    size_t          stringlen;
-    char            *restofstring;
+    ResNameOrOrdinal	*cclass;
+    uint_8          	flags;
+    bool            	error;
+    size_t          	stringlen;
+    char            	*restofstring;
 
     /* read in the first byte */
     error = false;
-    class = ResReadUint8( &error, fp );
+    flags = ResReadUint8( &error, fp );
     if( error )
         return( NULL );
 
     restofstring = NULL;
     stringlen = 0;
-    if( class & 0x80 ) {
-    } else if( class == 0 ) {
+    if( flags & 0x80 ) {
+    } else if( flags == 0 ) {
     } else {
         restofstring = ResReadString( fp, &stringlen );
         if( restofstring == NULL ) {
@@ -243,80 +245,24 @@ static ControlClass *ReadControlClass( FILE *fp )
     }
 
     /* allocate memory for the new class */
-    class_id = WRESALLOC( sizeof( ControlClass ) + stringlen );
-    if( class_id == NULL ) {
+    cclass = WRESALLOC( sizeof( ResNameOrOrdinal ) + stringlen );
+    if( cclass == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
-    } else {
-        /* copy the class or string into the correct place */
-        if( class & 0x80 ) {
-            class_id->Class = class;
-        } else if( class == 0 ) {
-            class_id->ClassName[0] = '\0';
-        } else {
-            class_id->ClassName[0] = class;
-            memcpy( class_id->ClassName + 1, restofstring, stringlen );
-        }
-    }
-
-    if( restofstring != NULL ) {
-        WRESFREE( restofstring );
-    }
-    return( class_id );
-}
-
-static ControlClass *Read32ControlClass( FILE *fp )
-/*************************************************/
-{
-    ControlClass    *class_id;
-    uint_16         flags;
-    uint_16         class;
-    bool            error;
-    size_t          stringlen;
-    char            *restofstring;
-
-    /* read in the first word */
-    error = false;
-    flags = ResReadUint16( &error, fp );
-    if( error )
-        return( NULL );
-
-    class = 0;
-    restofstring = NULL;
-    stringlen = 0;
-    if( flags == 0xffff ) {
-        class = ResReadUint16( &error, fp );
-        if( error ) {
-            return( NULL );
-        }
+    /* copy the class or string into the correct place */
+    } else if( flags & 0x80 ) {
+        cclass->ord.fFlag = 0xff;
+        cclass->ord.wOrdinalID = flags;
     } else if( flags == 0 ) {
+        cclass->name[0] = '\0';
     } else {
-        restofstring = ResRead32String( fp, &stringlen );
-        if( restofstring == NULL ) {
-            return( NULL );
-        }
-        stringlen++;                /* for the '\0' */
-    }
-
-    /* allocate memory for the new class */
-    class_id = WRESALLOC( sizeof( ControlClass ) + stringlen );
-    if( class_id == NULL ) {
-        WRES_ERROR( WRS_MALLOC_FAILED );
-    } else {
-        /* copy the class or string into the correct place */
-        if( flags == 0xffff ) {
-            class_id->Class = (uint_8)class;
-        } else if( flags == 0 ) {
-            class_id->ClassName[0] = '\0';                  /* NUL character */
-        } else {
-            class_id->ClassName[0] = UNI2ASCII( flags );    /* first 16-bit UNICODE character */
-            memcpy( class_id->ClassName + 1, restofstring, stringlen );
-        }
+        cclass->name[0] = flags;
+        memcpy( cclass->name + 1, restofstring, stringlen );
     }
 
     if( restofstring != NULL ) {
         WRESFREE( restofstring );
     }
-    return( class_id );
+    return( cclass );
 }
 
 bool ResReadDialogBoxControl( DialogBoxControl *control, FILE *fp )
@@ -333,7 +279,7 @@ bool ResReadDialogBoxControl( DialogBoxControl *control, FILE *fp )
     control->Style = ResReadUint32( &error, fp );
     if( error )
         return( true );
-    control->ClassID = ReadControlClass( fp );
+    control->ClassID = readControlClass( fp );
     if( control->ClassID == NULL )
         return( true );
     control->Text = ResReadNameOrOrdinal( fp );
@@ -343,23 +289,8 @@ bool ResReadDialogBoxControl( DialogBoxControl *control, FILE *fp )
     return( error );
 }
 
-static bool ResReadDialogControlCommon32( ControlClass **class_id, ResNameOrOrdinal **text, uint_16 *extra_bytes, FILE *fp )
-{
-    bool            error;
-
-    *class_id = Read32ControlClass( fp );
-    if( *class_id == NULL )
-        return( true );
-    *text = ResRead32NameOrOrdinal( fp );
-    if( *text == NULL )
-        return( true );
-    error = false;
-    *extra_bytes = ResReadUint16( &error, fp );
-    return( error );
-}
-
-bool ResReadDialogBoxControl32( DialogBoxControl32 *control, FILE *fp )
-/*********************************************************************/
+bool ResReadDialogBoxControl32( DialogBoxControl *control, FILE *fp )
+/*******************************************************************/
 {
     bool            error;
 
@@ -375,14 +306,22 @@ bool ResReadDialogBoxControl32( DialogBoxControl32 *control, FILE *fp )
     control->ID = ResReadUint16( &error, fp );
     if( error )
         return( true );
-    if( ResReadDialogControlCommon32( &(control->ClassID), &(control->Text), &(control->ExtraBytes), fp ) )
+    control->ClassID = ResReadNameOrOrdinal32( fp );
+    if( control->ClassID == NULL )
         return( true );
+    control->Text = ResReadNameOrOrdinal32( fp );
+    if( control->Text == NULL )
+        return( true );
+    control->ExtraBytes = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+
     /* seek to dword boundary if necessary */
     return( ResReadPadDWord( fp ) );
 }
 
-bool ResReadDialogBoxExControl32( DialogBoxExControl32 *control, FILE *fp )
-/*************************************************************************/
+bool ResReadDialogBoxExControl( DialogBoxControl *control, FILE *fp )
+/*******************************************************************/
 {
     bool            error;
 
@@ -401,7 +340,14 @@ bool ResReadDialogBoxExControl32( DialogBoxExControl32 *control, FILE *fp )
     control->ID = ResReadUint32( &error, fp );
     if( error )
         return( true );
-    if( ResReadDialogControlCommon32( &(control->ClassID), &(control->Text), &(control->ExtraBytes), fp ) )
+    control->ClassID = ResReadNameOrOrdinal32( fp );
+    if( control->ClassID == NULL )
+        return( true );
+    control->Text = ResReadNameOrOrdinal32( fp );
+    if( control->Text == NULL )
+        return( true );
+    control->ExtraBytes = ResReadUint16( &error, fp );
+    if( error )
         return( true );
     /* seek to dword boundary if necessary */
     return( ResReadPadDWord( fp ) );
@@ -424,8 +370,8 @@ void ResFreeDialogBoxHeaderPtrs( DialogBoxHeader *head )
     }
 }
 
-void ResFreeDialogBoxHeader32Ptrs( DialogBoxHeader32 *head )
-/**********************************************************/
+void ResFreeDialogBoxHeaderPtrs32( DialogBoxHeader *head )
+/********************************************************/
 {
     if( head->MenuName != NULL ) {
         WRESFREE( head->MenuName );

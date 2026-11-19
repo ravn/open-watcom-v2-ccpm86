@@ -56,15 +56,15 @@ extern bool                 WResReadHeader( WResHeader *header, FILE *fp );
 extern bool                 WResReadExtHeader( WResExtHeader *extheader, FILE *fp );
 extern WResResType          WResReadResType( FILE *fp );
 extern ResNameOrOrdinal     *ResReadNameOrOrdinal( FILE *fp );
-extern ResNameOrOrdinal     *ResRead32NameOrOrdinal( FILE *fp );
+extern ResNameOrOrdinal     *ResReadNameOrOrdinal32( FILE *fp );
 extern char                 *ResReadString( FILE *fp, size_t *strlen );
-extern char                 *ResRead32String( FILE *fp, size_t *strlen );
+extern char                 *ResReadString32( FILE *fp, size_t *strlen );
 extern uint_32              ResReadUint32( bool *error, FILE *fp );
 extern uint_16              ResReadUint16( bool *error, FILE *fp );
 extern uint_8               ResReadUint8( bool *error, FILE *fp );
 extern long                 ResTell( FILE *fp );
 extern bool                 ResSeek( FILE *fp, long offset, int origin );
 extern bool                 ResReadPadDWord( FILE *fp );
-extern MResResourceHeader   *MResReadResourceHeader( FILE *fp, bool iswin32 );
+extern MSResResourceHeader  *MSResReadResourceHeader( FILE *fp, bool iswin32 );
 
 #endif

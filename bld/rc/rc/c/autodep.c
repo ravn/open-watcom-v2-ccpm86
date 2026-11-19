@@ -132,10 +132,9 @@ static void writeDepListEOF( void )
 static void freeDepList( void )
 {
     DepNode     *cur;
-    DepNode     *next;
 
-    for( cur = depList; cur != NULL; cur = next ) {
-        next = cur->next;
+    while( (cur = depList) != NULL ) {
+        depList = cur->next;
         MemFree( cur );
     }
 }
@@ -152,7 +151,7 @@ bool WriteDependencyRes( void )
         loc.start = SemStartResource();
         for( cur = depList; cur != NULL; cur = cur->next ) {
             if( stat( cur->info.name, &file_info ) == -1 ) {
-                RcError( ERR_READING_FILE, cur->info.name, strerror( errno ) );
+                RcError( RCMSG_READING_FILE, cur->info.name, strerror( errno ) );
                 ErrorHasOccured = true;
             }
             cur->info.time = (uint_32)file_info.st_mtime;
@@ -162,7 +161,7 @@ bool WriteDependencyRes( void )
         loc.len = SemEndResource( loc.start );
         res_id = WResIDFromStr( DEP_LIST_NAME );
         type_id = WResIDFromNum( DEP_LIST_TYPE );
-        SemAddResourceAndFree( res_id, type_id, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, loc );
+        SemAddResourceAndFree( res_id, type_id, DEFAULT_FLAGS_MD, loc );
     }
     freeDepList();
     return( false );

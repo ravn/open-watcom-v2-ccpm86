@@ -37,18 +37,15 @@
  * appropriate C code use #pragma aux ... __frame to do same
  * for some unknown reason this doesn't work for C++ compiler now
  */
-#include <stdlib.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstring>
 #ifndef STANDALONE_MERGER
     #include <dr.h>
 #endif
 #include "death.h"
-#include "brmem.h"
-#include "debuglog.h"
 #include "memfuncs.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "debuglog.h"
+#include "trmem.h"
 
 
 #ifdef TRMEM
@@ -78,7 +75,7 @@ class Memory : public DebuggingLog
 
 static Memory bogus;        // just need to get the ctor's called
 
-void PrintLine( void *parm, const char *buf, size_t len )
+void PrintLine( void *parm, const char *buf, std::size_t len )
 {
     /* unused parameters */ (void)parm; (void)len;
 
@@ -88,8 +85,8 @@ void PrintLine( void *parm, const char *buf, size_t len )
 
 #endif  // TRMEM
 
-void *operator new( size_t size )
-//-------------------------------
+void *operator new( std::size_t size )
+//------------------------------------
 {
     void *p;
 
@@ -99,7 +96,7 @@ void *operator new( size_t size )
 #ifdef TRMEM
         p = _trmem_alloc( size, _trmem_guess_who(), TrHdl );
 #else
-        p = malloc( size );
+        p = std::malloc( size );
 #endif
 #ifndef STANDALONE_MERGER
         if( p != NULL || size == 0 )    // successful allocation
@@ -116,20 +113,21 @@ void *operator new( size_t size )
 
 extern "C" {
 
-void * WBRAlloc( size_t size )
-//----------------------------
+TRMEMAPI( MemAlloc )
+void *MemAlloc( unsigned size )
+//-----------------------------
 // note: code directly cloned from above since we need to be able to trace
 // calling functions when the memory tracker is in.
 {
     void *p;
 
 #ifndef STANDALONE_MERGER
-    for(;;) {
+    for( ;; ) {
 #endif
 #ifdef TRMEM
         p = _trmem_alloc( size, _trmem_guess_who(), TrHdl );
 #else
-        p = malloc( size );
+        p = std::malloc( size );
 #endif
 #ifndef STANDALONE_MERGER
         if( p != NULL || size == 0 )    // successful allocation
@@ -144,8 +142,18 @@ void * WBRAlloc( size_t size )
     return p;
 }
 
-char * WBRStrdup( const char *str )
+#ifndef STANDALONE_MERGER
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( unsigned size )
 //---------------------------------
+{
+    return MemAlloc( size );
+}
+#endif
+
+TRMEMAPI( MemStrdup )
+char *MemStrdup( const char *str )
+//--------------------------------
 // note: code directly cloned from above since we need to be able to trace
 // calling functions when the memory tracker is in.
 {
@@ -157,7 +165,7 @@ char * WBRStrdup( const char *str )
 #ifdef TRMEM
         p = _trmem_strdup( str, _trmem_guess_who(), TrHdl );
 #else
-        p = strdup( str );
+        p = ::strdup( str );
 #endif
 #ifndef STANDALONE_MERGER
         if( p != NULL )             // successful allocation
@@ -172,8 +180,18 @@ char * WBRStrdup( const char *str )
     return p;
 }
 
-void * WBRRealloc( void * p, size_t size )
-//----------------------------------------
+#ifndef STANDALONE_MERGER
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+//------------------------------------
+{
+    return MemStrdup( str );
+}
+#endif
+
+TRMEMAPI( MemRealloc )
+void *MemRealloc( void *p, unsigned size )
+//------------------------------------------
 // note: code cloned from above since we need to be able to trace
 // calling functions when the memory tracker is in.
 {
@@ -183,7 +201,7 @@ void * WBRRealloc( void * p, size_t size )
 #ifdef TRMEM
         p = _trmem_realloc( p, size, _trmem_guess_who(), TrHdl );
 #else
-        p = realloc( p, size );
+        p = std::realloc( p, size );
 #endif
 #ifndef STANDALONE_MERGER
         if( p != NULL || size == 0 )    // successful allocation
@@ -198,7 +216,8 @@ void * WBRRealloc( void * p, size_t size )
     return p;
 }
 
-void WBRFree( void *p )
+TRMEMAPI( MemFree )
+void MemFree( void *p )
 //---------------------
 {
     if( p == NULL )
@@ -206,47 +225,11 @@ void WBRFree( void *p )
 #ifdef TRMEM
     _trmem_free( p, _trmem_guess_who(), TrHdl );
 #else
-    free( p );
+    std::free( p );
 #endif
 }
 
 #ifndef STANDALONE_MERGER
-void *MemAlloc( unsigned a )
-//--------------------------
-{
-    return WBRAlloc( a );
-}
-
-void *MemAllocSafe( unsigned a )
-//------------------------------
-{
-    return WBRAlloc( a );
-}
-
-char *MemStrdup( const char *a )
-//--------------------------
-{
-    return strdup( a );
-}
-
-char *MemStrdupSafe( const char *a )
-//--------------------------
-{
-    return strdup( a );
-}
-
-void *MemRealloc( void *ptr, unsigned size )
-//------------------------------------------
-{
-    return WBRRealloc( ptr, size );
-}
-
-void MemFree( void *p )
-//---------------------
-{
-    WBRFree( p );
-}
-
 void GUIMemOpen( void )
 {
 }
@@ -271,7 +254,7 @@ void operator delete( void *p )
 #ifdef TRMEM
     _trmem_free( p, _trmem_guess_who(), TrHdl );
 #else
-    free( p );
+    std::free( p );
 #endif
 }
 
@@ -290,7 +273,7 @@ Memory::Memory()
 //--------------------------------
 {
     DebuggingLog::printf( "Address of GetOffset is %#p\n\n", &GetOffset );
-    TrHdl = _trmem_open( malloc, free, realloc, strdup,
+    TrHdl = _trmem_open( std::malloc, std::free, std::realloc, ::strdup,
             NULL, PrintLine, _TRMEM_DEF );
 
     _trmem_set_min_alloc( MINALLOC, TrHdl );
@@ -310,7 +293,7 @@ Memory::~Memory()
         WMessageDialog::message( NULL, MsgWarning, MsgOk,
                          "Memory problems detected", "Browser Memory Tracker" );
 #else
-        fprintf( stderr, "Memory problems detected" );
+        std::fprintf( stderr, "Memory problems detected" );
 #endif
     }
 }

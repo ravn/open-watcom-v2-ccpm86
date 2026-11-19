@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,8 +38,7 @@
 /**** Semantic structures ****/
 
 typedef struct FullHelpEntryOS2 {
-    struct FullHelpEntryOS2     *next;
-    struct FullHelpEntryOS2     *prev;
+    LL_ITEM( struct FullHelpEntryOS2 );
     HelpTableEntryOS2           entry;
 } FullHelpEntryOS2;
 
@@ -48,8 +48,7 @@ typedef struct FullHelpTableOS2 {
 } FullHelpTableOS2;
 
 typedef struct FullHelpSubEntryOS2 {
-    struct FullHelpSubEntryOS2  *next;
-    struct FullHelpSubEntryOS2  *prev;
+    LL_ITEM( struct FullHelpSubEntryOS2 );
     DataElemList                *dataListHead;
 } FullHelpSubEntryOS2;
 
@@ -60,11 +59,9 @@ typedef struct FullHelpSubTableOS2 {
 } FullHelpSubTableOS2;
 
 /**** Semantic routines ****/
-extern FullHelpTableOS2     *SemOS2NewHelpTable( FullHelpEntryOS2 );
 extern FullHelpTableOS2     *SemOS2AddHelpItem( FullHelpEntryOS2, FullHelpTableOS2 * );
 extern FullHelpEntryOS2     SemOS2MakeHelpItem( unsigned long id1, unsigned long id2, unsigned long id3 );
-extern void                 SemOS2WriteHelpTable( WResID *res_id, ResMemFlags flags, FullHelpTableOS2 *helptable );
-extern FullHelpSubTableOS2  *SemOS2NewHelpSubTable( DataElemList * );
+extern void                 SemOS2WriteHelpTable( WResID *res_id, ResMemFlags res_flags, FullHelpTableOS2 *helptable );
 extern FullHelpSubTableOS2  *SemOS2AddHelpSubItem( DataElemList *, FullHelpSubTableOS2 * );
-extern void                 SemOS2WriteHelpSubTable( WResID *res_id, unsigned numWords, ResMemFlags flags, FullHelpSubTableOS2 *helptable );
+extern void                 SemOS2WriteHelpSubTable( WResID *res_id, unsigned numWords, ResMemFlags res_flags, FullHelpSubTableOS2 *helptable );
 #endif

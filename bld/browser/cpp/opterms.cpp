@@ -31,10 +31,10 @@
 ****************************************************************************/
 
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <cctype>
 #include <watcom.h>
 #include <wstring.hpp>
 #include "util.h"
@@ -115,14 +115,14 @@ extern int tryToken( LookForType lf, char * buf )
 {
     int         i;
     tokenInfo * fnd = NULL;
-    int         count = strlen( buf );
+    int         count = std::strlen( buf );
 
     for( int cnt = 0; TokenTables[cnt].table != NULL; cnt += 1 ) {
         tokenTable * table = &TokenTables[cnt];
 
         if( table->type & lf ) {
             for( i = 0; i < table->num_elem; i += 1 ) {
-                if( strnicmp( table->table[i].name, buf, count ) == 0
+                if( ::strnicmp( table->table[i].name, buf, count ) == 0
                   && count >= table->table[i].unique ) {
                     fnd = &table->table[i];
                     break;
@@ -142,7 +142,7 @@ extern char * tryAmbig( LookForType lf, char * buf )
 /**************************************************/
 {
     int          i;
-    int          count = strlen( buf );
+    int          count = std::strlen( buf );
     tokenTable * table;
 
     for( int cnt = 0; TokenTables[cnt].table != NULL; cnt += 1 ) {
@@ -150,7 +150,7 @@ extern char * tryAmbig( LookForType lf, char * buf )
 
         if( table->type & lf ) {
             for( i = 0; i < table->num_elem; i += 1 ) {
-                if( strnicmp( table->table[i].name, buf, count ) == 0 ) {
+                if( ::strnicmp( table->table[i].name, buf, count ) == 0 ) {
                     break;
                 }
             }
@@ -160,13 +160,13 @@ extern char * tryAmbig( LookForType lf, char * buf )
 
                 ambigs.concat( table->table[i].name );
                 i += 1;
-                while( i < table->num_elem && strnicmp( table->table[i].name, buf, count ) == 0 ) {
+                while( i < table->num_elem && ::strnicmp( table->table[i].name, buf, count ) == 0 ) {
                     ambigs.concat( " or " );
                     ambigs.concat( table->table[i].name );
                     i += 1;
                 }
 
-                return WBRStrdup( ambigs );
+                return MemStrdup( ambigs );
             }
         }
     }
@@ -207,7 +207,7 @@ static void showUnique( char * name, int unique )
     strlwr( name );
     while( unique > 0 ) {
         unique -= 1;
-        name[unique] = (char) toupper( name[unique] );
+        name[unique] = (char)std::tolower( name[unique] );
     }
 }
 
@@ -221,7 +221,7 @@ static int samelen( char * a, char * b )
 {
     int i = 0;
 
-    while( *a != '\0' && *b != '\0' && toupper( *a++ ) == toupper( *b++ ) ) {
+    while( *a != '\0' && *b != '\0' && std::tolower( *a++ ) == std::tolower( *b++ ) ) {
         i += 1;
     }
 
@@ -234,7 +234,7 @@ static int samelen( char * a, char * b )
 static int compNodes( const void * left, const void * right )
 /***********************************************************/
 {
-    return strcmp( ((tokenInfo *)left)->name, ((tokenInfo *)right)->name );
+    return std::strcmp( ((tokenInfo *)left)->name, ((tokenInfo *)right)->name );
 }
 
 /*
@@ -248,7 +248,7 @@ static void setupTokenTable( tokenTable * table )
     int prev;
     int next;
 
-    qsort( table->table, table->num_elem, sizeof(tokenInfo), compNodes );
+    std::qsort( table->table, table->num_elem, sizeof(tokenInfo), compNodes );
 
     for( i = 0; i < table->num_elem; i += 1 ) {
         unique = 0;
@@ -270,7 +270,7 @@ static void setupTokenTable( tokenTable * table )
         unique = maxi( unique, next );
 
         table->table[i].unique = mini( unique + 1,
-                                        strlen( table->table[i].name ));
+                                        std::strlen( table->table[i].name ));
 
 #if 0   // this modifies a static string, and doesn't work with /zc
         showUnique( table->table[i].name, table->table[i].unique );

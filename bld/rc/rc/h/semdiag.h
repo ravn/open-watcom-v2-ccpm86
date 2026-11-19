@@ -33,67 +33,43 @@
 #ifndef SEMDIAG_INCLUDED
 #define SEMDIAG_INCLUDED
 
-typedef struct DlgHeader32 {
-    DialogBoxHeader32           Head;
-    DialogBoxExHeader32short    ExHead;
-} DlgHeader32;
+typedef unsigned long       help_id;
+
+typedef struct IntMask {
+    uint_32     Mask;
+    uint_32     Value;
+    boolbit     longVal :1;
+    boolbit     unsgVal :1;
+} IntMask;
 
 typedef struct FullDialogBoxHeader {
-    bool                iswin32;
-    union {
-        DialogBoxHeader     Head;
-        DlgHeader32         Head32;
-    } u;
-    bool                StyleGiven;
+    DialogBoxHeader         Head;
+    bool                    StyleGiven;
 } FullDialogBoxHeader;
 
-typedef struct DlgControl32 {
-    uint_32             Style;
-    uint_32             ExtendedStyle;
-    DialogSizeInfo      SizeInfo;
-    uint_32             ID;
-    ControlClass        *ClassID;
-    ResNameOrOrdinal    *Text;
-    uint_16             ExtraBytes;         /* should be 0 */
-    uint_32             HelpId;             /* only used for Dialogex */
-    bool                HelpIdDefined;      /* only used for Dialogex */
-}DlgControl32;
+typedef struct FullDialogBoxControlWIN {
+    LL_ITEM( struct FullDialogBoxControlWIN );
+    DialogBoxControl        ctrl;
+    DataElemList            *dataListHead;
+} FullDialogBoxControlWIN;
 
-typedef struct FullDialogBoxControl {
-    struct FullDialogBoxControl     *next;
-    struct FullDialogBoxControl     *prev;
-    bool                            iswin32;
-    union {
-        DialogBoxControl            ctrl;
-        DlgControl32                ctrl32;
-    } u;
-    DataElemList                    *dataListHead;
-} FullDialogBoxControl;
+typedef struct FullDialogCtrlListWIN {
+    FullDialogBoxControlWIN *head;
+    FullDialogBoxControlWIN *tail;
+    uint_16                 numctrls; /* Win16 only support upto 255 controls. */
+} FullDialogCtrlListWIN;
 
-typedef struct FullDiagCtrlList {
-    FullDialogBoxControl            *head;
-    FullDialogBoxControl            *tail;
-    uint_16                         numctrls; /* Win16 only support upto 255 controls. */
-} FullDiagCtrlList;
-
-typedef struct FullDiagCtrlOptions {
+typedef struct FullDialogCtrlOptionsWIN {
     DialogSizeInfo          SizeInfo;
     IntMask                 Style;
     uint_16                 ID;
     ResNameOrOrdinal        *Text;
     uint_32                 ExtendedStyle;
-    uint_32                 HelpId;
-    bool                    HelpIdDefined;
-} FullDiagCtrlOptions;
-
-typedef struct DlgHelpId {
-    uint_32     HelpId;
-    bool        HelpIdDefined;
-} DlgHelpId;
+    help_id                 HelpId;
+} FullDialogCtrlOptionsWIN;
 
 typedef struct PresParamsOS2 {
-    struct PresParamsOS2    *next;
-    struct PresParamsOS2    *prev;
+    LL_ITEM( struct PresParamsOS2 );
     ResNameOrOrdinal        *Name;
     DataElemList            *dataList;
     uint_32                 size;
@@ -106,27 +82,26 @@ typedef struct PresParamListOS2 {
 } PresParamListOS2;
 
 typedef struct FullDialogBoxControlOS2 {
-    struct FullDialogBoxControlOS2  *next;
-    struct FullDialogBoxControlOS2  *prev;
+    LL_ITEM( struct FullDialogBoxControlOS2 );
     DialogBoxControl                ctrl;
     DataElemList                    *dataListHead;
     PresParamListOS2                *presParams;
-    struct FullDiagCtrlListOS2      *children;
+    struct FullDialogCtrlListOS2    *children;
     DialogTemplateItemOS2           *tmpl;
     uint_32                         framectl;
 } FullDialogBoxControlOS2;
 
-typedef struct FullDiagCtrlListOS2 {
+typedef struct FullDialogCtrlListOS2 {
     FullDialogBoxControlOS2         *head;
     FullDialogBoxControlOS2         *tail;
     uint_8                          numctrls;
-} FullDiagCtrlListOS2;
+} FullDialogCtrlListOS2;
 
-typedef struct FullDiagCtrlOptionsOS2 {
+typedef struct FullDialogCtrlOptionsOS2 {
     DialogSizeInfo          SizeInfo;
     IntMask                 Style;
     uint_16                 ID;
     ResNameOrOrdinal        *Text;
-} FullDiagCtrlOptionsOS2;
+} FullDialogCtrlOptionsOS2;
 
 #endif

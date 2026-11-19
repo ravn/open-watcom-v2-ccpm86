@@ -33,6 +33,9 @@
 #ifndef FILEFMT_INCLUDED
 #define FILEFMT_INCLUDED
 
+#include "resflags.h"
+
+
 #define WRESMAGIC0  0xC3D4C1D7
 #define WRESMAGIC1  0xC3D2CDCF
 #define WRESVERSION 3               /* set to version number of the file format */
@@ -125,7 +128,7 @@ typedef struct WResResInfo2 {
  * WResResInfo1 is the structure used in version 1
  */
 typedef struct WResResInfo1 {
-    uint_16         MemoryFlags;
+    uint_16         res_flags;
     uint_32         Offset;         /* offset of resource body in file */
     uint_32         Length;         /* length in bytes of resource body */
     WResID1or2      ResName;
@@ -145,7 +148,7 @@ typedef struct WResLangType {
 
 typedef struct WResLangInfo {
     WResLangType    lang;
-    uint_16         MemoryFlags;
+    uint_16         res_flags;
     uint_32         Offset;         /* offset of resource body in file */
     uint_32         Length;         /* length in bytes of resource body */
 } _WCUNALIGNED WResLangInfo;
@@ -213,7 +216,7 @@ typedef struct WResLangType {
 typedef struct WResLangInfo {
     uint_32         Offset;         /* offset of resource body in file */
     uint_32         Length;         /* length in bytes of resource body */
-    uint_16         MemoryFlags;
+    ResMemFlags     res_flags;
     WResLangType    lang;
 } WResLangInfo;
 

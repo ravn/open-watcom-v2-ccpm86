@@ -84,19 +84,21 @@ typedef struct RCParams {
     boolbit     NoPreprocess    : 1;    /* if set won't attemp any preprocessing */
     boolbit     GenAutoDep      : 1;    /* generate autodependency info for wmake */
     boolbit     iswin32         : 1;    /* target is WIN32 */
+    boolbit     StrictWin16     : 1;    /* WIN16 strict mode, don't accept EXSTYLE */
 #ifndef NO_REPLACE
     boolbit     FindAndReplace  : 1;    /* a check to see whether for this option */
     boolbit     Prepend         : 1;
 #endif
     unsigned    SegmentSorting  : 2;    /* which segment sorting method to use */
     unsigned    TargetOS        : 2;
-    unsigned    Win16VerStamp;
+    unsigned    winver;
+    unsigned_16 win16stamp;
     char        MBCharSupport;          /* which of the zk switches is set */
     char        *InFileName;
     char        *InExeFileName;
     char        *OutResFileName;
     char        *OutExeFileName;
-    char        *CodePageFile;
+    char        *CodepageFile;
     char        *PrependString;
     char        **CPPArgs;    /* temporary until preprocessing done inline */
     ExtraRes    *ExtraResFiles;
@@ -104,11 +106,6 @@ typedef struct RCParams {
     FRStrings   *FindReplaceStrings;
 #endif
 } RCParams;
-
-#define VERSION_10_STAMP 0x0100
-#define VERSION_20_STAMP 0x0200
-#define VERSION_30_STAMP 0x0300
-#define VERSION_31_STAMP 0x030a     /* This is what the MS rc uses */
 
 enum SegmentSortMethods {
     SEG_SORT_NONE,

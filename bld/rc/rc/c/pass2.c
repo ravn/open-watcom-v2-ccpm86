@@ -25,7 +25,7 @@
 *
 *  ========================================================================
 *
-* Description:  Resource Compiler pass 2.
+* Description:  Resource Compiler pass 2.   (used by 16-bit code)
 *
 ****************************************************************************/
 
@@ -134,21 +134,25 @@ static void checkShiftCount( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *re
 
 static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
 {
-    uint_16             sect2mask = 0;
-    uint_16             sect2bits = 0;
+    ResMemFlags         res2mask;
+    ResMemFlags         res2bits;
+    uint_16             sect2mask;
+    uint_16             sect2bits;
     uint_16             shift_count;
     long                gangloadstart;
     long                gangloadlen;
     CpSegRc             copy_segs_ret;
     bool                use_gangload = false;
 
+    res2mask = RESFLAG_NONE;
+    res2bits = RESFLAG_NONE;
+    sect2mask = 0;
+    sect2bits = 0;
     switch( CmdLineParms.SegmentSorting ) {
     case SEG_SORT_NONE:
         /*
          * all segments in section 2
          */
-        sect2mask = 0;
-        sect2bits = 0;
         use_gangload = false;
         dst->u.NEInfo.WinHead.align = src->u.NEInfo.WinHead.align;
         dst->u.NEInfo.Res.Dir.ResShiftCount = computeShiftCount( src, dst, res );
@@ -157,8 +161,8 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         /*
          * all load on call segments in section 2
          */
+        res2mask = RESFLAG_PRELOAD;
         sect2mask = SEG_PRELOAD;
-        sect2bits = 0;
         use_gangload = true;
         checkShiftCount( src, dst, res );
         break;
@@ -166,6 +170,8 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         /*
          * only load on call, discardable, code segments in section 2
          */
+        res2mask = RESFLAG_PRELOAD | RESFLAG_DISCARDABLE;
+        res2bits = RESFLAG_DISCARDABLE;
         sect2mask = SEG_DATA | SEG_PRELOAD | SEG_DISCARD;
         sect2bits = SEG_DISCARD;
         /*
@@ -186,7 +192,7 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         break;
     }
     /*
-     * third arg to Copy???? is false --> copy section one
+     * fifth arg to CopyWIN.... is false --> copy section one
      */
     gangloadstart = RESTELL( dst->fp );
     gangloadstart += AlignAmount( gangloadstart, dst->u.NEInfo.Res.Dir.ResShiftCount );
@@ -194,7 +200,7 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     switch( copy_segs_ret ) {
     case CPSEG_SEG_TOO_BIG:
         if( use_gangload ) {
-            RcWarning( ERR_NO_GANGLOAD );
+            RcWarning( RCMSG_NO_GANGLOAD );
             use_gangload = false;
         }
         break;
@@ -205,20 +211,20 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         break;
     }
     if( ! CmdLineParms.NoResFile ) {
-        if( CopyWINResources( dst, res, sect2mask, sect2bits, false ) != RS_OK ) {
+        if( CopyWINResources( dst, res, res2mask, res2bits, false ) != RS_OK ) {
             return( true );
         }
     }
     gangloadlen = RESTELL( dst->fp ) - gangloadstart;
     /*
-     * third arg to Copy???? is true  --> copy section two
+     * fifth arg to CopyWIN.... is true --> copy section two
      */
     copy_segs_ret = CopyWINSegments( src, dst, sect2mask, sect2bits, true );
     if( copy_segs_ret == CPSEG_ERROR ) {
         return( true );
     }
     if( !CmdLineParms.NoResFile ) {
-        if( CopyWINResources( dst, res, sect2mask, sect2bits, true ) != RS_OK ) {
+        if( CopyWINResources( dst, res, res2mask, res2bits, true ) != RS_OK ) {
             return( true );
         }
     }
@@ -328,8 +334,8 @@ static RcStatus writeHeadAndTables( ExeFileInfo *src, ExeFileInfo *dst, int *err
     dst->u.NEInfo.WinHead.target = src->u.NEInfo.WinHead.target;
     /* |= the next one since the WIN_GANGLOAD_PRESENT flag may be set */
     dst->u.NEInfo.WinHead.otherflags |= src->u.NEInfo.WinHead.otherflags;
-    dst->u.NEInfo.WinHead.swaparea =   0;      /* What is this field for? */
-    dst->u.NEInfo.WinHead.expver = CmdLineParms.Win16VerStamp;
+    dst->u.NEInfo.WinHead.swaparea = 0;      /* What is this field for? */
+    dst->u.NEInfo.WinHead.expver = CmdLineParms.win16stamp;
     /*
      * seek to the start of the os2_exe_header in dst
      */
@@ -470,7 +476,7 @@ static RcStatus findEndOfResources( ExeFileInfo *src, int *err_code )
         return( RESIOERR( src->fp, numread ) ? RS_READ_ERROR : RS_READ_INCMPLT );
     }
     end = 0;
-    while( typeinfo.type != 0 ) {
+    while( typeinfo.type_id != 0 ) {
         for( i = typeinfo.num_resources; i > 0 ; --i ) {
             numread = RESREAD( src->fp, &nameinfo, sizeof( nameinfo ) );
             if( numread != sizeof( nameinfo ) ) {
@@ -553,7 +559,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -561,7 +567,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -571,7 +577,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -579,7 +585,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -588,7 +594,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -596,7 +602,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( error )
         goto HANDLE_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -606,7 +612,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -614,7 +620,7 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -647,7 +653,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -655,7 +661,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -663,7 +669,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -671,7 +677,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -680,7 +686,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -688,7 +694,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( error )
         goto HANDLE_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -698,7 +704,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -706,7 +712,7 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -795,7 +801,7 @@ bool MergeResExePE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -803,7 +809,7 @@ bool MergeResExePE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     if( error )
         goto HANDLE_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -811,7 +817,7 @@ bool MergeResExePE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     if( error )
         goto HANDLE_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -821,7 +827,7 @@ bool MergeResExePE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -831,7 +837,7 @@ bool MergeResExePE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -841,7 +847,7 @@ bool MergeResExePE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -973,7 +979,7 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     if( ret != RS_OK )
         goto REPORT_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -981,7 +987,7 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     if( error )
         goto HANDLE_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -989,7 +995,7 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     if( error )
         goto HANDLE_ERROR;
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -1005,7 +1011,7 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -1015,7 +1021,7 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 
@@ -1025,7 +1031,7 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
         goto REPORT_ERROR;
     }
     if( StopInvoked ) {
-        RcFatalError( ERR_STOP_REQUESTED );
+        RcFatalError( RCMSG_STOP_REQUESTED );
         /* never return */
     }
 

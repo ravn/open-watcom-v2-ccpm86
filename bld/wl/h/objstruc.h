@@ -32,6 +32,7 @@
 
 #include "orl.h"
 #include "hash.h"
+#include "exeos2.h"
 
 
 typedef enum {
@@ -130,10 +131,13 @@ typedef enum {
 typedef enum {
     OMF_DBG_UNKNOWN,
     OMF_DBG_CODEVIEW,
-    OMF_DBG_HLL
+    OMF_DBG_HLL_03,
+    OMF_DBG_HLL_04,
+    OMF_DBG_HLL_06
 } omf_dbg_type;
 
 typedef enum {
+    CLASS_NONE          = 0x0000,
     CLASS_TRANSFER      = 0x0001,   /* used for PE import transfer code */
     CLASS_MS_TYPE       = 0x0002,
     CLASS_MS_LOCAL      = 0x0004,
@@ -146,9 +150,10 @@ typedef enum {
     CLASS_FIXED         = 0x1000,   // Class should load at specified address
     CLASS_COPY          = 0x2000,   // Class should use data from DupClass
     CLASS_NOEMIT        = 0x4000,   // Class should not generate output
+    CLASS_HLL_LINE      = 0x8000,   // HLL Line Number (debug info)
 } class_status;
 
-#define CLASS_DEBUG_INFO    (CLASS_MS_TYPE | CLASS_MS_LOCAL | CLASS_DWARF)
+#define CLASS_DEBUG_INFO    (CLASS_MS_TYPE | CLASS_MS_LOCAL | CLASS_DWARF | CLASS_HLL_LINE)
 
 #define EMIT_CLASS(c)       (((c)->flags & CLASS_NOEMIT) == 0)
 
@@ -182,22 +187,23 @@ typedef enum {
  * field, so the two words have overlapping bits.
  */
 
-enum {
-    SEG_ABSOLUTE        = 0x0001,
-    SEG_COMDAT          = 0x0002,   /* seg is a comdat */
-    SEG_OVERLAYED       = 0x0040,   /* segment belongs to an overlay class */
-    MAKE_ADDR_INFO      = 0x0080,   /* set if making an addr info next time */
-    SEG_DEAD            = 0x0080,   /* mark a segdef as being "dead"(pass 2) */
-    SEG_CODE            = 0x0200,   /* segment is a code segment.         */
-    USE_32              = 0x0400,   /* segment uses 32 bit addresses      */
-    LAST_SEGMENT        = 0x0800,   /* force last segment in a code group */
-    SEG_FIXED           = 0x1000,   /* Segment should start at seg_addr, not next addr */
-    SEG_NOEMIT          = 0x2000,   /* Segment should not generate output */
-    SEG_LXDATA_SEEN     = 0x8000,   /* LxDATA rec. seen for this segment */
-    SEG_BOTH_MASK       = 0x8641,   /* flags common to both structures */
-};
+typedef enum seg_info_type {
+    SEGINF_NONE         = 0x0000,
+    SEGINF_ABSOLUTE     = 0x0001,
+    SEGINF_COMDAT       = 0x0002,   /* seg is a comdat */
+    SEGINF_OVERLAYED    = 0x0040,   /* segment belongs to an overlay class */
+    SEGINF_MAKE_ADDR    = 0x0080,   /* set if making an addr info next time */
+    SEGINF_DEAD         = 0x0080,   /* mark a segdef as being "dead"(pass 2) */
+    SEGINF_CODE         = 0x0200,   /* segment is a code segment.         */
+    SEGINF_USE_32       = 0x0400,   /* segment uses 32 bit addresses      */
+    SEGINF_LAST_SEGMENT = 0x0800,   /* force last segment in a code group */
+    SEGINF_FIXED        = 0x1000,   /* Segment should start at seg_addr, not next addr */
+    SEGINF_NOEMIT       = 0x2000,   /* Segment should not generate output */
+    SEGINF_LXDATA_SEEN  = 0x8000,   /* LxDATA rec. seen for this segment */
+    SEGINF_BOTH_MASK    = 0x8641,   /* flags common to both structures */
+} seg_info_type;
 
-#define EMIT_SEG(s)     (((s)->segflags & SEG_NOEMIT) == 0)
+#define EMIT_SEG(s)     (((s)->info & SEGINF_NOEMIT) == 0)
 
 enum {
     NOT_DEBUGGING_INFO  = 0x0000,
@@ -207,7 +213,8 @@ enum {
     DWARF_DEBUG_ABBREV  = 0x0004,
     DWARF_DEBUG_LINE    = 0x0005,
     DWARF_DEBUG_ARANGE  = 0x0006,
-    DWARF_DEBUG_OTHER   = 0x0007
+    DWARF_DEBUG_OTHER   = 0x0007,
+    HLL_LINE            = 0x0008    /* IBM HLL line numbers. */
 };
 
 enum {
@@ -260,6 +267,13 @@ typedef struct areasect {
 typedef struct order_class      ORDER_CLASS;
 typedef struct order_segment    ORDER_SEGMENT;
 
+typedef struct reloc_info_struct *reloc_info;
+
+typedef struct {
+    reloc_info          externals; /* external and segment style fixups */
+    reloc_info          internals; /* internal, non-segment fixups */
+} os2_reloc_header;
+
 typedef struct section {
     SECTION             *next;
     FILE_LIST           *files;
@@ -267,13 +281,13 @@ typedef struct section {
     MOD_ENTRY           *mods;
     CLASS_ENTRY         *classes;
     ORDER_CLASS         *orderlist;     // Link to data for ordering, if used
-    targ_addr           sect_addr;
+    addr_type           sect_addr;
     overlay_ref         ovlref;
     areasect            *areas;
     SECTION             *parent;
     unsigned_32         relocs;
     unsigned_32         size;
-    void                *reloclist;
+    reloc_info          reloclist;
     union {
         unsigned_32     file_loc;
         MOD_ENTRY       *dist_mods;
@@ -370,6 +384,7 @@ typedef struct obj_name_list {
 typedef struct odbimodinfo      ODBIMODINFO;    // defd in dbg information hdrs
 typedef struct dwarfmodinfo     DWARFMODINFO;
 typedef struct cvmodinfo        CVMODINFO;
+typedef struct hllmodinfo       HLLMODINFO;
 
 typedef struct mod_entry {
     union {
@@ -400,6 +415,7 @@ typedef struct mod_entry {
         ODBIMODINFO     *o;
         DWARFMODINFO    *d;
         CVMODINFO       *cv;
+        HLLMODINFO      *hll;
     } u3;                           // union used for debugging information
 } mod_entry;
 
@@ -410,7 +426,7 @@ typedef struct class_entry {
     class_status        flags;
     byte                bits;           // segment bitnese
     section             *section;
-    targ_addr           BaseAddr;       // Fixed location to of this class for loadfile
+    addr_type           BaseAddr;       // Fixed location to of this class for loadfile
     CLASS_ENTRY         *DupClass;      // Class to get data from for output
 } class_entry;
 
@@ -419,14 +435,16 @@ typedef struct group_entry {
     SEG_LEADER          *leaders;
     symbol              *sym;
     section             *section;
-    targ_addr           grp_addr;
-    unsigned_16         segflags;
+    addr_type           addr;
+    seg_flags_type      segflags;
     offset              size;
     offset              totalsize;
     offset              linear;         // preferred base address
     union {
-        void            *grp_relocs;    // OS2/ELF only.
-        class_entry     *class;         // CV (during addr calc )
+        reloc_info      *reloclist_array;   // PE only
+        os2_reloc_header *pagelist_array;   // OS/2 flat and Windows 3.x VxD only.
+        reloc_info      reloclist;          // others
+        class_entry     *class;         // debug info CV (during addr calc )
     } g;
     union {
         unsigned        qnxflags;       // QNX
@@ -439,19 +457,9 @@ typedef struct group_entry {
     unsigned            num;
 } group_entry;
 
-// this is a bit in the segflags field. This is also defined in exeos2.h
-
-#define SEG_DATA        1
-#define SEG_READ_ONLY   0x80
-
-// the default value to initialize group flags to. This is the same as
-// SEG_LEVEL_3 in exeos2.h.
-
-#define DEFAULT_GRP_FLAGS (0xC00 | SEG_READ_ONLY)
-
 // flags used under OS/2 to indicate special information about a segment
 
-#define SEG_16_ALIAS    1
+#define OS2_SEG_16_ALIAS    1
 
 typedef struct seg_leader {
     SEG_LEADER          *next;
@@ -464,13 +472,13 @@ typedef struct seg_leader {
     offset              size;               // total size of segment
     offset              vsize;              // total virtual size of segment
     SEG_LEADER          *DupSeg;            // Segment to get data from for output
-    unsigned_16         info;
+    seg_info_type       info;
     unsigned_16         align   : 5;        // alignment of seg (power of 2)
-    unsigned_16         dbgtype : 3;        // debugging type of seg
+    unsigned_16         dbgtype : 4;        // debugging type of seg
     unsigned_16         combine : 2;        // combine val. of seg
     unsigned_32         num;                // # of addrinfos to output (video)
-    targ_addr           seg_addr;           // address of segment.
-    unsigned_16         segflags;           // format specific segment flags
+    addr_type           seg_addr;           // address of segment.
+    seg_flags_type      segflags;           // format specific segment flags
 } seg_leader;
 
 /*
@@ -528,11 +536,11 @@ typedef struct {
     void                *entry;
 } node;
 
-#define NOT_IMP_BY_ORDINAL ((ordinal_t)-1)
+#define IMP_BY_NAME     ((ordinal_t)-1)
 
 typedef signed_32       ordinal_t;
 
-typedef struct {
+typedef struct dll_sym_info {
     union {
         obj_name_list   *modnum;        /* # of DLL in imported names table */
         name_strtab     modname;
@@ -547,14 +555,13 @@ typedef struct {
     symbol              *iatsym;        // NT: symbol for address in iat
 } dll_sym_info;
 
-// this structure used for processing segment flags for various executable types
-// structures qnx_seg_flags and os2_seg_flags depend on this declaration
-typedef struct xxx_seg_flags {
-    struct xxx_seg_flags    *next;
-    unsigned_16             flags;
-    char                    *name;
-    segflag_type            type;   // as above.
-} xxx_seg_flags;
+typedef struct seg_flags_struct {
+    struct seg_flags_struct *next;
+    seg_flags_type      flags;
+    char                *name;
+    segflag_type        type;
+    seg_flags_type      specified;      // used for enforcing mutual exclusion
+} seg_flags_struct;
 
 typedef struct {
     symbol              *entry;
@@ -572,7 +579,7 @@ typedef struct {
     SEGDATA             *entry;
     orl_sec_handle      handle;     // ORL: handle for the segment.
     unsigned_8          *contents;  // ORL: pointer to contents of segment.
-    unsigned            info;
+    seg_info_type       info;
 } segnode;
 
 typedef struct list_of_names {
@@ -583,7 +590,7 @@ typedef struct list_of_names {
 typedef struct {
     segdata             *seg;
     offset              obj_offset; // pass 1: delta for fixup offsets
-    targ_addr           addr;
+    addr_type           addr;
     unsigned_8          *data;
 } lobject_data;
 
@@ -597,7 +604,7 @@ typedef struct order_class {
     class_entry         *Ring;  // Used for sorting
     char                *Name;
     char                *SrcName;
-    targ_addr           Base;
+    addr_type           Base;
     ORDER_SEGMENT       *SegList;
     boolbit             FixedAddr   : 1;
     boolbit             NoEmit      : 1;
@@ -607,7 +614,7 @@ typedef struct order_class {
 typedef struct order_segment {
     ORDER_SEGMENT       *NextSeg;
     char                *Name;
-    targ_addr           Base;
+    addr_type           Base;
     boolbit             FixedAddr   : 1;
     boolbit             NoEmit      : 1;
 } order_segment;

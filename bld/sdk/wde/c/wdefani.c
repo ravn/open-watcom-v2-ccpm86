@@ -81,8 +81,8 @@ WINEXPORT LRESULT CALLBACK WdeAniCSuperClassProc( HWND, UINT, WPARAM, LPARAM );
 /****************************************************************************/
 /* static function prototypes                                               */
 /****************************************************************************/
-static OBJPTR   WdeMakeAniC( OBJPTR, RECT *, OBJPTR, DialogStyle, char *, OBJ_ID );
-static OBJPTR   WdeAniCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl * );
+static OBJPTR   WdeMakeAniC( OBJPTR, RECT *, OBJPTR, DialogStyle, const char *, OBJ_ID );
+static OBJPTR   WdeAniCreate( OBJPTR, RECT *, OBJPTR, OBJ_ID, WdeDialogBoxControl *control );
 static void     WdeAniCSetDefineInfo( WdeDefineObjectInfo *, HWND );
 static void     WdeAniCGetDefineInfo( WdeDefineObjectInfo *, HWND );
 static bool     WdeAniCDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
@@ -121,7 +121,7 @@ OBJPTR CALLBACK WdeAniCCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle )
     }
 }
 
-OBJPTR WdeMakeAniC( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle style, char *text, OBJ_ID id )
+OBJPTR WdeMakeAniC( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle style, const char *text, OBJ_ID id )
 {
     OBJPTR new;
 
@@ -141,7 +141,7 @@ OBJPTR WdeMakeAniC( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle st
     return( new );
 }
 
-OBJPTR WdeAniCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id, WdeDialogBoxControl *info )
+OBJPTR WdeAniCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id, WdeDialogBoxControl *control )
 {
     WdeAniCObject *new;
 
@@ -180,7 +180,7 @@ OBJPTR WdeAniCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id, Wd
         return( NULL );
     }
 
-    if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
+    if( !Forward( new->object_handle, SET_OBJECT_INFO, control, NULL ) ) {
         WdeWriteTrail( "WdeAniCCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
         MemFree( new );
@@ -255,7 +255,7 @@ bool WdeAniCInit( bool first )
     SETCTL_SIZEW( WdeDefaultAniC, 0 );
     SETCTL_SIZEH( WdeDefaultAniC, 0 );
     SETCTL_TEXT( WdeDefaultAniC, NULL );
-    SETCTL_CLASSID( WdeDefaultAniC, WdeStrToControlClass( WANIMATE_CLASS ) );
+    SETCTL_CLASSID( WdeDefaultAniC, ResStrToNameOrOrdinal( WANIMATE_CLASS ) );
 
 #ifdef __WINDOWS__
     WdeAniCDispatch = MakeProcInstance_DISPATCHER( WdeAniCDispatcher, WdeGetAppInstance() );
@@ -350,7 +350,7 @@ bool WdeAniCGetWndProc( WdeAniCObject *obj, WNDPROC *proc, void *p2 )
     return( true );
 }
 
-bool WdeAniCGetWindowClass( WdeAniCObject *obj, char **class, void *p2 )
+bool WdeAniCGetWindowClass( WdeAniCObject *obj, const char **class, void *p2 )
 {
     /* unused parameters */ (void)obj; (void)p2;
 
@@ -382,7 +382,7 @@ void WdeAniCSetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     DialogStyle mask;
 
     // set the animate control options
-    mask = GETCTL_STYLE( o_info->info.c.info ) & 0x0000000f;
+    mask = GETCTL_STYLE( o_info->info.c.control ) & 0x0000000f;
     if( mask & ACS_CENTER ) {
         CheckDlgButton( hDlg, IDB_ACS_CENTER, BST_CHECKED );
     }
@@ -418,7 +418,7 @@ void WdeAniCGetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
         mask |= ACS_AUTOPLAY;
     }
 
-    SETCTL_STYLE( o_info->info.c.info, (GETCTL_STYLE( o_info->info.c.info ) & 0xffff0000) | mask );
+    SETCTL_STYLE( o_info->info.c.control, (GETCTL_STYLE( o_info->info.c.control ) & 0xffff0000) | mask );
 
     // get the extended control settings
     WdeEXGetDefineInfo( o_info, hDlg );

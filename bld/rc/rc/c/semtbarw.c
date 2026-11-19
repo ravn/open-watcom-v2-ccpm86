@@ -47,21 +47,16 @@ static void initToolBarItems( ToolBarItems *ret )
     memset( ret->items, 0, TB_ITEM_CNT * sizeof( uint_16 ) );
 }
 
-ToolBar *SemWINCreateToolBar( void )
-{
-    ToolBar     *ret;
-
-    ret = MemAllocSafe( sizeof( ToolBar ) );
-    ret->last = &ret->first;
-    ret->nodecnt = 1;
-    initToolBarItems( &ret->first );
-    return( ret );
-}
-
-void SemWINAddToolBarItem( ToolBar *toolbar, uint_16 item )
+ToolBar *SemWINAddToolBarItem( ToolBar *toolbar, uint_16 item )
 {
     ToolBarItems        *node;
 
+    if( toolbar == NULL ) {
+        toolbar = MemAllocSafe( sizeof( ToolBar ) );
+        toolbar->last = &toolbar->first;
+        toolbar->nodecnt = 1;
+        initToolBarItems( &toolbar->first );
+    }
     if( toolbar->last->cnt == TB_ITEM_CNT ) {
         toolbar->last->next = MemAllocSafe( sizeof( ToolBarItems ) );
         toolbar->last = toolbar->last->next;
@@ -71,15 +66,15 @@ void SemWINAddToolBarItem( ToolBar *toolbar, uint_16 item )
     node = toolbar->last;
     node->items[node->cnt] = item;
     node->cnt++;
+    return( toolbar );
 }
 
 static void semFreeToolBar( ToolBar *toolbar )
 {
     ToolBarItems        *cur;
-    ToolBarItems        *next;
 
-    for( cur = toolbar->first.next; cur != NULL; cur = next ) {
-        next = cur->next;
+    while( (cur = toolbar->first.next) != NULL ) {
+        toolbar->first.next = cur->next;
         MemFree( cur );
     }
     MemFree( toolbar );
@@ -87,7 +82,7 @@ static void semFreeToolBar( ToolBar *toolbar )
 
 void SemWINWriteToolBar( WResID *res_id, ToolBar *toolbar,
                       unsigned long item1, unsigned long item2,
-                      ResMemFlags flags )
+                      ResMemFlags res_flags )
 {
     ResLocation         loc;
     unsigned            cnt;
@@ -102,7 +97,7 @@ void SemWINWriteToolBar( WResID *res_id, ToolBar *toolbar,
             ResWriteToolBarItems( CurrResFile.fp, cur->items, cur->cnt );
         }
         loc.len = SemEndResource( loc.start );
-        SemAddResourceAndFree( res_id, WResIDFromNum( RESOURCE2INT( RT_TOOLBAR ) ), flags, loc );
+        SemAddResourceAndFree( res_id, WResIDFromNum( RESOURCE2INT( RT_TOOLBAR ) ), res_flags, loc );
     }
     semFreeToolBar( toolbar );
 }

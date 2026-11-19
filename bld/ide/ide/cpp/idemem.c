@@ -34,17 +34,8 @@
 #include <string.h>
 #include "guimem.h"
 #include "memfuncs.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
-
-#if defined( TRMEM ) && defined( _M_IX86 )
-#define _XSTR(s)    # s
-#define TRMEMAPI(x) _Pragma(_XSTR(aux x __frame))
-#else
-#define TRMEMAPI(x)
-#endif
 
 #ifdef TRMEM
 
@@ -93,7 +84,7 @@ void GUIMemOpen( void )
         TrHdl = _trmem_open( malloc, free, realloc, _TRMEM_NO_STRDUP,
             NULL, GUIMemPrintLine, _TRMEM_DEF );
 
-        tmpdir = getenv( "TRMEMFILE" );
+        tmpdir = std::getenv( "TRMEMFILE" );
         if( tmpdir != NULL ) {
             TrFile = fopen( tmpdir, "w" );
         }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,8 +31,8 @@
 ****************************************************************************/
 
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <wcvector.h>
 
 #include "assure.h"
@@ -48,7 +48,7 @@
 #include "clibext.h"
 
 
-#define FNAMECHARCMP( a, b ) ( tolower( (int) a ) - tolower( (int) b ) )
+#define FNAMECHARCMP( a, b ) ( std::tolower( (int) a ) - std::tolower( (int) b ) )
 
 //------------------ FFiltPattern -------------------------------
 
@@ -76,14 +76,14 @@ bool FFiltPattern::match( String & s )
         return true;
     }
 
-    _splitpath2( s, file.buffer, &file.drive, &file.dir, &file.fname, &file.ext );
-    _splitpath2( _pattern, pat.buffer, &pat.drive, &pat.dir, &pat.fname, &pat.ext );
+    ::_splitpath2( s, file.buffer, &file.drive, &file.dir, &file.fname, &file.ext );
+    ::_splitpath2( _pattern, pat.buffer, &pat.drive, &pat.dir, &pat.fname, &pat.ext );
 
-    if( stricmp( file.drive, pat.drive ) ) {
+    if( ::stricmp( file.drive, pat.drive ) ) {
         return false;
     }
 
-    if( stricmp( file.dir, pat.dir ) ) {
+    if( ::stricmp( file.dir, pat.dir ) ) {
         return false;
     }
 
@@ -134,7 +134,7 @@ FFiltEntry & FFiltEntry::operator=( const FFiltEntry & o )
 int FFiltEntry::operator==( const FFiltEntry & o ) const
 //------------------------------------------------------
 {
-    return( stricmp( _name, o._name ) == 0 );
+    return( ::stricmp( _name, o._name ) == 0 );
 }
 
 int FFiltEntry::operator<( const FFiltEntry & o ) const

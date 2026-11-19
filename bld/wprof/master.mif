@@ -12,6 +12,11 @@ wprof_wreslib_cli = gui
 wprof_qnx_usage = 1
 
 additional_clean = *.grc *.grh
+!ifdef sys_windowed
+!ifeq host_os os2
+additional_clean += *.dlg
+!endif
+!endif
 
 !include cproj.mif
 !include defrule.mif
@@ -35,7 +40,7 @@ dig_arch = all
 .c : ../c;$(dig_srcs);$(watcom_dir)/c;$(trmem_dir)
 
 inc_dirs = -I"../h" -I"$(wsample_dir)/h" $(cli_aui_inc_dirs) &
-    $(cli_wpi_inc_dirs) $(cli_hlpview_inc_dirs) -I"$(dig_dir)/h"
+    $(cli_wpi_inc_dirs) $(cli_hlpview_inc_dirs) -I"$(dig_dir)/h" -I"$(trmem_dir)"
 
 extra_cpp_flags = $(dig_arch_cpp_flags) -DBLDVER=$(bld_ver)
 !ifdef sys_windowed

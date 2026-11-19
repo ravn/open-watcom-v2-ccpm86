@@ -35,7 +35,9 @@
 :: The following segment only appears in locale.h.
 #ifdef __cplusplus
 
-#include <clocale>
+#ifndef _CLOCALE_INCLUDED
+ #include <clocale>
+#endif
 
 // C99 types in locale.h.
 using std::lconv;
@@ -43,10 +45,6 @@ using std::lconv;
 // C99 functions in locale.h.
 using std::setlocale;
 using std::localeconv;
-
-:include ext.sp
-using std::_wsetlocale;
-:include extepi.sp
 
 #else /* __cplusplus not defined */
 :: End of segment that is only in locale.h
@@ -101,12 +99,12 @@ struct lconv {
 
 _WCRTLINK extern char         *setlocale( int __category, const char *__locale );
 _WCRTLINK extern struct lconv *localeconv(void);
+:include nsstdepi.sp
 
 :: Wide character version
 :include ext.sp
 _WCRTLINK extern wchar_t      *_wsetlocale( int __category, const wchar_t *__locale );
 :include extepi.sp
-:include nsstdepi.sp
 
 :include poppack.sp
 

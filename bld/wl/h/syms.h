@@ -196,7 +196,7 @@ typedef struct symbol {
     struct symbol       *hash;
     struct symbol       *next_by_publist; /* Ring2... */
     struct symbol       *next;
-    targ_addr           addr;
+    addr_type           addr;
     unsigned_16         namelen_cmp;
     sym_info            info;       // flags & floating point patch type.
     struct mod_entry    *mod;
@@ -204,7 +204,8 @@ typedef struct symbol {
         void            *edges;     // for dead code elim. when sym undefd
         struct segdata  *seg;       // seg symbol is in.
         name_strtab     alias;      // for aliased syms.
-        void            *import;    // NOVELL & OS/2 only: imported symbol data.
+        struct nov_import   *import_nov; // NOVELL only: imported symbol data.
+        struct dll_sym_info *import_dll; // OS/2 only: imported symbol data.
         offset          cdefsize;   // altdef comdefs: size of comdef
     } p;
     union {
@@ -260,5 +261,6 @@ extern offset           SymbolAbsAddr( symbol * );
 extern struct group_entry *SymbolGroup( symbol * );
 
 extern size_t           NameLen;
-extern int              (*CmpRtn)( const char *, const char *, size_t );
+extern int              (*CmpNRtn)( const char *, const char *, size_t );
+extern int              (*CmpRtn)( const char *, const char * );
 extern symbol           *LastSym;

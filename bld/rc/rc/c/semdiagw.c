@@ -79,67 +79,58 @@
 #include "rcrtns.h"
 #include "rccore.h"
 
+#include "clibext.h"
+
 
 static FullDialogBoxHeader *NewDialogBoxHeader( void )
 /****************************************************/
 {
-    FullDialogBoxHeader     *newheader;
+    FullDialogBoxHeader     *diaghead;
 
-    newheader = MemAllocSafe( sizeof( FullDialogBoxHeader ) );
+    diaghead = MemAllocSafe( sizeof( FullDialogBoxHeader ) );
 
-    newheader->iswin32 = CmdLineParms.iswin32;
     if( CmdLineParms.iswin32 ) {
-        newheader->u.Head32.Head.Style = 0L;
-        newheader->u.Head32.Head.ExtendedStyle = 0L;
-        newheader->u.Head32.Head.NumOfItems = 0;
-        newheader->u.Head32.Head.SizeInfo.x = 0;
-        newheader->u.Head32.Head.SizeInfo.y = 0;
-        newheader->u.Head32.Head.SizeInfo.width = 0;
-        newheader->u.Head32.Head.SizeInfo.height = 0;
-        newheader->u.Head32.Head.MenuName = NULL;
-        newheader->u.Head32.Head.ClassName = NULL;
-        newheader->u.Head32.Head.Caption = NULL;
-        newheader->u.Head32.Head.PointSize = 0;
-        newheader->u.Head32.Head.FontName = NULL;
+        diaghead->Head.Style = 0;
+        diaghead->Head.ExtendedStyle = 0;
+        diaghead->Head.NumOfItems = 0;
+        diaghead->Head.SizeInfo.x = 0;
+        diaghead->Head.SizeInfo.y = 0;
+        diaghead->Head.SizeInfo.width = 0;
+        diaghead->Head.SizeInfo.height = 0;
+        diaghead->Head.MenuName = NULL;
+        diaghead->Head.ClassName = NULL;
+        diaghead->Head.Caption = NULL;
+        diaghead->Head.PointSize = 0;
+        diaghead->Head.FontName = NULL;
 
-        newheader->u.Head32.ExHead.FontWeight = 0;
-        newheader->u.Head32.ExHead.FontItalic = 0;
-        newheader->u.Head32.ExHead.FontCharset = DEFAULT_CHARSET;
-        newheader->u.Head32.ExHead.HelpId = 0L;
-        newheader->u.Head32.ExHead.FontWeightDefined = false;
-        newheader->u.Head32.ExHead.FontItalicDefined = false;
-        newheader->u.Head32.ExHead.FontCharsetDefined = false;
+        diaghead->Head.FontWeight = 0;
+        diaghead->Head.FontItalic = 0;
+        diaghead->Head.FontCharset = DEFAULT_CHARSET;
+        diaghead->Head.HelpId = 0;
+        diaghead->Head.FontWeightDefined = false;
+        diaghead->Head.FontItalicDefined = false;
+        diaghead->Head.FontCharsetDefined = false;
     } else {
-        newheader->u.Head.Style = 0L;
-        newheader->u.Head.NumOfItems = 0;
-        newheader->u.Head.SizeInfo.x = 0;
-        newheader->u.Head.SizeInfo.y = 0;
-        newheader->u.Head.SizeInfo.width = 0;
-        newheader->u.Head.SizeInfo.height = 0;
-        newheader->u.Head.MenuName = NULL;
-        newheader->u.Head.ClassName = NULL;
-        newheader->u.Head.Caption = NULL;
-        newheader->u.Head.PointSize = 0;
-        newheader->u.Head.FontName = NULL;
+        diaghead->Head.Style = 0;
+        diaghead->Head.NumOfItems = 0;
+        diaghead->Head.SizeInfo.x = 0;
+        diaghead->Head.SizeInfo.y = 0;
+        diaghead->Head.SizeInfo.width = 0;
+        diaghead->Head.SizeInfo.height = 0;
+        diaghead->Head.MenuName = NULL;
+        diaghead->Head.ClassName = NULL;
+        diaghead->Head.Caption = NULL;
+        diaghead->Head.PointSize = 0;
+        diaghead->Head.FontName = NULL;
     }
 
-    newheader->StyleGiven = false;
+    diaghead->StyleGiven = false;
 
-    return( newheader );
+    return( diaghead );
 } /* NewDialogBoxHeader */
 
-FullDialogBoxHeader *SemWINNewDiagOptions( FullDialogOptions *opt )
-/*****************************************************************/
-{
-    FullDialogBoxHeader *newheader;
-
-    newheader = NewDialogBoxHeader();
-
-    return( SemWINDiagOptions( newheader, opt ) );
-} /* SemWINNewDiagOptions */
-
-static void AddDiagOption( DialogBoxHeader *head, FullDialogOptions *opt )
-/************************************************************************/
+static void AddDialogOption( DialogBoxHeader *head, FullDialogOptions *opt )
+/**************************************************************************/
 {
     switch( opt->token ) {
     case Y_STYLE:
@@ -158,19 +149,15 @@ static void AddDiagOption( DialogBoxHeader *head, FullDialogOptions *opt )
         head->ClassName = opt->Opt.Name;
         break;
     case Y_FONT:
-        switch( CmdLineParms.Win16VerStamp ) {
-        case VERSION_10_STAMP:
-        case VERSION_20_STAMP:
-            RcWarning( WARN_DLGFONT_WIN2X );
-            break;
-        default:
+        if( CmdLineParms.winver < 30 ) {
+            RcWarning( RCMSG_DLGFONT_WIN2X );
+        } else {
             head->Style |= DS_SETFONT;
             head->PointSize = opt->Opt.Font.PointSize;
             if( head->FontName != NULL ) {
                 MemFree( head->FontName );
             }
             head->FontName = opt->Opt.Font.FontName;
-            break;
         }
         break;
     case Y_CAPTION:
@@ -181,120 +168,116 @@ static void AddDiagOption( DialogBoxHeader *head, FullDialogOptions *opt )
         head->Caption = opt->Opt.Str;
         break;
     case Y_EXSTYLE:
-        RcWarning( ERR_NT_KEYWORD, SemWINTokenToString( opt->token ) );
+        RcWarning( RCMSG_NT_KEYWORD, SemWINTokenToString( opt->token ) );
         break;
     }
-} /* AddDiagOptions */
+} /* AddDialogOptions */
 
-static void AddDiagOption32( DlgHeader32 *head, FullDialogOptions *opt )
-/**********************************************************************/
+static void AddDialogOption32( DialogBoxHeader *head, FullDialogOptions *opt )
+/****************************************************************************/
 {
     switch( opt->token ) {
     case Y_STYLE:
-        head->Head.Style |= opt->Opt.Style;
+        head->Style |= opt->Opt.Style;
         break;
     case Y_EXSTYLE:
-        head->Head.ExtendedStyle |= opt->Opt.Exstyle;
+        head->ExtendedStyle |= opt->Opt.Exstyle;
         break;
     case Y_MENU:
-        if( head->Head.MenuName != NULL ) {
-            MemFree( head->Head.MenuName );
+        if( head->MenuName != NULL ) {
+            MemFree( head->MenuName );
         }
-        head->Head.MenuName = opt->Opt.Name;
+        head->MenuName = opt->Opt.Name;
         break;
     case Y_CLASS:
-        if( head->Head.ClassName != NULL ) {
-            MemFree( head->Head.ClassName );
+        if( head->ClassName != NULL ) {
+            MemFree( head->ClassName );
         }
-        head->Head.ClassName = opt->Opt.Name;
+        head->ClassName = opt->Opt.Name;
         break;
     case Y_FONT:
-        head->Head.Style |= DS_SETFONT;
-        head->Head.PointSize = opt->Opt.Font.PointSize;
-        if( head->Head.FontName != NULL ) {
-            MemFree( head->Head.FontName );
+        head->Style |= DS_SETFONT;
+        head->PointSize = opt->Opt.Font.PointSize;
+        if( head->FontName != NULL ) {
+            MemFree( head->FontName );
         }
-        head->Head.FontName = opt->Opt.Font.FontName;
-        head->ExHead.FontItalic = opt->Opt.Font.FontItalic;
-        head->ExHead.FontWeight = opt->Opt.Font.FontWeight;
-        head->ExHead.FontCharset = opt->Opt.Font.FontCharset;
-        head->ExHead.FontItalicDefined = opt->Opt.Font.FontItalicDefined;
-        head->ExHead.FontWeightDefined = opt->Opt.Font.FontWeightDefined;
-        head->ExHead.FontCharsetDefined = opt->Opt.Font.FontCharsetDefined;
+        head->FontName = opt->Opt.Font.FontName;
+        head->FontItalic = opt->Opt.Font.FontItalic;
+        head->FontWeight = opt->Opt.Font.FontWeight;
+        head->FontCharset = opt->Opt.Font.FontCharset;
+        head->FontItalicDefined = opt->Opt.Font.FontItalicDefined;
+        head->FontWeightDefined = opt->Opt.Font.FontWeightDefined;
+        head->FontCharsetDefined = opt->Opt.Font.FontCharsetDefined;
         break;
     case Y_CAPTION:
-        head->Head.Style |= WS_CAPTION;
-        if( head->Head.Caption != NULL ) {
-            MemFree( head->Head.Caption );
+        head->Style |= WS_CAPTION;
+        if( head->Caption != NULL ) {
+            MemFree( head->Caption );
         }
-        head->Head.Caption = opt->Opt.Str;
+        head->Caption = opt->Opt.Str;
         break;
     case Y_LANGUAGE:
         SemWINSetResourceLanguage( &opt->Opt.lang, true );
         break;
     }
-} /* AddDiagOptions32 */
+} /* AddDialogOptions32 */
 
-FullDialogBoxHeader *SemWINDiagOptions( FullDialogBoxHeader *head, FullDialogOptions *opt )
-/*****************************************************************************************/
+FullDialogBoxHeader *SemWINDialogOptions( FullDialogBoxHeader *diaghead, FullDialogOptions *opt )
+/***********************************************************************************************/
 {
-    if( head->iswin32 ) {
-        AddDiagOption32( &head->u.Head32, opt );
+    if( diaghead == NULL ) {
+        diaghead = NewDialogBoxHeader();
+    }
+    if( CmdLineParms.iswin32 ) {
+        AddDialogOption32( &diaghead->Head, opt );
     } else {
-        AddDiagOption( &head->u.Head, opt );
+        AddDialogOption( &diaghead->Head, opt );
     }
     if( opt->token == Y_STYLE ) {
-        head->StyleGiven = true;
+        diaghead->StyleGiven = true;
     }
 
-    return( head );
+    return( diaghead );
 }
 
-FullDiagCtrlList *SemWINEmptyDiagCtrlList( void )
-/***********************************************/
+FullDialogCtrlListWIN *SemWINEmptyDialogCtrlList( void )
+/******************************************************/
 {
-    FullDiagCtrlList    *newlist;
+    FullDialogCtrlListWIN   *newlist;
 
-    newlist = MemAllocSafe( sizeof( FullDiagCtrlList ) );
+    newlist = MemAllocSafe( sizeof( FullDialogCtrlListWIN ) );
     newlist->head = NULL;
     newlist->tail = NULL;
     newlist->numctrls = 0;
     return( newlist );
 }
 
-FullDiagCtrlList *SemWINNewDiagCtrlList( FullDialogBoxControl *ctrl, DataElemList *list )
-/***************************************************************************************/
-{
-    FullDiagCtrlList    *newlist;
-
-    newlist = SemWINEmptyDiagCtrlList();
-    return( SemWINAddDiagCtrlList( newlist, ctrl, list ) );
-} /* SemWINNewDiagCtrlList */
-
-FullDiagCtrlList *SemWINAddDiagCtrlList( FullDiagCtrlList *list,
-                    FullDialogBoxControl *ctrl, DataElemList *dataList )
+FullDialogCtrlListWIN *SemWINAddDialogCtrlList( FullDialogCtrlListWIN *list,
+                    FullDialogBoxControlWIN *diagctrl, DataElemList *dataList )
 /**********************************************************************/
 {
-    if( ctrl != NULL ) {
-        ctrl->dataListHead = dataList;
-        ResAddLLItemAtEnd( (void **)&(list->head), (void **)&(list->tail), ctrl );
+    if( list == NULL ) {
+        list = SemWINEmptyDialogCtrlList();
+    }
+    if( diagctrl != NULL ) {
+        diagctrl->dataListHead = dataList;
+        ResAddLLItemAtEnd( (void **)&(list->head), (void **)&(list->tail), diagctrl );
         list->numctrls++;
     }
     return( list );
-} /* SemWINAddDiagCtrlList */
+} /* SemWINAddDialogCtrlList */
 
-static FullDialogBoxControl *semInitDiagCtrl( void )
-/**************************************************/
+static FullDialogBoxControlWIN *semInitDialogCtrl( void )
+/*******************************************************/
 {
-    FullDialogBoxControl        *newctrl;
+    FullDialogBoxControlWIN     *diagctrl;
 
-    newctrl = MemAllocSafe( sizeof( FullDialogBoxControl ) );
-    newctrl->next = NULL;
-    newctrl->prev = NULL;
-    newctrl->iswin32 = CmdLineParms.iswin32;
+    diagctrl = MemAllocSafe( sizeof( FullDialogBoxControlWIN ) );
+    diagctrl->next = NULL;
+    diagctrl->prev = NULL;
 
-    return( newctrl );
-} /* semInitDiagCtrl */
+    return( diagctrl );
+} /* semInitDialogCtrl */
 
 /*
  * These are the default styles used for all dialog box control statmens
@@ -343,10 +326,36 @@ static FullDialogBoxControl *semInitDiagCtrl( void )
 #define LO_WORD     0x0000ffff
 #define HI_WORD     0xffff0000
 
-FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions opts )
-/************************************************************************************/
+static ResNameOrOrdinal *WINCanonicalControlClass( ResNameOrOrdinal *cclass )
 {
-    FullDialogBoxControl    *newctrl;
+    ResNameOrOrdinal    *new_cclass;
+
+    if( cclass->ord.fFlag == 0xff ) {
+        new_cclass = ResNumToNameOrOrdinal( cclass->ord.wOrdinalID );
+    } else {
+        if( stricmp( cclass->name, "button" ) == 0 ) {
+            new_cclass = ResNumToNameOrOrdinal( CLASS_BUTTON );
+        } else if( stricmp( cclass->name, "edit" ) == 0 ) {
+            new_cclass = ResNumToNameOrOrdinal( CLASS_EDIT );
+        } else if( stricmp( cclass->name, "static" ) == 0 ) {
+            new_cclass = ResNumToNameOrOrdinal( CLASS_STATIC );
+        } else if( stricmp( cclass->name, "listbox" ) == 0 ) {
+            new_cclass = ResNumToNameOrOrdinal( CLASS_LISTBOX );
+        } else if( stricmp( cclass->name, "scrollbar" ) == 0 ) {
+            new_cclass = ResNumToNameOrOrdinal( CLASS_SCROLLBAR );
+        } else if( stricmp( cclass->name, "combobox" ) == 0 ) {
+            new_cclass = ResNumToNameOrOrdinal( CLASS_COMBOBOX );
+        } else {
+            new_cclass = ResStrToNameOrOrdinal( cclass->name );
+        }
+    }
+    return( new_cclass );
+}
+
+FullDialogBoxControlWIN *SemWINNewDialogCtrl( YYTOKENTYPE token, FullDialogCtrlOptionsWIN opts )
+/**********************************************************************************************/
+{
+    FullDialogBoxControlWIN *diagctrl;
     uint_32                 style_mask; /* for the style of the control */
     uint_32                 style_value;
     uint_32                 defstyle_hi = 0;
@@ -355,7 +364,7 @@ FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions 
     uint_32                 style_lo;
     uint_16                 class = 0;
     uint_16                 tmp_mask;
-    ControlClass            *cont_class;
+    ResNameOrOrdinal        *cclass;
 
     switch( token ) {
     case Y_LTEXT:
@@ -429,7 +438,7 @@ FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions 
             defstyle_hi = DEF_AUTO3STATE_HI;
             defstyle_lo = DEF_AUTO3STATE_LO;
         } else {
-            RcWarning( ERR_NT_KEYWORD, SemWINTokenToString( token ) );
+            RcWarning( RCMSG_NT_KEYWORD, SemWINTokenToString( token ) );
             return( NULL );
         }
         break;
@@ -439,7 +448,7 @@ FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions 
             defstyle_hi = DEF_AUTOCHECKBOX_HI;
             defstyle_lo = DEF_AUTOCHECKBOX_LO;
         } else {
-            RcWarning( ERR_NT_KEYWORD, SemWINTokenToString( token ) );
+            RcWarning( RCMSG_NT_KEYWORD, SemWINTokenToString( token ) );
             return( NULL );
         }
         break;
@@ -449,7 +458,7 @@ FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions 
             defstyle_hi = DEF_AUTORADIOBUTTON_HI;
             defstyle_lo = DEF_AUTORADIOBUTTON_LO;
         } else {
-            RcWarning( ERR_NT_KEYWORD, SemWINTokenToString( token ) );
+            RcWarning( RCMSG_NT_KEYWORD, SemWINTokenToString( token ) );
             return( NULL );
         }
         break;
@@ -464,14 +473,14 @@ FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions 
             defstyle_hi = DEF_STATE3_HI;
             defstyle_lo = DEF_STATE3_LO;
         } else {
-            RcWarning( ERR_NT_KEYWORD, SemWINTokenToString( token ) );
+            RcWarning( RCMSG_NT_KEYWORD, SemWINTokenToString( token ) );
             return( NULL );
         }
         break;
     }
 
-    newctrl = semInitDiagCtrl();
-    cont_class = ResNumToControlClass( class );
+    diagctrl = semInitDialogCtrl();
+    cclass = ResNumToNameOrOrdinal( class );
 
     style_mask = opts.Style.Mask;
     style_value = opts.Style.Value;
@@ -494,144 +503,123 @@ FullDialogBoxControl *SemWINNewDiagCtrl( YYTOKENTYPE token, FullDiagCtrlOptions 
      */
     style_hi = (style_mask & style_value) | (~style_mask & defstyle_hi);
 
-    if( newctrl->iswin32 ) {
-        newctrl->u.ctrl32.ID = opts.ID;
-        newctrl->u.ctrl32.SizeInfo = opts.SizeInfo;
-        newctrl->u.ctrl32.Text = opts.Text;
-        newctrl->u.ctrl32.ClassID = cont_class;
-        newctrl->u.ctrl32.Style = (style_lo & LO_WORD) | (style_hi & HI_WORD);
+    if( CmdLineParms.iswin32 ) {
+        diagctrl->ctrl.ID = opts.ID;
+        diagctrl->ctrl.SizeInfo = opts.SizeInfo;
+        diagctrl->ctrl.Text = opts.Text;
+        diagctrl->ctrl.ClassID = cclass;
+        diagctrl->ctrl.Style = (style_lo & LO_WORD) | (style_hi & HI_WORD);
         /*
          * ExtraBytes and ExtendStyle are 0 for all controls
          * that RC understands
          */
-        newctrl->u.ctrl32.ExtraBytes = 0;
+        diagctrl->ctrl.ExtraBytes = 0;
 
-        newctrl->u.ctrl32.ExtendedStyle = opts.ExtendedStyle;
-        newctrl->u.ctrl32.HelpId = opts.HelpId;
-        newctrl->u.ctrl32.HelpIdDefined = opts.HelpIdDefined;
+        diagctrl->ctrl.ExtendedStyle = opts.ExtendedStyle;
+        diagctrl->ctrl.HelpId = opts.HelpId;
     } else {
-        newctrl->u.ctrl.ID = opts.ID;
-        newctrl->u.ctrl.SizeInfo = opts.SizeInfo;
-        newctrl->u.ctrl.Text = opts.Text;
-        newctrl->u.ctrl.ClassID = cont_class;
-        newctrl->u.ctrl.Style = (style_lo & LO_WORD) | (style_hi & HI_WORD);
+        diagctrl->ctrl.ID = opts.ID;
+        diagctrl->ctrl.SizeInfo = opts.SizeInfo;
+        diagctrl->ctrl.Text = opts.Text;
+        diagctrl->ctrl.ClassID = cclass;
+        diagctrl->ctrl.Style = (style_lo & LO_WORD) | (style_hi & HI_WORD);
         /*
          * ExtraBytes is 0 for all controls that RC understands
          */
-        newctrl->u.ctrl.ExtraBytes = 0;
+        diagctrl->ctrl.ExtraBytes = 0;
     }
 
-    return( newctrl );
-} /* SemWINNewDiagCtrl */
+    return( diagctrl );
+} /* SemWINNewDialogCtrl */
 
 
-static void SemFreeDiagCtrlList( FullDiagCtrlList *list )
-/*******************************************************/
+static void SemFreeDialogCtrlList( FullDialogCtrlListWIN *list )
+/**************************************************************/
 {
-    FullDialogBoxControl        *ctrl;
-    FullDialogBoxControl        *next;
+    FullDialogBoxControlWIN     *diagctrl;
 
-    for( ctrl = list->head; ctrl != NULL; ctrl = next ) {
-        next = ctrl->next;
+    while( (diagctrl = list->head) != NULL ) {
+        list->head = diagctrl->next;
         /*
          * free the contents of pointers within the structure
          */
-        if( ctrl->iswin32 ) {
-            if( ctrl->u.ctrl32.ClassID != NULL ) {
-                MemFree( ctrl->u.ctrl32.ClassID );
+        if( CmdLineParms.iswin32 ) {
+            if( diagctrl->ctrl.ClassID != NULL ) {
+                MemFree( diagctrl->ctrl.ClassID );
             }
-            if( ctrl->u.ctrl32.Text != NULL ) {
-                MemFree( ctrl->u.ctrl32.Text );
+            if( diagctrl->ctrl.Text != NULL ) {
+                MemFree( diagctrl->ctrl.Text );
             }
         } else {
-            if( ctrl->u.ctrl.ClassID != NULL ) {
-                MemFree( ctrl->u.ctrl.ClassID );
+            if( diagctrl->ctrl.ClassID != NULL ) {
+                MemFree( diagctrl->ctrl.ClassID );
             }
-            if( ctrl->u.ctrl.Text != NULL ) {
-                MemFree( ctrl->u.ctrl.Text );
+            if( diagctrl->ctrl.Text != NULL ) {
+                MemFree( diagctrl->ctrl.Text );
             }
         }
-        MemFree( ctrl );
+        MemFree( diagctrl );
     }
-
     MemFree( list );
-} /* SemFreeDiagCtrlList */
 
-static void SemFreeDialogHeader( FullDialogBoxHeader *head )
-/**********************************************************/
+} /* SemFreeDialogCtrlList */
+
+static void SemFreeDialogHeader( FullDialogBoxHeader *diaghead )
+/**************************************************************/
 {
-    if( head->iswin32 ) {
-        if( head->u.Head32.Head.MenuName != NULL ) {
-            MemFree( head->u.Head32.Head.MenuName );
+    if( CmdLineParms.iswin32 ) {
+        if( diaghead->Head.MenuName != NULL ) {
+            MemFree( diaghead->Head.MenuName );
         }
-        if( head->u.Head32.Head.ClassName != NULL ) {
-            MemFree( head->u.Head32.Head.ClassName );
+        if( diaghead->Head.ClassName != NULL ) {
+            MemFree( diaghead->Head.ClassName );
         }
-        if( head->u.Head32.Head.Caption != NULL ) {
-            MemFree( head->u.Head32.Head.Caption );
+        if( diaghead->Head.Caption != NULL ) {
+            MemFree( diaghead->Head.Caption );
         }
-        if( head->u.Head32.Head.FontName != NULL ) {
-            MemFree( head->u.Head32.Head.FontName );
+        if( diaghead->Head.FontName != NULL ) {
+            MemFree( diaghead->Head.FontName );
         }
     } else {
-        if( head->u.Head.MenuName != NULL ) {
-            MemFree( head->u.Head.MenuName );
+        if( diaghead->Head.MenuName != NULL ) {
+            MemFree( diaghead->Head.MenuName );
         }
-        if( head->u.Head.ClassName != NULL ) {
-            MemFree( head->u.Head.ClassName );
+        if( diaghead->Head.ClassName != NULL ) {
+            MemFree( diaghead->Head.ClassName );
         }
-        if( head->u.Head.Caption != NULL ) {
-            MemFree( head->u.Head.Caption );
+        if( diaghead->Head.Caption != NULL ) {
+            MemFree( diaghead->Head.Caption );
         }
-        if( head->u.Head.FontName != NULL ) {
-            MemFree( head->u.Head.FontName );
+        if( diaghead->Head.FontName != NULL ) {
+            MemFree( diaghead->Head.FontName );
         }
     }
 
-    MemFree( head );
+    MemFree( diaghead );
 } /* SemFreeDialogHeader */
 
-static bool SemWriteDiagCtrlList( FullDiagCtrlList *list, int *err_code, YYTOKENTYPE tokentype )
-/**********************************************************************************************/
+static bool SemWriteDialogCtrlList( FullDialogCtrlListWIN *list, int *err_code, bool is_dialogex )
+/************************************************************************************************/
 {
     bool                        error;
-    FullDialogBoxControl        *ctrl;
-    DialogBoxExControl32        controlex;
-    DialogBoxControl32          control;
+    FullDialogBoxControlWIN     *diagctrl;
 
     error = false;
-    for( ctrl = list->head; ctrl != NULL && !error; ctrl = ctrl->next ) {
-        if( ctrl->iswin32 ) {
-            if( tokentype == Y_DIALOG ) {
-                control.Style = ctrl->u.ctrl32.Style;
-                control.ExtendedStyle = ctrl->u.ctrl32.ExtendedStyle;
-                control.SizeInfo = ctrl->u.ctrl32.SizeInfo;
-                control.ID = ctrl->u.ctrl32.ID;
-                control.ClassID = ctrl->u.ctrl32.ClassID;
-                control.Text = ctrl->u.ctrl32.Text;
-                control.ExtraBytes = ctrl->u.ctrl32.ExtraBytes;
-                error = ResWriteDialogBoxControl32( &control, CurrResFile.fp );
-            } else if( tokentype == Y_DIALOG_EX ) {
-                controlex.HelpId = ctrl->u.ctrl32.HelpId;
-                controlex.ExtendedStyle = ctrl->u.ctrl32.ExtendedStyle;
-                controlex.Style = ctrl->u.ctrl32.Style;
-                controlex.SizeInfo = ctrl->u.ctrl32.SizeInfo;
-                controlex.ID = ctrl->u.ctrl32.ID;
-                controlex.ClassID = ctrl->u.ctrl32.ClassID;
-                controlex.Text = ctrl->u.ctrl32.Text;
-                controlex.ExtraBytes = ctrl->u.ctrl32.ExtraBytes;
-                error = ResWriteDialogBoxExControl32( &controlex, CurrResFile.fp );
-                if( ctrl->dataListHead != NULL ) {
-                    SemFlushDataElemList( ctrl->dataListHead, false );
-                }
+    for( diagctrl = list->head; diagctrl != NULL && !error; diagctrl = diagctrl->next ) {
+        if( is_dialogex ) {
+            error = ResWriteDialogBoxExControl( &(diagctrl->ctrl), CurrResFile.fp );
+            if( diagctrl->dataListHead != NULL ) {
+                SemFlushDataElemList( diagctrl->dataListHead, false );
             }
+        } else if( CmdLineParms.iswin32 ) {
+            error = ResWriteDialogBoxControl32( &(diagctrl->ctrl), CurrResFile.fp );
         } else {
-            error = ResWriteDialogBoxControl( &(ctrl->u.ctrl), CurrResFile.fp );
+            error = ResWriteDialogBoxControl( &(diagctrl->ctrl), CurrResFile.fp );
         }
     }
     *err_code = LastWresErr();
     return( error );
-} /* SemWriteDiagCtrlList */
+} /* SemWriteDialogCtrlList */
 
 static size_t SemCountBytes( DataElemList *list )
 /***********************************************/
@@ -653,73 +641,56 @@ static size_t SemCountBytes( DataElemList *list )
     return( bytes );
 }
 
-static void SemCheckDialogBox( FullDialogBoxHeader *head, YYTOKENTYPE tokentype,
-                               DlgHelpId dlghelp, FullDiagCtrlList *ctrls )
-/***************************************************************************/
+static void SemCheckDialogBox( FullDialogBoxHeader *diaghead, bool is_dialogex,
+                               help_id HelpId, FullDialogCtrlListWIN *ctrls )
+/*****************************************************************************/
 {
-    FullDialogBoxControl    *travptr;
+    FullDialogBoxControlWIN *diagctrl;
 
-    if( head->iswin32 ) {
-        if( tokentype == Y_DIALOG
-          && dlghelp.HelpIdDefined ) {
-            RcError( ERR_DIALOG_HELPID );
-        } else if( tokentype == Y_DIALOG_EX
-          && dlghelp.HelpIdDefined ) {
-            head->u.Head32.ExHead.HelpId = dlghelp.HelpId;
-        }
-        if( tokentype == Y_DIALOG ) {
-            if( head->u.Head32.ExHead.FontItalicDefined ) {
-                RcError( ERR_FONT_ITALIC );
-            }
-            if( head->u.Head32.ExHead.FontWeightDefined ) {
-                RcError( ERR_FONT_WEIGHT );
-            }
-            if( head->u.Head32.ExHead.FontCharsetDefined ) {
-                RcError( ERR_FONT_CHARSET );
-            }
-            for( travptr = ctrls->head; travptr != NULL; travptr = travptr->next ) {
-                if( travptr->u.ctrl32.HelpIdDefined ) {
-                    RcError( ERR_DIALOG_CONTROL_HELPID );
-                }
-                if( travptr->dataListHead != NULL ) {
-                    SemFreeDataElemList( travptr->dataListHead );
-                    RcError( ERR_DATA_ELEMENTS );
+    if( CmdLineParms.iswin32 ) {
+        if( is_dialogex ) {
+            diaghead->Head.HelpId = HelpId;
+        } else {
+            for( diagctrl = ctrls->head; diagctrl != NULL; diagctrl = diagctrl->next ) {
+                if( diagctrl->dataListHead != NULL ) {
+                    SemFreeDataElemList( diagctrl->dataListHead );
+                    RcError( RCMSG_DATA_ELEMENTS );
                 }
             }
         }
     }
 }
 
-void SemWINWriteDialogBox( WResID *res_id, ResMemFlags flags,
-                    DialogSizeInfo sizeinfo, FullDialogBoxHeader *head,
-                    FullDiagCtrlList *ctrls, DlgHelpId dlghelp,
-                    YYTOKENTYPE tokentype )
-/******************************************************************/
+void SemWINWriteDialogBox( WResID *res_id, ResMemFlags res_flags,
+                    DialogSizeInfo SizeInfo, FullDialogBoxHeader *diaghead,
+                    FullDialogCtrlListWIN *ctrls, help_id HelpId,
+                    bool is_dialogex )
+/*************************************************************************/
 {
     ResLocation              loc;
     int                      err_code = 0;
     int                      error;
-    FullDialogBoxControl     *travptr;
+    FullDialogBoxControlWIN  *diagctrl;
 
     error = 0;
-    if( head == NULL ) {
-        head = NewDialogBoxHeader();
+    if( diaghead == NULL ) {
+        diaghead = NewDialogBoxHeader();
     }
-    SemCheckDialogBox( head, tokentype, dlghelp, ctrls );
-    if( head->iswin32 ) {
-        if( tokentype != Y_DIALOG ) {
-            for( travptr = ctrls->head; travptr != NULL; travptr = travptr->next ) {
-                if( travptr->dataListHead != NULL ) {
-                    travptr->u.ctrl32.ExtraBytes = SemCountBytes( travptr->dataListHead );
+    SemCheckDialogBox( diaghead, is_dialogex, HelpId, ctrls );
+    if( CmdLineParms.iswin32 ) {
+        if( is_dialogex ) {
+            for( diagctrl = ctrls->head; diagctrl != NULL; diagctrl = diagctrl->next ) {
+                if( diagctrl->dataListHead != NULL ) {
+                    diagctrl->ctrl.ExtraBytes = SemCountBytes( diagctrl->dataListHead );
                 }
             }
         }
-        if( !head->StyleGiven ) {
-            head->u.Head32.Head.Style |= (WS_POPUP | WS_BORDER | WS_SYSMENU);
+        if( !diaghead->StyleGiven ) {
+            diaghead->Head.Style |= (WS_POPUP | WS_BORDER | WS_SYSMENU);
         }
 
-        head->u.Head32.Head.NumOfItems = ctrls->numctrls;
-        head->u.Head32.Head.SizeInfo = sizeinfo;
+        diaghead->Head.NumOfItems = ctrls->numctrls;
+        diaghead->Head.SizeInfo = SizeInfo;
         /*
          * pad the start of the resource so that padding within the resource
          * is easier
@@ -728,8 +699,8 @@ void SemWINWriteDialogBox( WResID *res_id, ResMemFlags flags,
             error = 1;
         }
     } else {
-        if( !head->StyleGiven ) {
-            head->u.Head.Style |= (WS_POPUP | WS_BORDER | WS_SYSMENU);
+        if( !diaghead->StyleGiven ) {
+            diaghead->Head.Style |= (WS_POPUP | WS_BORDER | WS_SYSMENU);
         }
         /*
          * Win16 resources stores resource count in one byte thus
@@ -738,104 +709,96 @@ void SemWINWriteDialogBox( WResID *res_id, ResMemFlags flags,
         if( ctrls->numctrls > 255 ) {
             error = 2;
         } else {
-            head->u.Head.NumOfItems = ctrls->numctrls & 0xFF;
-            head->u.Head.SizeInfo = sizeinfo;
+            diaghead->Head.NumOfItems = ctrls->numctrls & 0xFF;
+            diaghead->Head.SizeInfo = SizeInfo;
         }
     }
     if( !error
       && !ErrorHasOccured ) {
         loc.start = SemStartResource();
-        if( head->iswin32 ) {
-            if( tokentype == Y_DIALOG ) {
-                if( ResWriteDialogBoxHeader32( &(head->u.Head32.Head), CurrResFile.fp ) ) {
-                    error = 1;
-                }
-            } else if( tokentype == Y_DIALOG_EX ) {
-                if( ResWriteDialogBoxExHeader32( &(head->u.Head32.Head), &(head->u.Head32.ExHead), CurrResFile.fp ) ) {
-                    error = 1;
-                }
+        if( is_dialogex ) {
+            if( ResWriteDialogBoxExHeader( &(diaghead->Head), CurrResFile.fp ) ) {
+                error = 1;
+            }
+        } else if( CmdLineParms.iswin32 ) {
+            if( ResWriteDialogBoxHeader32( &(diaghead->Head), CurrResFile.fp ) ) {
+                error = 1;
             }
         } else {
-            if( ResWriteDialogBoxHeader( &(head->u.Head), CurrResFile.fp ) ) {
+            if( ResWriteDialogBoxHeader( &(diaghead->Head), CurrResFile.fp ) ) {
                 error = 1;
             }
         }
         if( !error
           && ctrls->head != NULL ) {
-            error = SemWriteDiagCtrlList( ctrls, &err_code, tokentype );
+            error = SemWriteDialogCtrlList( ctrls, &err_code, is_dialogex );
         }
         if( !error ) {
             loc.len = SemEndResource( loc.start );
-            SemAddResourceAndFree( res_id, WResIDFromNum( RESOURCE2INT( RT_DIALOG ) ), flags, loc );
+            SemAddResourceAndFree( res_id, WResIDFromNum( RESOURCE2INT( RT_DIALOG ) ), res_flags, loc );
         }
     } else {
         MemFree( res_id );
     }
     if( error ) {
         if( error == 2 ) {
-            RcError( ERR_WIN16_TOO_MANY_CONTROLS, ctrls->numctrls );
+            RcError( RCMSG_WIN16_TOO_MANY_CONTROLS, ctrls->numctrls );
         } else {
             err_code = LastWresErr();
-            RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code )  );
+            RcError( RCMSG_WRITTING_RES, CurrResFile.filename, strerror( err_code )  );
         }
         ErrorHasOccured = true;
     }
-    SemFreeDialogHeader( head );
-    SemFreeDiagCtrlList( ctrls );
+    SemFreeDialogHeader( diaghead );
+    SemFreeDialogCtrlList( ctrls );
 
 } /* SemWINWriteDialogBox */
 
 
-FullDialogBoxControl *SemWINSetControlData( IntMask ctrlstyle,
-         uint_16 cntlid, DialogSizeInfo sizeinfo, WResID *cntltext_id,
-         ResNameOrOrdinal *ctlclassname, uint_32 exstyle, DlgHelpId *help )
+FullDialogBoxControlWIN *SemWINSetControlData( IntMask ctrlstyle,
+         uint_16 cntlid, DialogSizeInfo SizeInfo, WResID *cntltext_id,
+         ResNameOrOrdinal *ctlclassname, uint_32 exstyle, help_id HelpId )
 /*************************************************************************/
 {
-    FullDialogBoxControl   *control;
-    uint_32                mask;
-    uint_32                value;
-    uint_32                style;
+    FullDialogBoxControlWIN *diagctrl;
+    uint_32                 mask;
+    uint_32                 value;
+    uint_32                 style;
 
     mask = ctrlstyle.Mask;
     value = ctrlstyle.Value;
     style = (mask & value) | (~mask & (WS_CHILD|WS_VISIBLE));
 
-    control = semInitDiagCtrl();
-    if( control->iswin32 ) {
-        control->u.ctrl32.ID = cntlid;
-        control->u.ctrl32.SizeInfo = sizeinfo;
-        control->u.ctrl32.Text = WResIDToNameOrOrdinal( cntltext_id );
+    diagctrl = semInitDialogCtrl();
+    if( CmdLineParms.iswin32 ) {
+        diagctrl->ctrl.ID = cntlid;
+        diagctrl->ctrl.SizeInfo = SizeInfo;
+        diagctrl->ctrl.Text = WResIDToNameOrOrdinal( cntltext_id );
         MemFree( cntltext_id );
-        control->u.ctrl32.ClassID = ResNameOrOrdinalToControlClass( ctlclassname );
-        control->u.ctrl32.Style = style;
+        diagctrl->ctrl.ClassID = WINCanonicalControlClass( ctlclassname );
+        diagctrl->ctrl.Style = style;
         /*
          * ExtraBytes and ExtendStyle are 0 for all controls
          * that RC understands
          */
-        control->u.ctrl32.ExtraBytes = 0;
-        control->u.ctrl32.ExtendedStyle = exstyle;
+        diagctrl->ctrl.ExtraBytes = 0;
+        diagctrl->ctrl.ExtendedStyle = exstyle;
+        diagctrl->ctrl.HelpId = HelpId;
 
-        if( help != NULL ) {
-            control->u.ctrl32.HelpId = help->HelpId;
-            control->u.ctrl32.HelpIdDefined = help->HelpIdDefined;
-        } else {
-            control->u.ctrl32.HelpId = 0;
-            control->u.ctrl32.HelpIdDefined = false;
-        }
         MemFree( ctlclassname );
     } else {
-        control->u.ctrl.ID = cntlid;
-        control->u.ctrl.SizeInfo = sizeinfo;
-        control->u.ctrl.Text = WResIDToNameOrOrdinal( cntltext_id );
+        diagctrl->ctrl.ID = cntlid;
+        diagctrl->ctrl.SizeInfo = SizeInfo;
+        diagctrl->ctrl.Text = WResIDToNameOrOrdinal( cntltext_id );
         MemFree( cntltext_id );
-        control->u.ctrl.ClassID = ResNameOrOrdinalToControlClass( ctlclassname );
-        control->u.ctrl.Style = style;
+        diagctrl->ctrl.ClassID = WINCanonicalControlClass( ctlclassname );
+        diagctrl->ctrl.Style = style;
         /*
          * ExtraBytes is 0 for all controls that RC understands
          */
-        control->u.ctrl.ExtraBytes = 0;
+        diagctrl->ctrl.ExtraBytes = 0;
         MemFree( ctlclassname );
     }
 
-    return( control );
+    return( diagctrl );
 }
