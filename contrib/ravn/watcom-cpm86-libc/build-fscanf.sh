@@ -27,7 +27,12 @@ WASM="$B/wasm/osxa64/wasm.exe"
 WLINK="$B/wl/osxa64/wlink.exe"
 WLIB="$B/nwlib/osxa64/wlib.exe"
 WDIS="$B/ndisasm/osxa64/wdis.exe"
-EMU2="${EMU2:-/Users/ravn/z80/scratch/cpm86-tools/emu2-cpm86/emu2}"
+EMU2="${EMU2:-}"
+if [ -z "$EMU2" ]; then
+    for _ep in /Users/ravn/z80/emu2-cpm86/emu2 /home/ravn/z80/emu2-cpm86/emu2; do
+        [ -x "$_ep" ] && { EMU2="$_ep"; break; }
+    done
+fi
 OUTDIR="${OUTDIR:-build-fscanf}"; mkdir -p "$OUTDIR"; cd "$OUTDIR"
 SRC=".."
 INC="-i=$B/lib_misc/h -i=$B/clib/streamio/h -i=$B/clib/h -i=$B/clib/heap/h -i=$B/clib/intel/h -i=$B/comp_cfg/h -i=$B/watcom/h -i=$B/hdr/dos/h"

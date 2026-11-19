@@ -29,7 +29,12 @@ WASM="$B/wasm/osxa64/wasm.exe"
 WLINK="$B/wl/osxa64/wlink.exe"
 WLIB="$B/nwlib/osxa64/wlib.exe"
 WDIS="$B/ndisasm/osxa64/wdis.exe"
-EMU2="${EMU2:-/Users/ravn/z80/scratch/cpm86-tools/emu2-cpm86/emu2}"
+EMU2="${EMU2:-}"
+if [ -z "$EMU2" ]; then
+    for _ep in /Users/ravn/z80/emu2-cpm86/emu2 /home/ravn/z80/emu2-cpm86/emu2; do
+        [ -x "$_ep" ] && { EMU2="$_ep"; break; }
+    done
+fi
 OUTDIR="${OUTDIR:-build-whetstone}"; mkdir -p "$OUTDIR"; cd "$OUTDIR"
 SRC=".."
 INC="-i=$B/lib_misc/h -i=$B/clib/streamio/h -i=$B/clib/h -i=$B/clib/heap/h -i=$B/clib/intel/h -i=$B/comp_cfg/h -i=$B/watcom/h -i=$B/hdr/dos/h"
@@ -231,11 +236,22 @@ assert_no_8087() {
 assert_no_8087 whetstone.obj crt0.obj cominit.obj stdioshim.obj lowlevel.obj stubs.obj
 
 # --- purity gate: zero INT 21h (DOS) AND zero executed 8087 trap (INT 34-3D) ---
+# Uses instruction-aware scan (same fix as build-streamio.sh) to avoid false
+# positives from CD 21 appearing as the operand bytes of a CALL near (E8 lo hi).
 python3 - whetstone.cmd <<'PY'
 import sys; d=open(sys.argv[1],'rb').read()
-dos=d.count(b'\xcd\x21'); bdos=d.count(bytes([0xcd,0xe0]))
-# emulator trap opcodes INT 0x34..0x3D would be CD 34 .. CD 3D
-traps=sum(d.count(bytes([0xcd,v])) for v in range(0x34,0x3e))
+i = 0; dos = 0; bdos = 0; traps = 0
+while i < len(d):
+    b = d[i]
+    if b in (0xe8, 0xe9): i += 3; continue   # CALL/JMP near: skip operand
+    if b == 0xeb: i += 2; continue            # JMP short: skip operand
+    if b == 0xcd and i + 1 < len(d):
+        n = d[i+1]
+        if n == 0x21: dos += 1
+        if n == 0xe0: bdos += 1
+        if 0x34 <= n <= 0x3d: traps += 1
+        i += 2; continue
+    i += 1
 print(f"purity: INT21h(DOS)={dos}  INTE0h(BDOS)={bdos}  INT34-3D(8087emu-bytecount)={traps}")
 assert dos==0,   "FAIL: DOS INT 21h present!"
 assert bdos>0,   "FAIL: no BDOS call in image!"
@@ -261,7 +277,12 @@ if [ "${WHET_NORUN:-0}" = "1" ]; then
   echo "WHET_NORUN=1: skipping emu2 oracle (built whetstone.cmd for MAME rc759)"
   exit 0
 fi
-OUT="$("$EMU2" -P 255 whetstone.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+if [ -t 0 ]; then
+    OUT="$("$EMU2" -P 255 whetstone.cmd | tr -d '\r')"
+else
+    OUT="$(script -q /dev/null "$EMU2" -P 255 whetstone.cmd | sed -e $'s/.\x08//g' -e $'s/.\x08//g' | tr -d $'\r')"
+fi
+echo "--- output ---"; echo "$OUT"
 EXP="$(cat <<'ORACLE'
       0       0       0   1.0000e+00  -1.0000e+00  -1.0000e+00  -1.0000e+00
     120     140     120  -6.8342e-02  -4.6264e-01  -7.2972e-01  -1.1240e+00

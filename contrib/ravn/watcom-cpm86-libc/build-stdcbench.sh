@@ -37,7 +37,12 @@ OW="${OW:-$(cd "$(dirname "$0")/../../.." && pwd)}"; B="$OW/bld"
 WCC="$B/cc/i86/osxa64/binbuild/wcc.exe"
 WASM="$B/wasm/osxa64/wasm.exe"
 WLINK="$B/wl/osxa64/wlink.exe"
-EMU2="${EMU2:-/Users/ravn/z80/scratch/cpm86-tools/emu2-cpm86/emu2}"
+EMU2="${EMU2:-}"
+if [ -z "$EMU2" ]; then
+    for _ep in /Users/ravn/z80/emu2-cpm86/emu2 /home/ravn/z80/emu2-cpm86/emu2; do
+        [ -x "$_ep" ] && { EMU2="$_ep"; break; }
+    done
+fi
 OUTDIR="${OUTDIR:-build-stdcbench}"; mkdir -p "$OUTDIR"
 SRC=".."                                        # port/ + test/ live one up from OUTDIR
 # Upstream stdcbench 0.8 sources (the SAME tree owc-drc built), reused verbatim.

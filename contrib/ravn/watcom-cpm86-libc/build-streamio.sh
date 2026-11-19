@@ -31,7 +31,12 @@ WASM="$B/wasm/$PLAT/wasm.exe"
 WLINK="$B/wl/$PLAT/wlink.exe"
 WLIB="$B/nwlib/$PLAT/wlib.exe"
 WDIS="$B/ndisasm/$PLAT/wdis.exe"
-EMU2="${EMU2:-/home/ravn/z80/emu2-cpm86/emu2}"
+EMU2="${EMU2:-}"
+if [ -z "$EMU2" ]; then
+    for _ep in /Users/ravn/z80/emu2-cpm86/emu2 /home/ravn/z80/emu2-cpm86/emu2; do
+        [ -x "$_ep" ] && { EMU2="$_ep"; break; }
+    done
+fi
 OUTDIR="${OUTDIR:-build-streamio}"; mkdir -p "$OUTDIR"; cd "$OUTDIR"
 SRC=".."
 TESTSRC="$B/clibtest/streamio/c/iotest.c"     # Watcom's UNCHANGED stream test
@@ -241,7 +246,12 @@ if [ "${STREAMIO_NORUN:-0}" = "1" ]; then
   exit 0
 fi
 rm -f TMP?????.\$\$\$ *.TMP
-OUT="$("$EMU2" -P 255 iotest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+if [ -t 0 ]; then
+    OUT="$("$EMU2" -P 255 iotest.cmd | tr -d '\r')"
+else
+    OUT="$(script -q /dev/null "$EMU2" -P 255 iotest.cmd | sed -e $'s/.\x08//g' -e $'s/.\x08//g' | tr -d $'\r')"
+fi
+echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "Tests completed"; then
   echo "PASS: Watcom UNCHANGED streamio/iotest.c on CP/M-86 (disk + console)"
 else
