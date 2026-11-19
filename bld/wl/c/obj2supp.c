@@ -43,6 +43,7 @@
 #include "loadnov.h"
 #include "loadqnx.h"
 #include "loadelf.h"
+#include "loadcpm86.h"
 #include "virtmem.h"
 #include "objpass2.h"
 #include "objstrip.h"
@@ -1120,6 +1121,20 @@ static void PatchData( fix_relo_data *fix )
         if( FmtData.type & MK_PROT_MODE ) {
             MPUT_16_UN( data, 0 );
         }
+#ifdef _CPM86
+        if( FmtData.type & MK_CPM86 ) {
+            /* Write a GROUP-RELATIVE paragraph (loader adds the runtime load
+             * base via a P_LOAD fixup record -- see loadcpm86.c).  An absolute
+             * segment (FIX_ABS, e.g. a hard-coded 0xB800) has no group and is
+             * left as-is.  formatBaseReloc() captures the matching fixup. */
+            if( fix->type & FIX_ABS ) {
+                MPUT_16_UN( data, fix->tgt_addr.seg );
+            } else {
+                MPUT_16_UN( data, CPM86GroupRelPara( fix->tgt_addr.seg ) );
+            }
+            return;
+        }
+#endif
 #if defined( _DOS16M ) || defined( _PHARLAP )
         if( FmtData.type & (MK_DOS16M | MK_PHAR_MULTISEG) ) {
             MPUT_16_UN( data, fix->target_addr.seg );
@@ -1347,7 +1362,25 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *target, segdata *s
     /* unused parameters */ (void)target;
 
     ftype = fix->type & (FIX_OFFSET_MASK | FIX_BASE);
-    target_addr = fix->target_addr;
+    target = fix->tgt_addr;
+#ifdef _CPM86
+    if( FmtData.type & MK_CPM86 ) {
+        /* Capture the cross-group far SEGMENT reference as a P_LOAD fixup
+         * (loadcpm86.c writes the 4-byte record + sets ch_fixrec).  Only base
+         * (segment) fixups need load-time relocation; offset-only fixups were
+         * already resolved and marked done in PatchData, so FmtReloc() never
+         * reaches here for them.  Return false so no generic reloc record is
+         * dumped -- our own table carries it.  The seg word sits after the
+         * offset part (mirrors MakeBase). */
+        if( fix->type & FIX_BASE ) {
+            offset      seg_off;
+
+            seg_off = fix->loc_addr.off + OffsetSizes[FIX_GET_OFFSET( fix->type )];
+            AddCPM86Fixup( fix->loc_addr.seg, seg_off, target.seg );
+        }
+        return( false );
+    }
+#endif
 #ifdef _OS2
     if( FmtData.type & MK_PE ) {
         unsigned_32 reltype;

@@ -1,0 +1,20 @@
+# _cpm -- CP/M-86 OS seam (BDOS) for the cpm86 clib.
+#
+# This component is the CP/M-86 replacement for the DOS `_dos` component: it
+# provides the OS primitives the OS-agnostic clib layers call (__open/__read/
+# __write/__lseek/__close via BDOS FCB I/O in diskio.c, the arena __brk/sbrk
+# heap seam in lowlevel.c, console/exit/dir/time seams) so that the standard
+# Watcom clib links against BDOS (INT 0E0h) instead of DOS INT 21h.
+#
+# Built only for system=cpm86 (host_os=dos, so the sources compile with the
+# same __DOS__ target as the OS-agnostic components they satisfy).
+
+objs_cpm86_086 = abortcpm.obj cominit.obj cstartcpm.obj dirent.obj diskio.obj &
+                 errnoptr.obj farheap.obj gtctmcpm.obj lowlevel.obj portmisc.obj &
+                 stubs.obj
+
+!ifeq objsuffix files
+objfiles = $+ $(objs_$(system)_$(processor)) $-
+!else
+objs = $+ $(objs_$(system)_$(processor)) $-
+!endif

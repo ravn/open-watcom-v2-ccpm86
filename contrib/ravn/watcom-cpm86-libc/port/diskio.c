@@ -42,12 +42,81 @@
 /* INT 0E0h: function in CL, parameter (near offset, or a segment for fn 51) in
    DX, result byte returned in AL. Small model => DS is the one data group, so a
    near &object is the DMA/FCB offset the BDOS wants. */
-extern unsigned char _bdos( unsigned char fn, unsigned param );
-#pragma aux _bdos =             \
+extern unsigned char _bdos_raw( unsigned char fn, unsigned param );
+#pragma aux _bdos_raw =         \
     "int 0E0h"                  \
     parm [cl] [dx]              \
     value [al]                  \
     modify [ax bx cx dx es];
+
+/* _fbdos: a BDOS gateway for the FCB-bearing calls. Unlike _bdos (which passes
+ * only the FCB offset in DX and leaves the segment implicit in DS), _fbdos takes
+ * a FAR pointer and loads DS from its segment for the duration of the INT 0E0h.
+ *
+ * WHY this exists: BDOS reads the FCB at DS:DX. The old _bdos assumed DS==DGROUP
+ * (true only in near-data models). Under the LARGE model (-ml, far data) DS
+ * floats -- e.g. set_dma() touches dma[] and leaves DS==dma's segment, so a
+ * following _bdos(F_SFIRST, &fcb) would read the FCB from the WRONG segment.
+ * Worked example (the "name not matched" bug): stat("FILE.TXT") built a correct
+ * FCB {'FILE    TXT'} in bdos_fcb, but F_SFIRST ran with DS=2CE9 while bdos_fcb
+ * lived at DGROUP 1CF1 -> BDOS saw an empty name '' and never matched the file.
+ * Loading DS from the FCB pointer itself makes every FCB call correct regardless
+ * of the ambient DS. (The DMA buffer is targeted separately via BD_SETDMASEG, an
+ * absolute segment, so the search result still lands in dma[].) */
+extern unsigned char _fbdos_raw( unsigned char fn, void __far *fcb );
+#pragma aux _fbdos_raw =        \
+    "push ds"                   \
+    "push es"                   \
+    "pop  ds"                   \
+    "int  0E0h"                 \
+    "pop  ds"                   \
+    parm [cl] [es dx]           \
+    value [al]                  \
+    modify [ax bx cx dx es];
+
+/* BDOS call trace: C wrappers over the raw INT 0E0h gateways so every BDOS
+   call prints fn + args + return.  Console output uses _bdos_conout (a separate
+   gateway), so the trace's own printf does not recurse here.  A re-entrancy
+   guard is kept anyway for safety.  Gated behind CPM86_BDOS_TRACE. */
+#ifdef CPM86_BDOS_TRACE
+static int _bdos_tracing = 0;
+static unsigned char _bdos( unsigned char fn, unsigned param )
+{
+    unsigned char r = _bdos_raw( fn, param );
+    if( fn == 26 || fn == 51 )          /* skip per-record set-DMA noise */
+        return( r );
+    if( !_bdos_tracing ) {
+        _bdos_tracing = 1;
+        printf( "  <bdos fn=%d dx=%04x -> %02x>\n", (int)fn, param, (unsigned)r );
+        fflush( stdout );
+        _bdos_tracing = 0;
+    }
+    return( r );
+}
+static unsigned char _fbdos( unsigned char fn, void __far *fcb )
+{
+    unsigned char __far *f = (unsigned char __far *)fcb;
+    unsigned char r = _fbdos_raw( fn, fcb );
+    /* Only trace drive-0 (B:, the temp/archive) FCB calls -- skips the ~30
+       read-only A: .sys input scans that would otherwise flood the trace. */
+    if( f[0] != 0 )
+        return( r );
+    if( !_bdos_tracing ) {
+        _bdos_tracing = 1;
+        printf( "  <fbdos fn=%d drv=%d %c%c%c%c%c%c%c%c.%c%c%c ex=%d cr=%d -> %02x>\n",
+                (int)fn, (int)f[0],
+                f[1]&0x7F, f[2]&0x7F, f[3]&0x7F, f[4]&0x7F, f[5]&0x7F,
+                f[6]&0x7F, f[7]&0x7F, f[8]&0x7F, f[9]&0x7F, f[10]&0x7F, f[11]&0x7F,
+                (int)f[12], (int)f[32], (unsigned)r );
+        fflush( stdout );
+        _bdos_tracing = 0;
+    }
+    return( r );
+}
+#else
+#  define _bdos(fn,param)   _bdos_raw((fn),(param))
+#  define _fbdos(fn,fcb)    _fbdos_raw((fn),(fcb))
+#endif
 
 extern unsigned _getds( void );
 #pragma aux _getds =            \
@@ -131,12 +200,68 @@ static unsigned char  dma[SECT];        /* our 128-byte DMA / work buffer */
 static dfile_t       *cache_fp;         /* which file's record is in dma */
 static long           cache_rec;        /* which record is in dma (valid iff cache_fp) */
 
+/* Shared scratch FCB for the name-only BDOS calls (stat/remove/chmod/rename).
+ * MUST live in DGROUP, not on the stack: _bdos passes the FCB in DX and the
+ * BDOS reads it at DS:DX -- a stack-local FCB is at SS:offset, and in this model
+ * SS != DS, so BDOS would read an empty/garbage FCB (the "name not matched" bug:
+ * F_SFIRST searched for '' and never found FILE.TXT). One buffer suffices because
+ * these calls are synchronous and single-threaded (no BDOS re-entrancy), and no
+ * two of them are ever live at the same time. */
+static unsigned char  bdos_fcb[36];
+
+/* ---- stdin/stdout redirection (shell-style  < file  > file  >> file) -------
+   CP/M's CCP has no I/O redirection, so a hosted program does it ITSELF: after
+   the crt0 command-tail parser has split the tail into argv, __apply_redirection
+   scans argv for the redirect operators, opens each named file as an ordinary
+   disk file (fd >= DISK_FIRST_FD), and records that fd here. __qread/__qwrite --
+   the single seam the whole FILE* stack (scanf/getchar/printf/fwrite/...) bottoms
+   out in -- then transparently reroute the console handles onto that fd, so the
+   ENTIRE stdin/stdout stream lands on the file with ZERO FILE* surgery: the
+   stdin/stdout FILE objects keep handles 0/1 and their buffering untouched.
+
+   stderr (handle 2) is deliberately NOT rerouted by `>`, matching Unix shells:
+   `prog > out.txt` still lets diagnostics reach the console.
+
+   Worked example -- command tail " < IN.TXT > OUT.TXT":
+     crt0 argv = {"UNZIP","<IN.TXT",">OUT.TXT",NULL}, argc=3
+     __apply_redirection opens IN.TXT (fd 3, redir_in=3), OUT.TXT (fd 4,
+     redir_out=4), strips both tokens -> argv={"UNZIP",NULL}, returns argc=1.
+     Thereafter __qread(0,..) reads record-by-record from fd 3 and __qwrite(1,..)
+     writes to fd 4; __close_redirection() commits both at program exit. */
+static int redir_in  = -1;      /* disk fd feeding stdin(0),  or -1 = console */
+static int redir_out = -1;      /* disk fd draining stdout(1), or -1 = console */
+
 static dfile_t *fd_to_file( int handle )
 {
     int i = handle - DISK_FIRST_FD;
     if( i < 0 || i >= DISK_MAX || !dfiles[i].used )
         return( NULL );
     return( &dfiles[i] );
+}
+
+/* Find another OPEN handle on the SAME file that has WRITTEN (fp->wrote), if
+   any. CP/M's directory entry (what BD_FILESIZE / disk_len() reads) is only
+   synced at F_CLOSE -- a WRITE RANDOM on a still-open FCB updates that FCB's
+   OWN view and the actual data blocks, but NOT the on-disk directory, so a
+   DIFFERENT FCB's F_SIZE cannot see the growth until the writer closes. This
+   is a real CP/M limitation (not a bug we can fix via more BDOS calls), so we
+   route around it with our own in-RAM bookkeeping: any other still-open
+   writer's dfile_t already tracks the byte-exact length itself (fp->len is
+   authoritative for a handle that has written, see __qwrite). This is what
+   lets a pure-reader handle see a byte another handle just fflush()ed
+   (iotest.c "flushes": one "w" + one "r" handle open simultaneously on the
+   same file) without waiting for a close/reopen. */
+static dfile_t *find_open_writer( const dfile_t *fp )
+{
+    int i;
+    for( i = 0; i < DISK_MAX; i++ ) {
+        dfile_t *o = &dfiles[i];
+        if( o == fp || !o->used || o->is_con || !o->wrote )
+            continue;
+        if( memcmp( &o->fcb[FCB_DRIVE], &fp->fcb[FCB_DRIVE], 1 + 11 ) == 0 )
+            return( o );
+    }
+    return( NULL );
 }
 
 /* ---- FCB helpers --------------------------------------------------------- */
@@ -242,9 +367,52 @@ static int load_record( dfile_t *fp, long rec )
 
     if( cache_fp == fp && cache_rec == rec )
         return( 0 );
+
+    if( !fp->wrote ) {
+        /* A PURE READER must never trust its OWN FCB for a record another
+           still-open handle on the SAME file may have just written. CP/M's
+           directory (what the reader's FCB resolves extents through) is only
+           synced at F_CLOSE, so the reader's own BD_READRAND is unreliable
+           here: it can either report "unwritten" OR -- worse -- succeed but
+           return STALE data (whatever the directory reflected as of some
+           earlier sync point, not the writer's latest byte), silently
+           clobbering the correct copy we already have in dma[] from the
+           writer's own write. Route entirely around the reader's FCB in this
+           case: reuse the writer's cached record if it's already sitting in
+           dma[] (no BDOS call at all -- the common case right after a
+           fflush()), else re-read explicitly through the WRITER's own FCB
+           (whose extent view IS current). (iotest.c "flushes": a "w"+"r"
+           handle pair open simultaneously on the same file.) */
+        dfile_t *w = find_open_writer( fp );
+        if( w != NULL ) {
+            if( cache_fp == w && cache_rec == rec )
+                return( 0 );                     /* already fresh in dma[] */
+            fcb_set_record( w->fcb, rec );
+            set_dma();
+            rc = _fbdos( BD_READRAND, (void __far *)w->fcb );
+            if( rc == 1 || rc == 4 ) {
+                memset( dma, CPM_EOF, SECT );
+                cache_fp = NULL;
+                return( 1 );
+            }
+            if( rc != 0 ) {
+                cache_fp = NULL;
+                return( -1 );
+            }
+            cache_fp = w;                        /* tag as the WRITER's record,
+                                                       so a later hit (by this or
+                                                       another reader) short-
+                                                       circuits via the check
+                                                       above instead of retrying
+                                                       BDOS */
+            cache_rec = rec;
+            return( 0 );
+        }
+    }
+
     fcb_set_record( fp->fcb, rec );
     set_dma();
-    rc = _bdos( BD_READRAND, (unsigned)(size_t)&fp->fcb[0] );
+    rc = _fbdos( BD_READRAND, (void __far *)fp->fcb );
     if( rc == 1 || rc == 4 ) {          /* 1 = reading unwritten data, 4 = past EOF */
         memset( dma, CPM_EOF, SECT );
         cache_fp = NULL;
@@ -269,7 +437,7 @@ static long text_eof( dfile_t *fp )
     int   i;
 
     set_dma();
-    _bdos( BD_FILESIZE, (unsigned)(size_t)&fp->fcb[0] );
+    _fbdos( BD_FILESIZE, (void __far *)&fp->fcb[0] );
     records = (long)fp->fcb[FCB_R0 + 0]
             | ((long)fp->fcb[FCB_R0 + 1] << 8)
             | ((long)fp->fcb[FCB_R0 + 2] << 16);
@@ -297,7 +465,7 @@ static long disk_len( dfile_t *fp )
     if( fp->text )
         return( text_eof( fp ) );
     set_dma();
-    _bdos( BD_FILESIZE, (unsigned)(size_t)&fp->fcb[0] );
+    _fbdos( BD_FILESIZE, (void __far *)&fp->fcb[0] );
     records = (long)fp->fcb[FCB_R0 + 0]
             | ((long)fp->fcb[FCB_R0 + 1] << 8)
             | ((long)fp->fcb[FCB_R0 + 2] << 16);
@@ -455,14 +623,14 @@ _WCRTLINK int _sopen( const char *name, int mode, int shflag, ... )
         fp->fcb[FCB_LRBC] = 0xFF;
 
     if( mode & O_TRUNC ) {
-        _bdos( BD_DELETE, (unsigned)(size_t)&fp->fcb[0] );
-        if( _bdos( BD_MAKE, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF )
+        _fbdos( BD_DELETE, (void __far *)&fp->fcb[0] );
+        if( _fbdos( BD_MAKE, (void __far *)&fp->fcb[0] ) == 0xFF )
             return( -1 );
         /* fresh/empty file: exact length is 0 */
-    } else if( _bdos( BD_OPEN, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF ) {
+    } else if( _fbdos( BD_OPEN, (void __far *)&fp->fcb[0] ) == 0xFF ) {
         if( !(mode & O_CREAT) )
             return( -1 );
-        if( _bdos( BD_MAKE, (unsigned)(size_t)&fp->fcb[0] ) == 0xFF )
+        if( _fbdos( BD_MAKE, (void __far *)&fp->fcb[0] ) == 0xFF )
             return( -1 );
         /* fresh/empty file: exact length is 0 */
     } else {
@@ -484,6 +652,29 @@ _WCRTLINK int _sopen( const char *name, int mode, int shflag, ... )
     return( DISK_FIRST_FD + i );
 }
 
+/* Console byte input (stdin / fopen("CON")). Reads a LINE via BDOS C_READ
+   (fn 1, echoed) into out[0..len), translating the CP/M line discipline to the
+   C stream convention: CR (Enter) -> '\n' (and echo the LF so the cursor wraps),
+   Ctrl-Z (0x1A) -> end of input. Returns at the newline or at len, so stdio gets
+   a normal line-buffered read; 0 means immediate EOF (^Z first). C_READ blocks
+   until a key, which is the expected getchar()/scanf() behaviour. */
+static unsigned con_read( unsigned char *out, unsigned len )
+{
+    unsigned n = 0;
+    while( n < len ) {
+        unsigned char ch = _bdos( 1, 0 );           /* C_READ: one char, echoed */
+        if( ch == 0x1A )                             /* Ctrl-Z = EOF */
+            break;
+        if( ch == '\r' ) {                           /* Enter -> newline */
+            _bdos_conout( '\n' );                    /* echo the LF (C_READ echoed only CR) */
+            out[n++] = '\n';
+            break;                                   /* line-buffered: stop at EOL */
+        }
+        out[n++] = ch;
+    }
+    return( n );
+}
+
 /* FILE fill path (fgetc/fread) -> __qread. Returns bytes read, 0 at EOF. */
 int _WCNEAR __qread( int handle, void *buffer, unsigned len )
 {
@@ -491,8 +682,12 @@ int _WCNEAR __qread( int handle, void *buffer, unsigned len )
     unsigned char *out = (unsigned char *)buffer;
     unsigned       total = 0;
 
-    if( handle < DISK_FIRST_FD )
-        return( 0 );                                /* console: no stdin here */
+    if( handle < DISK_FIRST_FD ) {                   /* a console handle (0/1/2) */
+        if( redir_in >= 0 )                          /* stdin redirected -> disk */
+            handle = redir_in;                       /*   fall through to the file */
+        else
+            return( (int)con_read( out, len ) );     /* stdin (0): console line input */
+    }
     fp = fd_to_file( handle );
     if( fp == NULL || !fp->readable )
         return( 0 );
@@ -502,8 +697,8 @@ int _WCNEAR __qread( int handle, void *buffer, unsigned len )
        byte another handle just fflush()ed. The read loop below re-derives EOF
        from disk for a pure reader on every call, so a stale ateof cannot wedge
        the stream shut. */
-    if( fp->is_con )                                /* CON device: no byte input */
-        return( 0 );
+    if( fp->is_con )                                /* fopen("CON"): console line input */
+        return( (int)con_read( out, len ) );
     fp->ateof = 0;                                  /* recomputed below each call */
 
     while( total < len ) {
@@ -523,7 +718,17 @@ int _WCNEAR __qread( int handle, void *buffer, unsigned len )
            (one "w" handle + one "r" handle on the same file). */
         if( fp->pos >= fp->len ) {
             if( !fp->wrote ) {
-                long dl = disk_len( fp );           /* re-read length off disk */
+                dfile_t *w = find_open_writer( fp );
+                long dl;
+                if( w != NULL )
+                    /* An open (not yet closed) writer on this file has the
+                       authoritative length in RAM -- CP/M's directory entry
+                       (what disk_len()/BD_FILESIZE reads) is stale until that
+                       writer closes, so a disk re-read here would still see
+                       the pre-write size and wrongly report EOF. */
+                    dl = w->len;
+                else
+                    dl = disk_len( fp );            /* re-read length off disk */
                 if( dl > fp->len )
                     fp->len = dl;
             }
@@ -562,19 +767,42 @@ int _WCNEAR __qread( int handle, void *buffer, unsigned len )
 }
 
 /* FILE flush path (flush/fwrite) -> __qwrite. Console handles 1/2 go to the CP/M
-   console via BDOS C_WRITE (verbatim: text-mode fputc already made "\r\n" in the
-   FILE buffer). Disk handles do a read-modify-write of each 128-byte record via
-   WRITE RANDOM, so an untouched record tail keeps its Ctrl-Z EOF marker. */
+   console via BDOS C_WRITE. The CP/M console is a text device that does NOT add
+   CR for a bare LF, so we insert one -- but idempotently: a '\n' already preceded
+   by '\r' (the stdio/fputc path pre-translates "\n" -> "\r\n" in the FILE buffer)
+   is left alone, while a bare '\n' from a raw write(1/2,...) (e.g. Info-ZIP UnZip's
+   messages, which use write(fileno(stderr),...) with no USE_FWRITE) gets its CR.
+   That way both paths render clean CR/LF and neither doubles to "\r\r\n".
+   The last-byte state is kept STATIC across calls: a stdio flush can split a
+   "\r\n" exactly on the FILE-buffer boundary, so the '\r' ends one __qwrite and
+   the '\n' opens the next -- a per-call reset would then see prev=-1 and inject
+   a spurious CR ("\r\r\n"). Console output is strictly sequential (one BDOS
+   stream, no interleaving), so a file-scope prev is safe and correct here.
+   Disk handles do a read-modify-write of each 128-byte record via WRITE RANDOM,
+   so an untouched record tail keeps its Ctrl-Z EOF marker. */
+static void con_write( const unsigned char *in, unsigned len )
+{
+    static int prev = -1;          /* last byte emitted, across calls */
+    unsigned   i;
+    for( i = 0; i < len; i++ ) {
+        unsigned char c = in[i];
+        if( c == '\n' && prev != '\r' )
+            _bdos_conout( '\r' );   /* bare LF -> CR LF; existing CR LF untouched */
+        _bdos_conout( c );
+        prev = c;
+    }
+}
+
 int _WCNEAR __qwrite( int handle, const void *buffer, unsigned len )
 {
     const unsigned char *in = (const unsigned char *)buffer;
     dfile_t             *fp;
     unsigned             total = 0;
 
-    if( handle == STDOUT_FILENO || handle == STDERR_FILENO ) {
-        unsigned i;
-        for( i = 0; i < len; i++ )
-            _bdos_conout( in[i] );
+    if( handle == STDOUT_FILENO && redir_out >= 0 ) {
+        handle = redir_out;                         /* stdout redirected -> disk */
+    } else if( handle == STDOUT_FILENO || handle == STDERR_FILENO ) {
+        con_write( in, len );                       /* console (stderr stays here) */
         return( (int)len );
     }
 
@@ -582,9 +810,7 @@ int _WCNEAR __qwrite( int handle, const void *buffer, unsigned len )
     if( fp == NULL || !fp->writable )
         return( -1 );
     if( fp->is_con ) {                              /* fopen("CON")/freopen -> console */
-        unsigned i;
-        for( i = 0; i < len; i++ )
-            _bdos_conout( in[i] );
+        con_write( in, len );
         return( (int)len );
     }
 
@@ -605,7 +831,7 @@ int _WCNEAR __qwrite( int handle, const void *buffer, unsigned len )
         memcpy( &dma[off], in + total, n );
         fcb_set_record( fp->fcb, rec );
         set_dma();
-        if( _bdos( BD_WRITERND, (unsigned)(size_t)&fp->fcb[0] ) != 0 )
+        if( _fbdos( BD_WRITERND, (void __far *)&fp->fcb[0] ) != 0 )
             break;                                  /* disk full / error */
         cache_fp = fp;                              /* dma still holds this record */
         cache_rec = rec;
@@ -685,7 +911,15 @@ int _WCNEAR __close( int handle )
         fp->used = 0;
         return( 0 );
     }
-    _bdos( BD_CLOSE, (unsigned)(size_t)&fp->fcb[0] );
+    /* Only F_CLOSE a file we actually WROTE.  A read-only file needs no close on
+       CP/M -- the directory is unchanged -- and on Concurrent CP/M-86 an F_CLOSE
+       of a file opened read-only on another (possibly write-protected/system)
+       drive can return 0xFF (e.g. the A: distribution disk), which would wrongly
+       surface as an I/O error.  CCP/M releases all read locks at program exit
+       anyway, so skipping the close for read-only handles is both correct and
+       safe. */
+    if( fp->wrote )
+        _fbdos( BD_CLOSE, (void __far *)&fp->fcb[0] );
     /* Write-side exact length (LRBC) -- KNOWN_ISSUES #2. On CP/M 3+ / Concurrent
        CP/M-86 (the RC759's OS) a program records a file's exact byte length by
        re-issuing F_ATTRIB (BDOS fn 30) AFTER close with the F6' request flag set
@@ -704,7 +938,7 @@ int _WCNEAR __close( int handle )
         if( lrbc != 0 ) {
             fp->fcb[6]        |= 0x80;              /* F6' = "set byte count"      */
             fp->fcb[FCB_LRBC]  = lrbc;             /* FCB+32 = used bytes, last rec */
-            _bdos( BD_ATTRIB, (unsigned)(size_t)&fp->fcb[0] );
+            _fbdos( BD_ATTRIB, (void __far *)&fp->fcb[0] );
             fp->fcb[6]        &= 0x7F;              /* clear F6' again (tidy up)    */
         }
     }
@@ -726,13 +960,13 @@ int isatty( int handle )
    primitive Watcom's own clibtest (streamio/file) uses to clean temp files. */
 int remove( const char *name )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
 
     if( name_to_fcb( name, fcb ) < 0 ) {
         errno = ENOENT;
         return( -1 );
     }
-    if( _bdos( BD_DELETE, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+    if( _fbdos( BD_DELETE, (void __far *)&fcb[0] ) == 0xFF ) {
         errno = ENOENT;
         return( -1 );
     }
@@ -755,7 +989,7 @@ int unlink( const char *name )
    attributes; BDOS returns 0xFF when no directory entry matched. */
 int chmod( const char *name, mode_t pmode )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
 
     if( name_to_fcb( name, fcb ) < 0 ) {
         errno = ENOENT;
@@ -765,7 +999,7 @@ int chmod( const char *name, mode_t pmode )
         fcb[FCB_TYPE] &= 0x7F;                      /* writable: clear R/O bit */
     else
         fcb[FCB_TYPE] |= 0x80;                      /* read-only: set R/O bit  */
-    if( _bdos( BD_ATTRIB, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+    if( _fbdos( BD_ATTRIB, (void __far *)&fcb[0] ) == 0xFF ) {
         errno = ENOENT;
         return( -1 );
     }
@@ -800,13 +1034,13 @@ int chmod( const char *name, mode_t pmode )
    mask to stay inside our work buffer. */
 static int stat_probe( const char *name, unsigned char *ent )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
     int           al;
 
     if( name_to_fcb( name, fcb ) < 0 )
         return( -1 );
     set_dma();
-    al = _bdos( BD_SFIRST, (unsigned)(size_t)&fcb[0] );
+    al = _fbdos( BD_SFIRST, (void __far *)&fcb[0] );
     if( al == 0xFF )
         return( 0 );
     memcpy( ent, &dma[(al & 3) * 32], 32 );
@@ -845,7 +1079,7 @@ _WCRTLINK int access( const char *name, int mode )
 _WCRTLINK int stat( const char *name, struct stat *buf )
 {
     unsigned char ent[32];
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
     long          records;
     mode_t        perm;
 
@@ -855,15 +1089,32 @@ _WCRTLINK int stat( const char *name, struct stat *buf )
     }
 
     /* Size via F_SIZE (fn 35): fills the FCB random record with the file's size
-       in 128-byte records, straight off the directory -- no open, no lock. */
+       in 128-byte records, straight off the directory -- no open, no lock. That
+       is only 128-byte-granular, so on CP/M 3+ (CCP/M-86) we additionally OPEN
+       with the LRBC probe (FCB+32 = 0xFF) to recover the exact byte length of
+       the final record -- WITHOUT it, stat() reports a record-rounded st_size
+       (e.g. 384 for a 358-byte file) while the open handle reads the exact 358,
+       and the mismatch derails length-driven callers such as UnZip's
+       end-of-central-directory scan (G.ziplen = statbuf.st_size). */
     name_to_fcb( name, fcb );
-    _bdos( BD_FILESIZE, (unsigned)(size_t)&fcb[0] );
+    _fbdos( BD_FILESIZE, (void __far *)&fcb[0] );
     records = (long)fcb[FCB_R0 + 0]
             | ((long)fcb[FCB_R0 + 1] << 8)
             | ((long)fcb[FCB_R0 + 2] << 16);
 
     memset( buf, 0, sizeof( *buf ) );
-    buf->st_size = records * SECT;                    /* record-rounded (probe) */
+    buf->st_size = records * SECT;                    /* record-rounded default */
+    if( records > 0 && os_has_lrbc() ) {
+        unsigned char *ofcb = bdos_fcb;  /* reuse shared scratch (records saved) */
+        name_to_fcb( name, ofcb );
+        ofcb[FCB_LRBC] = 0xFF;                        /* ask CP/M 3+ for the LRBC */
+        if( _fbdos( BD_OPEN, (void __far *)&ofcb[0] ) != 0xFF ) {
+            unsigned char lrbc = ofcb[FCB_LRBC];
+            _fbdos( BD_CLOSE, (void __far *)&ofcb[0] );
+            if( lrbc != 0xFF )                        /* exact final-record length */
+                buf->st_size = (records - 1) * SECT + (lrbc == 0 ? SECT : lrbc);
+        }
+    }
 
     perm = S_IREAD;                                  /* every CP/M file is readable */
     if( !(ent[FCB_TYPE] & 0x80) )                    /* R/O bit clear => writable */
@@ -1039,7 +1290,7 @@ _WCRTLINK int eof( int handle )
    directory entry's name+type in place, keeping the file's data blocks. */
 int rename( const char *old, const char *new )
 {
-    unsigned char fcb[36];
+    unsigned char *fcb = bdos_fcb;  /* shared DGROUP scratch (see bdos_fcb) */
     unsigned char nfcb[36];
     int           i;
 
@@ -1051,7 +1302,7 @@ int rename( const char *old, const char *new )
         fcb[16 + i] = 0;
     for( i = FCB_NAME; i < FCB_TYPE + 3; i++ )      /* copy name(1..8)+type(9..11) */
         fcb[16 + i] = nfcb[i];
-    if( _bdos( BD_RENAME, (unsigned)(size_t)&fcb[0] ) == 0xFF ) {
+    if( _fbdos( BD_RENAME, (void __far *)&fcb[0] ) == 0xFF ) {
         errno = ENOENT;
         return( -1 );
     }
@@ -1160,4 +1411,97 @@ _WCRTLINK FILE *tmpfile( void )
     fclose( fp );                       /* registry full: don't leak an entry */
     remove( name );
     return( NULL );
+}
+
+/* ---- command-tail redirection front end ---------------------------------- */
+
+/* Parse ONE redirect operand. Recognises  <name  >name  >>name  and the split
+   forms  < name / > name / >> name  (operator and file in separate argv slots).
+   On a match, opens the file and latches redir_in / redir_out; returns the
+   number of argv slots consumed (1 for the joined form, 2 for the split form),
+   or 0 if `a` is not a redirect operand (an ordinary program operand). `next`
+   is argv[i+1] (may be NULL) for the split form. */
+static int redirect_one( char *a, char *next )
+{
+    const char *name;
+    int         mode;
+    int         is_in;
+    int         consumed = 1;
+    int         fd;
+
+    if( a[0] == '<' ) {
+        is_in = 1;
+        mode  = O_RDONLY;                       /* text: reads stop at Ctrl-Z */
+        name  = a + 1;
+    } else if( a[0] == '>' && a[1] == '>' ) {
+        is_in = 0;
+        mode  = O_WRONLY | O_CREAT | O_APPEND | O_BINARY;   /* append, binary: LRBC exact size */
+        name  = a + 2;
+    } else if( a[0] == '>' ) {
+        is_in = 0;
+        mode  = O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;    /* truncate/create, binary: LRBC */
+        name  = a + 1;
+    } else {
+        return( 0 );                             /* not a redirect operand */
+    }
+
+    if( *name == '\0' ) {                        /* split form: name is next slot */
+        if( next == NULL )
+            return( 1 );                         /* dangling operator: just drop it */
+        name = next;
+        consumed = 2;
+    }
+
+    fd = _sopen( name, mode, 0 );
+    if( fd >= 0 ) {                              /* open failure: leave on console */
+        if( is_in ) {
+            if( redir_in >= 0 )
+                __close( redir_in );             /* last `<` wins */
+            redir_in = fd;
+        } else {
+            if( redir_out >= 0 )
+                __close( redir_out );            /* last `>`/`>>` wins */
+            redir_out = fd;
+        }
+    }
+    return( consumed );
+}
+
+/* __apply_redirection -- called from crt0 (via cominit.c's __CommonRedirect)
+   AFTER the command tail is split into argv and BEFORE main(). Scans argv[1..]
+   for redirect operands, opens them, and compacts argv so main() sees only the
+   real operands. Returns the new argc. argv[0] (program name) is always kept. */
+int __apply_redirection( int argc, char **argv )
+{
+    int i;
+    int out = 1;                                 /* compacted write index */
+
+    for( i = 1; i < argc; i++ ) {
+        char *next = ( i + 1 < argc ) ? argv[i + 1] : NULL;
+        int   used = redirect_one( argv[i], next );
+        if( used == 0 ) {
+            argv[out++] = argv[i];               /* ordinary operand: keep it */
+        } else {
+            i += used - 1;                       /* skip a split-form file slot */
+        }
+    }
+    argv[out] = NULL;
+    return( out );
+}
+
+/* __close_redirection -- called from crt0 AFTER main() returns. Flush the
+   buffered stdout FILE (our minimal crt0 runs no atexit chain, so nothing else
+   would) then commit each redirected disk file: __close writes the final partial
+   record, appends the Ctrl-Z text EOF, and closes the directory entry. */
+void __close_redirection( void )
+{
+    if( redir_out >= 0 ) {
+        fflush( stdout );                        /* drain the FILE buffer first */
+        __close( redir_out );
+        redir_out = -1;
+    }
+    if( redir_in >= 0 ) {
+        __close( redir_in );
+        redir_in = -1;
+    }
 }

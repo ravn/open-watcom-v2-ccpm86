@@ -3,10 +3,10 @@
 # build-owc-drlink.sh - build a CP/M-86 .CMD from Open Watcom C by linking the
 # Watcom OMF output with Digital Research's native CP/M-86 linker (LINK86).
 #
-# Unlike contrib/ravn/build-cpm86.sh (which links to a flat raw binary with wl
-# and wraps it with bin2cmd.py), this path proves that Open Watcom's OMF object
-# output is directly consumable by a *real CP/M-86 linker*. DR LINK86 reads the
-# Watcom .obj files and emits a proper .CMD with correct group descriptors.
+# Unlike wl's own `format cpm86` output (the native route in this tree), this
+# path proves that Open Watcom's OMF object output is directly consumable by a
+# *real CP/M-86 linker*. DR LINK86 reads the Watcom .obj files and emits a
+# proper .CMD with correct group descriptors.
 #
 # KEY FACTS (verified, see README.md):
 #   * Open Watcom emits Intel/MS OMF; DR LINK-86 v1.4 (1984) accepts it as-is.
@@ -40,7 +40,7 @@ pick() { for t in "$@"; do command -v "$t" >/dev/null 2>&1 && { echo "$t"; retur
 WCC=$(pick wcc "$BINB/bwcc")
 WASM=$(pick wasm "$BINB/bwasm")
 
-XDEV="$HERE/../cpm86-crossdev"
+XDEV="${XDEV:-$REPO/../cpm86-crossdev}"   # top-level ~/z80/cpm86-crossdev (nested dup removed; overridable)
 # CANONICAL TOOLCHAIN (see wlink-cpm86-plan.md): authentic DR LINK-86 v1.4
 # (19 March 1984), the same native CP/M-86 linker DR C 1.11 uses, run under the
 # emu2-cpm86 fork (executes a CP/M-86 .CMD natively).  NOT linkcmd.exe (LINK-86

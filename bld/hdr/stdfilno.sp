@@ -5,7 +5,7 @@
 #define STDERR_FILENO   2
 :segment DOS
 :include ext.sp
-#if defined(__DOS__) || defined(__WINDOWS__)
+#if defined(__DOS__) || defined(__WINDOWS__) || defined(__CPM86__)
 #define STDAUX_FILENO   3
 #define STDPRN_FILENO   4
 #endif

@@ -1,52 +1,115 @@
 # Building CP/M-86 programs with Open Watcom
 
-## Short answer
+> **STATUS (this fork): CP/M-86 IS a supported, native target.** This fork of
+> Open Watcom carries patches that add a **native `format cpm86` output format
+> to the linker** (`wl`), and a hand-built CP/M-86 C-runtime seam layer lives in
+> `watcom-cpm86-libc/`. Do **not** assume CP/M-86 is unsupported — it is built
+> and passes tests. `owcc -bcpm86` / `wl format cpm86` emit `.CMD` files
+> directly; the former manual raw-image + `bin2cmd.py` wrapping route has been
+> **retired** (2026-08-19) now that the linker is authoritative.
 
-Open Watcom **cannot** build CP/M-86 executables out of the box. It has:
+## CP/M-86 vs MS-DOS — same 8086 core, different runtime + exe format
 
-- no `.CMD` output format in the linker (`wl` supports DOS `.EXE`/`.COM`,
-  OS/2, Windows, ELF, Phar Lap, QNX, RDOS, Novell and raw binary only — see
-  `bld/wl/h/_formats.h`), and
-- no CP/M-86 C runtime (`clib` targets DOS/OS2/Windows/etc. via INT 21h).
+For the compiler, **CP/M-86 codegen *is* MS-DOS 8086 codegen** — same 8086
+real-mode instruction set, same OMF `.obj` format, same memory models
+(tiny/small/compact/large ↔ 8080/Small/Compact/Big group models), same
+calling conventions. CP/M-86 sources are compiled `wcc -bt=dos`; the
+compiler never needs to know the target. Only **two** things differ, and
+both are link/runtime concerns, not codegen:
 
-There is **no** `__CPM__` target macro or CP/M header/library anywhere in the
-tree. The only `CPM`/`CP/M` strings in the source are unrelated (DOS PSP
-compatibility fields, an SCSI bitflag, a comment about the CP/M-era EOF byte).
+1. **Runtime / OS-call mechanism.** MS-DOS enters the OS with `INT 21h`
+   (function in `AH`); CP/M-86 uses reserved software `INT 224` (`0E0h`)
+   into the BDOS (function in `CL`; 8086 `CH:CL` mirror CP/M-80 `B:C`). The
+   C-runtime seam that bridges Watcom's DOS clib onto BDOS lives in
+   `watcom-cpm86-libc/port/` and `bld/clib/_cpm/`. Ref: *CP/M-86 System
+   Guide* §4.1 (the txt's OCR "#244" is a typo for the assembler's
+   `equ 224 ;reserved BDOS Interrupt`).
+2. **Executable format.** MS-DOS uses flat `.COM` (≤64K) or relocatable MZ
+   `.EXE`; CP/M-86 uses `.CMD` — a 128-byte header of up to 8 nine-byte
+   **group descriptors** (code/data/extra/stack + 4 aux; each a paragraph
+   length + optional absolute base) that the CCP/loader uses to place the
+   groups and set CS/DS/SS/ES. Ref: *CP/M-86 System Guide* §3 (GENCMD/CMD
+   header) & §4 (memory models). Realized here by native
+   `wlink format cpm86` (see below), not a wrapper.
 
-## But it is achievable via a workaround
+**Distinguishing the two in source — `__CPM86__`.** `-bt=cpm86` is a
+**first-class compiler build target**. Verified empirically: `-bt=dos`
+predefines `__DOS__`/`_DOS`/`MSDOS`; `-bt=cpm86` predefines `__CPM86__`
+**and** `__DOS__`/`_DOS`/`MSDOS`. Use `#ifdef __CPM86__` to select CP/M-86
+code paths; the DOS-family macros keep every DOS-gated header/clib applying
+unchanged. Implementation is a zero-codegen-impact two-liner in
+`bld/cc/c/cmdlnx86.c` (`setTargetSystem` maps `"CPM86"` → `TS_DOS` — nothing
+branches on `TS_DOS` vs the old `TS_OTHER` default except the `_DOS`/`MSDOS`
+predefines; `SetFinalTargetSystem` adds `__DOS__`; both `#if _CPU == 8086`).
+The `owcc -bcpm86` driver already passes `-bt=cpm86` (via
+`bld/wcl/owcc/*/specs.owc`), so the shipping build gets all four macros. (The
+`_cpm` clib variant is still *built* with `-bt=dos` per `flags.mif` — fine,
+identical codegen, and clib needs no `__CPM86__`.)
 
-CP/M-86 and DOS both run 8086 code, so you can compile with Open Watcom and
-retarget the *output packaging* and *system-call layer*:
+Primary references are the manuals in this directory
+(`CPM-86_System_Guide_Jun83`, `CPM-86_Programmers_Guide_Jan83`,
+`Concurrent_CPM_Programmers_Reference_Guide_Jan84`). See also the
+superproject memo `tasks/memory/reference_cpm86_vs_msdos_model.md`.
+
+## Short answer — native `format cpm86` (patched into this fork)
+
+`wl` in this tree emits CP/M-86 `.CMD` files directly. Link with:
 
 ```
-wcc  -0 -mt -s -oi hello.c            # 16-bit x86, tiny model, no runtime
-wl   format raw bin option start=_start_ name hello.bin file hello.obj
-python3 bin2cmd.py hello.bin HELLO.CMD
+wcc  -bt=dos -0 -ms -zl -zastd=c99 hello.c -fo=hello.obj
+wl   format cpm86 op dosseg op quiet name HELLO.CMD file hello.obj  [more files/libraries]
 ```
 
-`build-cpm86.sh` accepts a `CPU` variable to select the instruction level
-(`-<n>`): `CPU=0` = 8086 (default), `CPU=1` = 80186, `CPU=2` = 80286, etc.
-Only the instruction set matters here -- CP/M-86 is real-mode and the result is
-run at instruction level (Unicorn/QEMU executes 80186+ opcodes fine); the
-80186's on-chip peripherals are out of scope.
+Sub-formats: `format cpm86 small` (separate code/data groups, pair with `-ms`)
+and `format cpm86 8080` (single group, `.COM`-like). A `library cpm86 …`
+(`LIBCPM86`) directive is also recognised.
 
-### The `.CMD` header (`bin2cmd.py`)
+**Proof it is native, not a wrapper** (cite these, do not re-derive):
+
+- `bld/wl/h/_formats.h` — `pick_format( 0x00200000, MK_CPM86, 21, "CP/M-86", "CP/M-86" )`.
+- `bld/wl/c/cmdcpm86.c` / `bld/wl/h/cmdcpm86.h` — the `CPM86` format command,
+  its `SMall`/`8080` sub-formats and `SetCPM86Fmt`/`FreeCPM86Fmt`, gated on `_CPM86`.
+- `bld/wl/c/loadcpm86.c` / `bld/wl/h/loadcpm86.h` — the actual `.CMD` image
+  writer (`WriteCPM86Data`, group-descriptor header).
+- `bld/wl/c/cmdline.c` wires `MK_CPM86` + `"LIBCPM86"`; `bld/wl/c/cmdall.c`
+  registers the `"CPM86"` format keyword.
+- Built objects present: `bld/wl/osxa64/loadcpm86.obj`, `…/cmdcpm86.obj`. The
+  four benchmark `.CMD`s in the comparison harness and every `.cmd` under
+  `watcom-cpm86-libc/build-*/` were produced by this native `format cpm86` and
+  run correctly under `cpm86run_unicorn.py`.
+
+The remaining task for a *standard* C program is the CP/M-86 **C runtime**
+(there is no `__CPM__`-targeted `clib` build): that seam layer — a CP/M-86
+`crt0`, a BDOS-based stdio/`printf`, an arena heap and small stubs — is provided
+in `watcom-cpm86-libc/port/` and linked alongside Watcom's own (unchanged) clib
+objects. See `watcom-cpm86-libc/README.md`.
+
+## Retired: freestanding raw binary + `bin2cmd.py` (removed 2026-08-19)
+
+Before the native `format cpm86` patch, CP/M-86 `.CMD`s were produced by
+emitting a flat `format raw` image and wrapping it in a 128-byte `.CMD` header
+with a hand-written `bin2cmd.py`, driven by `build-cpm86.sh`. Both files have
+been **removed** now that `owcc -bcpm86` / `wl format cpm86` emit `.CMD`
+directly — the linker is the single source of truth for the header, so there is
+no longer a second (hand-rolled) header writer to keep in sync.
+
+The freestanding example sources (`hello.asm`, `hello.c`, `echoarg.asm`,
+`dhry.c`, `bigdata.c`, `cpmstart.asm`) and their prebuilt `.CMD` artifacts are
+kept as runnable references for the raw-BDOS (`INT 0E0h`) technique; rebuild
+them with the native linker path (`owcc -bcpm86 …` or `wl format cpm86 …`).
+
+### The `.CMD` header
 
 CP/M-86 executables start with a 128-byte **Command File Header**: eight 9-byte
 group descriptors (`type, length, base, min, max`, little-endian, in 16-byte
 paragraphs), followed by RSX/fixup/flags fields. Verified against Digital
 Research's *CP/M-86 System Guide* (Command File Format appendix) and the
-seasip.info archive.
-
-`bin2cmd.py` supports two models:
-
-- `--model 8080` (default): one Code group holding code+data — mirrors a
-  CP/M-80 `.COM` layout; pair with `wcc -mt` (tiny).
-- `--model small`: separate Code (type 1) and Data (type 2) groups — pair with
-  `wcc -ms` and supply the data image via `--data`.
-
-The header layout and both models are covered by the self-tests (run
-`python3 bin2cmd.py --help`; the test block is in the session notes).
+seasip.info archive. The linker's writer lives in `bld/wl/c/loadcpm86.c`
+(+ `cmdcpm86.c`); the Unicorn runner (`cpm86run_unicorn.py`) carries a small
+read-only `parse_header()` to inspect the descriptors when loading, and
+`_apply_fixups()` — a port of the CCP/M loader (`load.sup:402-449`) — to apply
+byte-127-bit7 / `ch_fixrec` load-time relocation exactly as a genuine loader
+does (unit tests: `test_cpm86_reloc.py`).
 
 ### The system-call layer (`hello.asm` / `hello.c`)
 
@@ -97,10 +160,9 @@ python3 cpm86run_unicorn.py ECHOARG.CMD one two.dat   ->   " ONE TWO.DAT"
 ### Ready-to-run artifact: `HELLO.CMD`
 
 `HELLO.CMD` in this folder is a **complete, runnable** CP/M-86 executable. It is
-now produced by the real Open Watcom toolchain (`build-cpm86.sh hello.asm`:
-`wasm` → `wl format raw` → `bin2cmd.py`); the resulting file is byte-identical
-to the earlier hand-assembled reference, which validates both the pipeline and
-the hand analysis. Code layout (after the base page):
+byte-identical to the earlier hand-assembled reference, which validated the hand
+analysis of the header format. Rebuild it via the native linker path
+(`owcc -bcpm86` / `wl format cpm86`). Code layout (after the base page):
 
 ```
 0100: 0e 1f ba 0d 01 b1 09 cd e0       ; push cs; pop ds; mov dx,msg; mov cl,9; int E0h
@@ -128,10 +190,11 @@ released `wasm`/`wcc`/`wl` if present, else falls back to `bwasm`/`bwcc`/
 
 ## What is still required
 
-1. **A CP/M-86 runtime** if you want the standard C library (stdio, malloc,
-   `printf`). That means a CP/M-86 startup stub (`_cstart_`) plus a BDOS-based
-   shim replacing clib's INT 21h calls. Freestanding code (own BDOS calls, as
-   in `hello.c`) needs none of this and is the right first milestone.
+1. **A CP/M-86 C runtime** for the standard C library (stdio, malloc,
+   `printf`). This **now exists** in `watcom-cpm86-libc/` — a CP/M-86 startup
+   stub plus a BDOS-based shim replacing clib's INT 21h calls — and is what the
+   compiler-quality benchmarks link against. Freestanding code (own BDOS calls,
+   as in `hello.c`) needs none of this.
 2. **Validation on real CP/M-86.** The `.CMD` runs under the included
    instruction-level emulators (see below); a full-machine emulator (86Box,
    PCem, or a CP/M-86 VM) is still the way to validate OS-loader specifics.
@@ -340,7 +403,6 @@ emulator demo, not a portable CP/M-86 program.
 
 | File | Purpose |
 |------|---------|
-| `bin2cmd.py` | raw 8086 image → CP/M-86 `.CMD` (8080 + small models, base page reserved), with tests |
 | `ccp.py` | emulate the CCP: parse the command line into FCBs + command tail and build the base page |
 | `hello.asm` | basic freestanding CP/M-86 hello-world (wasm, org 100h), raw BDOS (`INT 0E0h`) |
 | `hello.c` | same program in C via `#pragma aux`; entry `cpmmain()` |
@@ -348,14 +410,14 @@ emulator demo, not a portable CP/M-86 program.
 | `dhry.c` | freestanding CP/M-86 port of the Dhrystone 2.1 benchmark (non-trivial C demo) |
 | `bigdata.c` | large program using `__far` pointers to build and checksum a >64 KB (192 KB) data structure |
 | `cpmstart.asm` | minimal C startup stub (linked first) — calls `cpmmain()`, then BDOS terminate |
-| `HELLO.CMD` | ready-to-run executable (built by `build-cpm86.sh hello.asm`; byte-identical to the earlier hand-assembled reference) |
+| `HELLO.CMD` | ready-to-run executable (prebuilt reference; byte-identical to the hand-assembled original) |
 | `ECHOARG.CMD` | ready-to-run command-tail demo |
-| `DHRY.CMD` | ready-to-run Dhrystone 2.1 benchmark (built by `build-cpm86.sh dhry.c`) |
-| `BIGDATA.CMD` | ready-to-run >64 KB data-structure checksum demo (built by `build-cpm86.sh bigdata.c`) |
-| `build-cpm86.sh` | the wasm/wcc → wl → bin2cmd pipeline (`CPU=` selects 8086/80186/…) |
+| `DHRY.CMD` | ready-to-run Dhrystone 2.1 benchmark (prebuilt reference) |
+| `BIGDATA.CMD` | ready-to-run >64 KB data-structure checksum demo (prebuilt reference) |
 | `mkdisk-cpm86.sh` | pack the `.CMD` files into a CP/M-86 disk image (cpmtools) for full-machine emulators |
 | `cpm86run.py` | minimal hand-written 8086 interpreter + BDOS |
-| `cpm86run_unicorn.py` | independent Unicorn/QEMU runner + BDOS console group (`--count`, `--ticks`) |
+| `cpm86run_unicorn.py` | independent Unicorn/QEMU runner + BDOS console group (`--count`, `--ticks`); applies P_LOAD load-time relocation |
+| `test_cpm86_reloc.py` | self-contained unit tests for the runner's `_apply_fixups()` load-time relocation |
 | `cycles186.py` | iAPX 186 (80186) clock-cycle estimator ("ticks") — capstone decode + clock table |
 | `bench.py` | oracle/baseline harness: `measure` / `compare` / `baseline` (DR C = 1.00× baseline) |
 | `bench.sh` | reproducible driver: builds Dhrystone O0/O3/mixed vs the DR C oracle and prints the matrix |

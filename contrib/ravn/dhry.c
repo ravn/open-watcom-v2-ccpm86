@@ -4,8 +4,8 @@
 *
 *   This is a real, non-trivial C program -- structs, unions, enums, pointer
 *   chasing, string handling and many cross-function calls -- built with the
-*   same wcc -> wl (format raw) -> bin2cmd pipeline as hello.c and run under
-*   the CP/M-86 emulators in this folder.
+*   native `wl format cpm86` linker route (the former raw+bin2cmd pipeline was
+*   retired) and run under the CP/M-86 emulators in this folder.
 *
 *   CP/M-86 gives us no C runtime, so everything the standard Dhrystone relies
 *   on from libc is provided here directly:

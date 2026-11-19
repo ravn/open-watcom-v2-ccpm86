@@ -4,6 +4,9 @@ include_watcom  = -I"$(watcom_dir)/h" -I"$(lib_misc_dir)/h" -I"$(comp_cfg_dir)/h
 # include_c_(system)
 include_c_kanji    = $(inc_dirs_lang_dos)
 include_c_msdos    = $(inc_dirs_lang_dos)
+# cpm86: OS-agnostic dos headers + the sibling component private headers the
+# _cpm BDOS seam pulls (FILE* internals, heap __brk/_curbrk, long-math, etc.).
+include_c_cpm86    = $(inc_dirs_lang_dos) -I"$(clib_dir)/streamio/h" -I"$(clib_dir)/heap/h" -I"$(clib_dir)/intel/h" -I"$(clib_dir)/string/h" -I"$(clib_dir)/time/h"
 include_c_nw_clib  = $(inc_dirs_lang_netware) $(inc_dirs_lang_dos)
 include_c_nw_clibl = $(inc_dirs_lang_netware) $(inc_dirs_lang_dos)
 # we need to include libc path below
@@ -22,6 +25,7 @@ include_c_path = $(include_default) $(include_c_$(system)) $(include_watcom)
 # include_a_(system)
 include_a_kanji    =
 include_a_msdos    =
+include_a_cpm86    =
 include_a_nw_clib  =
 include_a_nw_clibl =
 include_a_nw_libc  =

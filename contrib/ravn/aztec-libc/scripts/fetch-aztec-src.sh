@@ -25,8 +25,8 @@ find_emu2() {
     if [ -n "${EMU2:-}" ] && [ -x "$EMU2" ]; then echo "$EMU2"; return; fi
     local c
     for c in \
-        "$here/../cpm86-crossdev/bin/emu2" \
-        "$here/../cpm86-crossdev/emu2/emu2" \
+        "$here/../../../../cpm86-crossdev/bin/emu2" \
+        "$here/../../../../cpm86-crossdev/emu2/emu2" \
         "$(command -v emu2 2>/dev/null || true)"; do
         [ -n "$c" ] && [ -x "$c" ] && { echo "$c"; return; }
     done

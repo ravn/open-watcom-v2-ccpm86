@@ -149,6 +149,7 @@ sw_c_ppc = $(sw_c_fi_nonx86)
 
 # sw_c_(system)_(processor)
 sw_c_msdos_086    =
+sw_c_cpm86_086    =
 sw_c_msdos_286    =
 sw_c_msdos_386    =
 sw_c_rdos_386     =
@@ -174,6 +175,7 @@ sw_c_linux_mps    = -eoe
 
 # sw_c_(system)
 sw_c_msdos      = -bt=dos
+sw_c_cpm86      = -bt=dos
 sw_c_nw_clib    = -bt=netware
 sw_c_nw_clibl   = -bt=netware
 sw_c_nw_libc    = -bt=netware5
@@ -233,6 +235,7 @@ sw_a_ppc =
 
 # sw_a_(system)_(processor)
 sw_a_msdos_086    =
+sw_a_cpm86_086    =
 sw_a_msdos_286    =
 sw_a_msdos_386    =
 sw_a_rdos_386     =
@@ -258,6 +261,7 @@ sw_a_linux_mps    =
 
 # sw_a_(system)
 sw_a_msdos      = -bt=dos
+sw_a_cpm86      = -bt=dos
 sw_a_nw_clib    = -bt=netware
 sw_a_nw_clibl   = -bt=netware
 sw_a_nw_libc    = -bt=netware5

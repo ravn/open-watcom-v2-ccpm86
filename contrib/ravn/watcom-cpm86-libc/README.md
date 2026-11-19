@@ -1,6 +1,13 @@
 # watcom-cpm86-libc — retargeting Open Watcom's own C library to CP/M-86
 
 Tracking issue: **ravn/rc7xx-work#6**.
+For the porting *story* (the pivot, milestones, and verification method) see
+[`PORTING.md`](PORTING.md); for remaining gaps see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
+
+**All three memory models** (small/medium/compact) are built and gated by one
+command — `bash run-all-models.sh` (7 tests × 3 models, all green). See
+[`docs/BUILDING_ALL_MODELS.md`](docs/BUILDING_ALL_MODELS.md) for the build/test
+process and [`docs/FLOAT_PRINTF.md`](docs/FLOAT_PRINTF.md) for opt-in `%e/%f/%g`.
 
 **Status:** foundation **proven end-to-end** (run-verified under emu2). This
 directory demonstrates that Open Watcom's *own* clib can be retargeted to
@@ -216,6 +223,45 @@ standard-library work only (the `c90float`/`c90double` modules are upstream
 stubs in 0.8), so this proof exercises **no floating point** — it neither uses
 nor retires the `double` ABI seam.
 
+## What the C++ proof adds (`build-cpp.sh`)
+
+The proofs above are all C. `build-cpp.sh` lifts the same retargeted-clib
+foundation to **C++**: Watcom's own **iostreams** (`std::cout`/`cin`/`cerr`,
+insertion/extraction operators, `std::endl`), **exception handling**
+(`try`/`throw`/`catch`, stack unwinding) and **`setjmp`/`longjmp`** running on
+the real RC759, layered over the disk FILE\* seam (`port/diskio.c`) — so
+`cout` buffers flush through the same `__qwrite` path the C `stdio` proof uses.
+It reuses Watcom's genuine C++ runtime libraries (`plib*`/`plbx*` base runtime
++ `iost*`/`iosx*` iostream) unchanged; only a handful of CP/M-86 OS seams and a
+C++-aware startup are ours.
+
+**MAME rc759-verified.** `test/cppfeat.cpp` (iostream + EH + setjmp feature
+sweep) reports **8 passes / 0 failures** and `test/mame_cpptest.cpp` reports
+**6 / 0** on the real machine (result records `0x0008` / `0x0006` on port
+`0x2FE`, same harness as the C proofs); both also run on emu2. Purity gate
+holds — INT 21h = 0, BDOS only.
+
+The one thing plain C never needs is **global-constructor startup**. Watcom C++
+registers each global object's constructor as a record in segment `XI` (its
+destructor in `YI`); predefined `cout`/`cin`/`cerr` are constructed this way.
+The minimal C `crt0` does not walk those tables, so the first `std::cout <<`
+would dereference an unconstructed streambuf and crash. `port/crt0cpp.asm` is
+the C `crt0` (heap seed + `__CommonInit` stdio attach) **extended** to bracket
+`XIB/XI/XIE` + `YIB/YI/YIE` into `DGROUP` and run `__init_rtns`
+(priority-ascending, before `main`) and `__fini_rtns` (priority-descending,
+after `main`). Empty tables are a no-op, so it is safe for pure C too — but the
+seven C targets keep the leaner `port/crt0sm.asm`; only `build-cpp.sh` uses
+`crt0cpp.asm`.
+
+The genuine C++ OS seams are small: `port/cpprt.c` supplies `__clib_malloc`/
+`__clib_free` (the runtime's allocator hooks onto Watcom `nmalloc`/`nfree`), and
+`port/ehsupp.c` supplies the exception/`longjmp` glue — a **near** `__longjmp_handler`
+(a far one would `retf` against `longjmp`'s near call and unbalance the stack),
+null `_get_ovl_stack`/`_restore_ovl_stack` (no overlays), and `__clib_exit`/
+`__clib_fatal`. Everything else — `strupr` (aliased `strupr_=_strupr_` like
+`strlwr` in the stream-I/O build), `ltoa`/`ultoa`, the buffered flush — is
+genuine, unchanged Watcom clib.
+
 ## Files
 
 | Path | Role |
@@ -228,15 +274,19 @@ nor retires the `double` ABI seam.
 | `build-float.sh` | double soft-float proof: `-fpc` runtime `__FDx` arithmetic on CP/M-86, no 8087; purity + anti-fold gates |
 | `build-whetstone.sh` | Whetstone proof: transcendental libm (sin/cos/atan/exp/log/sqrt) + real `%e` float printf on CP/M-86, no 8087; adds the `assert_no_286` CPU gate |
 | `build-owtests.sh` | Runs Open Watcom's OWN `ctest` float regression suite (`float01..float04`, byte-for-byte unchanged) on CP/M-86, `-fpc` no 8087; independent third-party oracle. Needs `-zastd=c99` for the tests' C99 hex-float/`fpclassify` |
+| `build-cpp.sh` | C++ proof: Watcom iostreams (`cout`/`cin`/`cerr`) + exceptions (`try`/`throw`/`catch`) + `setjmp`/`longjmp` on CP/M-86, layered over the disk FILE\* seam; MAME rc759-verified (cppfeat 8/0, mame_cpptest 6/0) |
 | `run-stdcbench-mame.sh` | stdcbench cross-check: builds `-DMAME_DONE` + runs SCB.CMD on cycle-accurate MAME rc759 (score 20 vs DR C 13) |
 | `port/cprintf.c` | Layer-2 seam: `__prtf` + BDOS `C_WRITE` callback (direct console printf) |
 | `port/stdioshim.c` | Layer-2 seam: `__qwrite` (BDOS console write) + `isatty` for the FILE\* path |
 | `port/diskio.c` | Layer-2 seam (disk build): supersedes `stdioshim.c` — `_sopen`/`__qread`/`__qwrite`/`__lseek`/`__close` + `lseek`/`_tell`/`remove`/`unlink`/`isatty` via CP/M-86 FCB random-record BDOS |
 | `port/lowlevel.c` | Layer-2 seam: arena `__brk`/`sbrk` + `_curbrk` (near-heap bottom) |
 | `port/crt0sm.asm` | CP/M-86 small-model startup (SS setup, `wc_heap_init`, `__CommonInit`, BDOS exit, `__STK` stub) |
+| `port/crt0cpp.asm` | C++ startup (C++ builds only): `crt0sm.asm` + the `XI`/`YI` global ctor/dtor table walk (`__init_rtns` before `main`, `__fini_rtns` after) so predefined `cout`/`cin`/`cerr` are constructed |
 | `port/cominit.c` | `__CommonInit` — crt0-invoked runtime init (ow#16): `__InitFiles` (+ `__setEFGfmt` when `-DCOMMONINIT_EFG`); empty under `-DCOMMONINIT_NOSTDIO` for cprintf-only demos |
 | `port/stubs.c` | never-reached closure stubs (`_ismbblead`, `__fatal_runtime_error`, `errno`, read-path `__lseek`/`fsync`; disk-build-only `tolower`/`__flushall`/`getche` under `-DDISKIO_LSEEK`) |
 | `port/errnoptr.c` | `__get_errno_ptr_` for mathlib `_matherr` (returns `&errno`; avoids duplicating the `errno` global that `stubs.c` owns) |
+| `port/cpprt.c` | Layer-2 seam (C++ builds): `__clib_malloc`/`__clib_free` — the C++ runtime allocator hooks onto Watcom `nmalloc`/`nfree` |
+| `port/ehsupp.c` | Layer-2 seam (C++ builds): exception/`longjmp` glue — near `__longjmp_handler`, null overlay-stack hooks, `__clib_exit`/`__clib_fatal` |
 | `port/abortcpm.c` | lightweight `abort()` = CP/M-86 warm-boot (BDOS 0), avoids Watcom's signal/raise machinery (float regression tests' `fail.h` references it) |
 | `test/main.c` | printf demo driver / oracle |
 | `test/heaptest.c` | heap demo driver / oracle |
@@ -245,6 +295,9 @@ nor retires the `double` ABI seam.
 | `test/floattest.c` | double soft-float demo driver / oracle |
 | `test/whetstone.c` | Whetstone benchmark driver (libm + `%e` printf) / oracle |
 | `test/owtdrv.c` | PASS/FAIL driver wrapping Watcom's own `float01..float04` (`-Dmain=owtest_main`); prints one `OWTEST: PASS/FAIL` verdict |
+| `test/cppfeat.cpp` | C++ iostream + exception + `setjmp` feature-sweep driver / self-checking oracle (reports 8/0 on `0x2FE`) |
+| `test/mame_cpptest.cpp` | C++ iostream/EH driver / self-checking oracle (reports 6/0 on `0x2FE`) |
+| `test/mamedone.h` | `MAME_DONE` result-record tap (writes pass/fail counts to I/O port `0x2FE`), shared by the C++ tests |
 | `test/scbport.c` | stdcbench glue: BDOS `T_GET` clock, `main`, `mame_done` (init via crt0 `__CommonInit`) |
 | `test/portme.h` | stdcbench 0.8 port config (integer c90base+c90lib set) |
 | `KNOWN_ISSUES.md` | honest list of bugs, gaps, inherent CP/M limits, and emu2-only (MAME-unverified) results |
@@ -255,6 +308,10 @@ Uses the pre-built cross tools + clib source from the scratch OW tree
 (override with `OW=`): `wcc.exe`, `wasm.exe`, `wlink.exe`; runs under `emu2`
 (override with `EMU2=`). `wlink` must include the CP/M-86 paragraph-packing
 fix (`f21f6a9f`).
+
+The `wcc`/`wpp`/`wasm`/`wlink` flags used by the build scripts (and why each is
+chosen, plus notable flags deliberately *not* used, e.g. `-1` 80186 codegen) are
+documented in [`docs/WATCOM_FLAGS.md`](docs/WATCOM_FLAGS.md).
 
 ## CPU-safety gate — 80186 (`assert_no_286`)
 
@@ -355,6 +412,21 @@ Tracked in ravn/rc7xx-work#6:
    `handleio`/`file`) is the eventual gold-standard oracle (as `float01–04` were
    for soft-float); it needs a few more primitives than a v1 round-trip
    (`tmpfile`/`tmpnam`/`fscanf`/`fopen("CON")`), documented as the next step.
+
+7. ~~**C++ layer** — prove Watcom's own **iostreams**, **exception handling**
+   and **`setjmp`/`longjmp`** run on the RC759, layered over the disk FILE\*
+   seam.~~ **DONE** (`build-cpp.sh` + `test/cppfeat.cpp`/`test/mame_cpptest.cpp`,
+   MAME rc759-verified: **8/0** and **6/0**). Reuses Watcom's genuine C++
+   runtime (`plib*`/`plbx*` + `iost*`/`iosx*`) unchanged; the CP/M-86 seams are
+   `port/cpprt.c` (`__clib_malloc`/`__clib_free` → Watcom `nmalloc`/`nfree`) and
+   `port/ehsupp.c` (near `__longjmp_handler`, null overlay-stack hooks,
+   `__clib_exit`/`__clib_fatal`). The one genuinely C++-specific piece is
+   startup: predefined `cout`/`cin`/`cerr` are constructed via `XI`/`YI` global
+   ctor/dtor records, which the minimal C `crt0` never walks, so
+   `port/crt0cpp.asm` extends it with `__init_rtns`/`__fini_rtns` (empty tables
+   = no-op, safe for pure C). This retargets the C++ layer that originally lived
+   on a hand-written scratch mini-clib onto Open Watcom's own library
+   (ravn/rc7xx-work#9, consolidated under #12).
 
 ## Next milestones (not yet done)
 

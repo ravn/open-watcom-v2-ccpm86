@@ -26,6 +26,7 @@ datasegment
         public  ___chipbug
         public  __chipbug
         public  ___FPE_handler
+        public  _fltused_
 
 __8087          db  0   ; 0 => no real 80x87 and no EMU present
 __real87        db  0   ; 0 => no real 80x87 used  => __FDxemu software path
@@ -40,6 +41,12 @@ __chipbug       dd  0   ; 0 => no buggy 8087 divider (irrelevant: no 8087)
 ; fstat086 / mathlib's _matherr reference it; our minimal crt0 never installs
 ; one, so 0 is correct.
 ___FPE_handler  dd  0   ; 0 => no user FP-exception handler
+; _fltused_: the compiler emits a reference to this from any module using float,
+; to force-link the FP support. Stock clib/startup/c/fltused.c defines it too but
+; ALSO runs AXIN(__setEFGfmt) -> drags the whole %e/%f/%g dtoa formatter in. We
+; want the marker WITHOUT that cascade (math tests print scaled %ld), so define
+; the word alone here. Programs that want printf("%f") link setefg.c explicitly.
+_fltused_       dw  1
 enddata
 
         endmod

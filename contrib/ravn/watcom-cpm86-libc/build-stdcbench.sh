@@ -1,4 +1,14 @@
 #!/bin/bash
+# ============================================================================
+# PARKED (owcc migration, 2026): NOT yet rewritten to owcc -bcpm86.
+# This script still uses the hand-assembled seam + wlink build path (crt0sm,
+# stdioshim, lowlevel, stubs, scbport -- all custom port seams), which the
+# owcc-standard/no-seams decision retires. Unlike Dhrystone + Mandelbrot
+# (already on owcc, see ../bench.sh / ../bench-mandel.sh), stdcbench has NO
+# baseline.json oracle and previously scored via emu2 (not built here), so a
+# faithful owcc rewrite needs a port + deterministic-scoring decision first.
+# User: "gem stdcbench for nu" -- left as-is until that is resolved.
+# ============================================================================
 # build-stdcbench.sh -- the wc-stdcbench milestone (rc7xx-work#6 milestone 4).
 #
 # Rebuild the SUBSTANTIAL multi-module benchmark stdcbench 0.8 (integer suite:
@@ -23,7 +33,7 @@
 # NEVER search outside /Users/ravn/z80/.
 set -e
 cd "$(dirname "$0")"
-OW="${OW:-/Users/ravn/z80/scratch/open-watcom-v2}"; B="$OW/bld"
+OW="${OW:-$(cd "$(dirname "$0")/../../.." && pwd)}"; B="$OW/bld"
 WCC="$B/cc/i86/osxa64/binbuild/wcc.exe"
 WASM="$B/wasm/osxa64/wasm.exe"
 WLINK="$B/wl/osxa64/wlink.exe"
@@ -183,7 +193,7 @@ echo "built scb.cmd ($(stat -f%z scb.cmd) bytes)"
 # --- optional emu2 functional run (host-speed score; proves execution) ---
 if [ -n "$SCB_NORUN" ]; then echo "SCB_NORUN set -- skipping emu2 run"; exit 0; fi
 echo "=== running stdcbench (emu2 functional run; score reflects HOST speed) ==="
-OUT="$("$EMU2" scb.cmd 2>&1 | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 scb.cmd 2>&1 | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "final score:"; then
   echo "PASS: stdcbench (c90base+c90lib) runs end-to-end on Watcom clib + our shim"
 else

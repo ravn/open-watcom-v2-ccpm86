@@ -1,0 +1,67 @@
+# CP/M-86 small-model clib merge component list.
+#
+# Same OS-agnostic component set as library/msdos.086/libs.mif, but:
+#   - the OS layer `_dos` (INT 21h) is replaced by `_cpm` (BDOS INT 0E0h);
+#   - the DOS `startup` component is dropped (cpm86 supplies its own startup,
+#     _cpm/.../cstartcpm.obj). That startup is ARCHIVED into `_cpm`'s clibs.lib
+#     (its entry is in the front-sorted BEGTEXT segment, so a library-member
+#     pull still lands _cstart_ at code-group offset 0), so wlink's `system
+#     cpm86` block auto-selects it via the object's default-library record with
+#     NO `libfile` -- exactly the 16-bit `system dos` convention.
+# `_cpm` is listed FIRST so its objects own the OS-coupled symbols in the
+# merged archive dictionary. When a later msdos.086 component object exports a
+# symbol `_cpm` has already defined, wlib DROPS that object outright (it is not
+# added to the archive at all -- verify with `wlib clibs.lib` + grep: the DOS
+# seams below have ZERO modules), so the CP/M-86 lib carries NO dead INT 21h
+# code -- this is genuine exclusion, not retain-and-shadow. Three OS layers are
+# replaced this way:
+#   - fd-layer:  diskio.obj  -> drops the DOS handleio objects (qwrit.obj/
+#                __lseek.obj, which trap INT 21h via __set_errno_dos). The
+#                OS-agnostic handleio objects (e.g. textmode.obj -> _fmode)
+#                have no symbol clash and still resolve on demand.
+#   - near heap: lowlevel.obj (__brk/sbrk over an in-DGROUP arena) -> drops
+#                heap/c/sbrk.obj (INT 21h AH=4Ah TinySetBlock).
+#   - far heap:  farheap.obj (__AllocSeg/__GrowSeg/__FreeSeg carving the .CMD
+#                type-3 Extra reservation) -> drops heap/c/{allocseg,growseg,
+#                freeseg}.obj (INT 21h AH=48h/49h TinyAllocBlock/TinyFreeBlock).
+#                The OS-generic far-heap API (_fmalloc/_ffree/_frealloc/... in
+#                heap/c/) is UNCHANGED and links on top of these seams.
+# The agnostic components are OS-independent by construction, so cpm86 reuses
+# the standard-built msdos.086 component libraries rather than rebuilding
+# byte-identical objects; only `_cpm` is compiled for system=cpm86.
+
+pfx__ =../../../
+agn__ =/library/msdos.086/$(libsubdir)/$(libname).lib
+cpm__ =/library/cpm86.086/$(libsubdir)/$(libname).lib
+
+libs = $+ &
+    $(pfx__)_cpm$(cpm__) &
+    $(pfx__)alias$(agn__) &
+    $(pfx__)bios$(agn__) &
+    $(pfx__)cgsupp$(agn__) &
+    $(pfx__)char$(agn__) &
+    $(pfx__)conio$(agn__) &
+    $(pfx__)convert$(agn__) &
+    $(pfx__)direct$(agn__) &
+    $(pfx__)environ$(agn__) &
+    $(pfx__)file$(agn__) &
+    $(pfx__)fpu$(agn__) &
+    $(pfx__)handleio$(agn__) &
+    $(pfx__)heap$(agn__) &
+    $(pfx__)intel$(agn__) &
+    $(pfx__)kanji$(agn__) &
+    $(pfx__)math$(agn__) &
+    $(pfx__)mbyte$(agn__) &
+    $(pfx__)memory$(agn__) &
+    $(pfx__)misc$(agn__) &
+    $(pfx__)posix$(agn__) &
+    $(pfx__)process$(agn__) &
+    $(pfx__)search$(agn__) &
+    $(pfx__)streamio$(agn__) &
+    $(pfx__)string$(agn__) &
+    $(pfx__)time$(agn__) &
+    $-
+
+pfx__ =
+agn__ =
+cpm__ =

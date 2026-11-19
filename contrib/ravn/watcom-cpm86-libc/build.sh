@@ -12,7 +12,7 @@
 #   above it is Watcom's unmodified clib source.
 set -e
 cd "$(dirname "$0")"
-OW="${OW:-/Users/ravn/z80/scratch/open-watcom-v2}"; B="$OW/bld"
+OW="${OW:-$(cd "$(dirname "$0")/../../.." && pwd)}"; B="$OW/bld"
 WCC="$B/cc/i86/osxa64/binbuild/wcc.exe"
 WASM="$B/wasm/osxa64/wasm.exe"
 WLINK="$B/wl/osxa64/wlink.exe"
@@ -33,6 +33,7 @@ USER="-bt=dos -0 -ms -zl -zastd=c99"                     # compile our plain por
 "$WCC" $CLIB $INC "$B/clib/convert/c/lltoa.c"     -fo=lltoa.obj     # ulltoa_ (narrow)
 "$WCC" $CLIB $INC "$B/clib/convert/c/alphabet.c"  -fo=alphabet.obj  # ___Alphabet table
 "$WCC" $CLIB $INC "$B/clib/mbyte/c/wctomb.c"      -fo=wctomb.obj
+"$WCC" $CLIB $INC "$B/clib/heap/c/amblksiz.c"     -fo=amblksiz.obj  # _amblksiz heap grow-size global (lowlevel.c __brk seam refs it)
 # long-arithmetic helpers (Layer 1 "kernel"): 32-bit multiply / divide
 "$WASM" -ms -0 -i="$B/watcom/h" "$B/clib/cgsupp/a/i4m.asm" -fo=i4m.obj
 "$WASM" -ms -0 -i="$B/watcom/h" "$B/clib/cgsupp/a/i4d.asm" -fo=i4d.obj
@@ -50,7 +51,7 @@ USER="-bt=dos -0 -ms -zl -zastd=c99"                     # compile our plain por
   file crt0.obj file main.obj file cprintf.obj file lowlevel.obj file prtf.obj file noefgfmt.obj \
   file cominit.obj \
   file strupr.obj file itoa.obj file ltoa.obj file lltoa.obj file alphabet.obj \
-  file strlen.obj file wctomb.obj file stubs.obj file i4m.obj file i4d.obj
+  file strlen.obj file wctomb.obj file stubs.obj file i4m.obj file i4d.obj file amblksiz.obj
 
 # --- purity gate: zero INT 21h (DOS), at least one INT E0h (BDOS) ---
 python3 - demo.cmd <<'PY'

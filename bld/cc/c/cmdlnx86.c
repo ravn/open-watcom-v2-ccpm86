@@ -155,6 +155,23 @@ static char *setTargetSystem( OPT_STORAGE *data )
     if( target_name != NULL ) {
         if( strcmp( target_name, "DOS" ) == 0 ) {
             TargetSystem = TS_DOS;
+#if _CPU == 8086
+        } else if( strcmp( target_name, "CPM86" ) == 0 ) {
+            /*
+             * CP/M-86 uses the very same 8086 real-mode codegen as MS-DOS
+             * (identical ISA, OMF object format, memory models and calling
+             * conventions). It differs only in the runtime (BDOS software
+             * INT 0E0h vs DOS INT 21h) and the executable format (.CMD group
+             * descriptors vs .COM / MZ .EXE) -- both handled at link time
+             * (wlink FORMAT CPM86) plus the _cpm runtime seam, never in the
+             * compiler. So inherit the DOS target verbatim: TS_DOS has no
+             * codegen effect here (nothing in cg/cc branches on it -- it only
+             * selects the _DOS/MSDOS predefines below), while keeping
+             * target_name "CPM86" makes SetFinalTargetSystem predefine
+             * __CPM86__ so source can tell the two apart with #ifdef __CPM86__.
+             */
+            TargetSystem = TS_DOS;
+#endif
         } else if( strcmp( target_name, "NETWARE" ) == 0 ) {
             TargetSystem = TS_NETWARE;
         } else if( strcmp( target_name, "NETWARE5" ) == 0 ) {
@@ -404,6 +421,21 @@ static void SetFinalTargetSystem( OPT_STORAGE *data, char *target_name )
     if( target_name != NULL ) {
         sprintf( buff, "__%s__", target_name );
         PreDefine_Macro( buff );
+#if _CPU == 8086
+        if( strcmp( target_name, "CPM86" ) == 0 ) {
+            /*
+             * CP/M-86 is a first-class platform, NOT DOS (issue #34).  Define
+             * __CPM__ (the generic CP/M-family marker, mirroring how __DOS__ is
+             * generic for DOS) alongside __CPM86__ (predefined just above from
+             * target_name), and do NOT predefine __DOS__/_DOS/MSDOS (see the
+             * TS_DOS case below).  Architecture-shared behaviour is reached via
+             * _M_I86 / __I86__ (already predefined for this 8086 target); the few
+             * DOS-family clib/header gates CP/M-86 also needs list __CPM86__
+             * explicitly.
+             */
+            PreDefine_Macro( "__CPM__" );
+        }
+#endif
     }
 
     PreDefine_Macro( UIMX86 );
@@ -423,9 +455,20 @@ static void SetFinalTargetSystem( OPT_STORAGE *data, char *target_name )
 
     switch( TargetSystem ) {
     case TS_DOS:
-        PreDefine_Macro( "_DOS" );
-        if( CompFlags.non_iso_compliant_names_enabled ) {
-            PreDefine_Macro( "MSDOS" );
+#if _CPU == 8086
+        if( target_name != NULL && strcmp( target_name, "CPM86" ) == 0 ) {
+            /*
+             * CP/M-86 shares DOS codegen (TS_DOS has no codegen effect here --
+             * see setTargetSystem) but is NOT DOS: emit no _DOS/MSDOS predefines.
+             * It is identified by __CPM86__/__CPM__ (predefined above).
+             */
+        } else
+#endif
+        {
+            PreDefine_Macro( "_DOS" );
+            if( CompFlags.non_iso_compliant_names_enabled ) {
+                PreDefine_Macro( "MSDOS" );
+            }
         }
         break;
     case TS_QNX:

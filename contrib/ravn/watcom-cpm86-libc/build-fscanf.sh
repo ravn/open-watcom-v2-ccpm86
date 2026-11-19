@@ -21,7 +21,7 @@
 # INT21h(DOS)=0. rc7xx-work GAP #3 (clibtest oracle) streamio subset.
 set -e
 cd "$(dirname "$0")"
-OW="${OW:-/Users/ravn/z80/scratch/open-watcom-v2}"; B="$OW/bld"
+OW="${OW:-$(cd "$(dirname "$0")/../../.." && pwd)}"; B="$OW/bld"
 WCC="$B/cc/i86/osxa64/binbuild/wcc.exe"
 WASM="$B/wasm/osxa64/wasm.exe"
 WLINK="$B/wl/osxa64/wlink.exe"
@@ -179,7 +179,7 @@ if [ "${FSCANF_NORUN:-0}" = "1" ]; then
   exit 0
 fi
 rm -f TEST.TXT SCAN.DAT
-OUT="$("$EMU2" disktest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 disktest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 if echo "$OUT" | grep -q "DISKIO: PASS"; then
   echo "PASS: Watcom GENUINE fscanf read-path formatter on CP/M-86 disk files"
 else

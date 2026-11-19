@@ -1,0 +1,11 @@
+# Reproducible build outputs (mk-cpm-soft-float-lib.sh + bench*.sh regenerate these).
+*.o
+*.obj
+cpm-soft-float.lib
+# Generated benchmark .CMDs (oracle is baseline.json, not the binaries).
+/DHRY*.CMD
+/MANDEL*.CMD
+/owc-drc/DHRY*.CMD
+/owc-drc/MANDEL*.CMD
+SCB*.CMD
+build-*/

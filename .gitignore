@@ -241,3 +241,6 @@ failures.log
 !binmake
 
 .DS_Store
+
+# generated wipfc binbuild makefile
+/bld/wipfc/binbuild/Makefile

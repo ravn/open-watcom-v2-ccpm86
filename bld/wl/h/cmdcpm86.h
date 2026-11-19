@@ -35,5 +35,14 @@ extern void SetCPM86Fmt( void );
 extern void FreeCPM86Fmt( void );
 
 extern bool ProcCPM86Format( void );
+extern bool ProcCPM86FarHeap( void );
+
+/* Stage A far heap (Extra group descriptor) size, in bytes, as requested by
+ * `OPTION FARHEAP=<size>`.  0 (default) means no Extra group is emitted --
+ * output stays small-model, byte-identical to phase 1.  Non-zero switches
+ * FiniCPM86LoadFile() into "compact model" per the CP/M-86 System Guide's own
+ * definition (Code+Data plus >=1 of Stack/Extra/Auxiliary): the model is
+ * implicit in which group descriptors are present, not a separate flag. */
+extern offset CPM86FarHeapSize;
 
 #endif

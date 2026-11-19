@@ -18,8 +18,8 @@
 ;   how the loader set DS.
 ;
 ;   Build:  wasm hello.asm
-;           wl format raw bin option start=start_ name hello.bin file hello.obj
-;           python3 bin2cmd.py hello.bin HELLO.CMD
+;           wl format cpm86 name HELLO.CMD file hello.obj
+;           (native CP/M-86 .CMD; the former raw+bin2cmd.py wrap was retired)
 ;
 ;****************************************************************************
         .8086

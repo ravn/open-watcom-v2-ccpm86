@@ -92,6 +92,7 @@ extern void             SeekEndLoad( unsigned long );
 extern unsigned long    PosLoad( void );
 extern void             WriteLeaderLoad( void * );
 extern offset           WriteGroupLoad( group_entry *, bool );
+extern offset           WriteGroupLoadInitOnly( group_entry * );
 extern unsigned_32      CopyToLoad( f_handle, const char * );
 extern unsigned long    NullAlign( unsigned );
 extern unsigned long    OffsetAlign( unsigned long, unsigned long );

@@ -13,7 +13,7 @@
 *       0  P_TERMCPM    terminate program, return to CCP
 *
 *   Build with small model (-ms) so code+data share one segment, matching the
-*   CP/M-86 "8080 model" produced by bin2cmd.py (single relocatable group).
+*   CP/M-86 "8080 model" (single relocatable group) emitted by wl format cpm86.
 *
 ****************************************************************************/
 

@@ -54,7 +54,7 @@
   #include <wos2.h>
 #elif defined( __RDOS__ )
   #include <rdos.h>
-#elif defined( __DOS__ )
+#elif defined( __DOS__ ) || defined( __CPM86__ )
   #include "tinyio.h"
   #include "dpmi.h"
 #endif

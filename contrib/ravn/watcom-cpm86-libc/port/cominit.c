@@ -27,12 +27,31 @@
  *                          install the genuine EFG formatter.
  */
 
+#include "variety.h"        /* _WCNEAR (near/far attribute macros per model) */
+
 #ifndef COMMONINIT_NOSTDIO
-extern void __InitFiles( void );    /* attach stdout/stderr FILE buffers */
+extern void _WCNEAR __InitFiles( void );    /* attach stdout/stderr FILE buffers */
 #endif
 #ifdef COMMONINIT_EFG
-extern void __setEFGfmt( void );    /* install real %e/%f/%g formatter */
+extern void _WCNEAR __setEFGfmt( void );    /* install real %e/%f/%g formatter */
 #endif
+#ifdef COMMONINIT_REDIRECT
+extern int  __apply_redirection( int argc, char **argv ); /* port/diskio.c */
+extern void __close_redirection( void );                  /* port/diskio.c */
+#endif
+
+/* Tail-call barrier. __CommonInit is FAR (crt0 does `call far ptr
+   __CommonInit_`), but its callees __InitFiles/__setEFGfmt are _WCNEAR (near
+   RET). With the near-code far-data models (large/medium) the optimizer would
+   tail-call the LAST callee as a bare `jmp` -- then that callee's NEAR ret pops
+   only IP and performs __CommonInit's far return with a stale CS, sending crt0
+   to <curCS>:<retIP> (garbage) instead of BEGTEXT:<retIP>. Concretely this hung
+   ZIP.CMD before main(): __InitFiles' `ret` at seg2:8D3A jumped to seg2:0011
+   (mid-ask_for_split_write_path) which then fgets()'d the console forever.
+   A store to this escaping volatile after the last call keeps __CommonInit from
+   ending on the near callee, so it emits its own `retf`. No-op cost on the
+   near-code models; harmless (a single word store) on the near-data ones. */
+static volatile int __ci_tail_barrier;
 
 void __CommonInit( void )
 {
@@ -41,5 +60,30 @@ void __CommonInit( void )
 #endif
 #ifdef COMMONINIT_EFG
     __setEFGfmt();
+#endif
+    __ci_tail_barrier = 0;      /* defeat far-fn -> near-fn tail-call (see above) */
+}
+
+/* __CommonRedirect -- crt0 calls this AFTER the command-tail argv parser and
+   BEFORE main(). Only the disk-file builds (-DCOMMONINIT_REDIRECT, the ones that
+   link port/diskio.c) actually honour shell-style < / > / >> on the command
+   tail; every other build compiles this as an argc-preserving no-op so the crt0
+   call resolves without dragging the FCB disk layer into a console-only .CMD. */
+int __CommonRedirect( int argc, char **argv )
+{
+#ifdef COMMONINIT_REDIRECT
+    return( __apply_redirection( argc, argv ) );
+#else
+    (void)argv;
+    return( argc );
+#endif
+}
+
+/* __CommonRedirectClose -- crt0 calls this AFTER main() returns, to flush and
+   commit any redirected stdout file. No-op unless redirection is compiled in. */
+void __CommonRedirectClose( void )
+{
+#ifdef COMMONINIT_REDIRECT
+    __close_redirection();
 #endif
 }

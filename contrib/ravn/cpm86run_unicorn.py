@@ -37,8 +37,35 @@ from unicorn.x86_const import (
     UC_X86_REG_AX, UC_X86_REG_BX,
 )
 
-import bin2cmd
 import ccp
+
+# CP/M-86 .CMD group-descriptor types (System Guide, CMD-header appendix;
+# cross-checked with seasip.info/Cpm/cmdfile.html). Only CODE/DATA are named
+# here; the loader below keeps all other group types (3..8) generically.
+G_CODE = 0x01
+G_DATA = 0x02
+
+
+def parse_header(data):
+    """Parse the 8x9-byte group descriptors of a CP/M-86 .CMD header.
+
+    Each descriptor is type(1) + length(2) + base(2) + min(2) + max(2), all
+    little-endian, lengths/bases in 16-byte paragraphs. Stops at the first
+    zero-type slot. Returns a list of (gtype, length, base, minp, maxp) tuples.
+    """
+    groups = []
+    for i in range(8):
+        off = i * 9
+        gtype = data[off]
+        if gtype == 0:
+            break
+        length = data[off + 1] | (data[off + 2] << 8)
+        base = data[off + 3] | (data[off + 4] << 8)
+        minp = data[off + 5] | (data[off + 6] << 8)
+        maxp = data[off + 7] | (data[off + 8] << 8)
+        groups.append((gtype, length, base, minp, maxp))
+    return groups
+
 
 LOAD_SEG = 0x1000      # paragraph where the first (code) group is placed
 CCP_SEG = 0x0800       # emulated CCP area: stack + a return stub below the program
@@ -100,11 +127,69 @@ class BdosUnimplemented(Exception):
 
 def _detect_model(groups):
     types = [g[0] for g in groups]
-    if types == [bin2cmd.G_CODE]:
+    if types == [G_CODE]:
         return "8080"
-    if sorted(types) == [bin2cmd.G_CODE, bin2cmd.G_DATA]:
+    if sorted(types) == [G_CODE, G_DATA]:
         return "small"
     return "compact"
+
+
+def _apply_fixups(uc, data, group_seg):
+    """Apply CP/M-86 load-time relocation ("P_LOAD" fixups) to memory.
+
+    Faithful port of the genuine Concurrent CP/M-86 2.0 loader (`load.sup`
+    lines 402-449; see [[reference_cpm86_cmd_header_ccpm_source]]). It runs only
+    when header byte 127 (`ch_lbyte`, 0x7F) has bit 7 (0x80) set. The fixup
+    table starts at file RECORD number `ch_fixrec` (word at 0x7D), i.e. byte
+    offset ch_fixrec*128, and is a packed array of 4-byte records terminated by
+    the first all-zero record:
+
+        byte 0   fix_grp   hi nibble = group the LOCATION word lives in
+                           lo nibble = TARGET group whose LOAD SEGMENT is ADDED
+        byte 1-2 fix_para  paragraph offset of the word within the LOCATION
+                           group (little-endian)
+        byte 3   fix_offs  byte offset 0..15 of the word within that paragraph
+
+    For each record the loader does `add es:[loc], dx` where `es:loc` is
+    (location_group_load_seg + para):offs and `dx` is the target group's actual
+    load segment.  The word already holds a *group-relative* paragraph (what the
+    linker wrote in place of the final segment); adding the runtime load segment
+    turns it into the absolute segment.
+
+    Worked example (DR C `RELOCSEG.CMD`, fixup rec #561 = the CLEARL guard):
+    grp=0x11 (location in CODE, add CODE base), para=0x017, offs=6 -> the word
+    at code_seg:(0x17*16+6) = code_seg:0x176 (CLEARL's `mov cx,0` immediate)
+    gets code_seg added, so it becomes nonzero and CLEARL skips its own
+    self-relocation -- exactly the guard that stops loader+crt0 double-applying.
+
+    Returns the number of records applied.
+    """
+    if not (data[0x7F] & 0x80):          # bit 7 clear -> no load-time fixups
+        return 0
+    fixrec = data[0x7D] | (data[0x7E] << 8)   # start record number (word, LE)
+    pos = fixrec * 128                        # record N -> byte offset N*128
+    applied = 0
+    while pos + 4 <= len(data):
+        grp, para_lo, para_hi, offs = data[pos:pos + 4]
+        if grp == 0 and para_lo == 0 and para_hi == 0 and offs == 0:
+            break                             # table ends at the first zero rec
+        loc_grp = (grp >> 4) & 0x0F           # group the location word lives in
+        tgt_grp = grp & 0x0F                  # group whose load seg is added
+        para = para_lo | (para_hi << 8)
+        loc_seg = group_seg.get(loc_grp)
+        tgt_seg = group_seg.get(tgt_grp)
+        if loc_seg is None or tgt_seg is None:
+            raise ValueError(
+                f"fixup record {applied} at 0x{pos:X} references undefined "
+                f"group (grp byte 0x{grp:02X}); loaded groups: "
+                f"{sorted(group_seg)}")
+        addr = ((loc_seg + para) << 4) + offs
+        w = uc.mem_read(addr, 2)
+        val = ((w[0] | (w[1] << 8)) + tgt_seg) & 0xFFFF
+        uc.mem_write(addr, bytes((val & 0xFF, (val >> 8) & 0xFF)))
+        applied += 1
+        pos += 4
+    return applied
 
 
 def _load(uc, data, cmdline):
@@ -112,7 +197,7 @@ def _load(uc, data, cmdline):
     CCP. Returns (cs, ip). Raises ValueError on a malformed file."""
     if len(data) < 128 or not (1 <= data[0] <= 9):
         raise ValueError("not a CP/M-86 .CMD file")
-    groups = bin2cmd.parse_header(data)
+    groups = parse_header(data)
     if not groups:
         raise ValueError(".CMD header has no group descriptors")
     model = _detect_model(groups)
@@ -133,12 +218,19 @@ def _load(uc, data, cmdline):
         all_groups.append((gtype, length, minp, maxp, img))
         off += nbytes
 
-    code_img = images.get(bin2cmd.G_CODE, b"")
-    data_img = images.get(bin2cmd.G_DATA, b"")
+    code_img = images.get(G_CODE, b"")
+    data_img = images.get(G_DATA, b"")
     code_len = len(code_img)
 
     code_seg = LOAD_SEG
     uc.mem_write(code_seg << 4, code_img)
+
+    # Map each CP/M-86 group NUMBER (== descriptor type: 1=code, 2=data,
+    # 3=extra, 4=stack, 5..8=aux) to the paragraph it is actually loaded at.
+    # _apply_fixups() below uses this exactly as the real loader's `tblsrch`
+    # does (load.sup): a fixup record names groups by number and the loader adds
+    # that group's runtime load segment.
+    group_seg = {G_CODE: code_seg}
 
     if model == "8080":
         data_seg = code_seg
@@ -161,7 +253,7 @@ def _load(uc, data, cmdline):
         # (extra/stack/aux) groups.
         img_paras = (len(data_img) + 15) // 16
         data_desc = next((g for g in groups
-                          if g[0] == bin2cmd.G_DATA), None)
+                          if g[0] == G_DATA), None)
         alloc_paras = 0x1000                      # 64K
         if data_desc is not None:
             _, _, _, dminp, dmaxp = data_desc
@@ -169,6 +261,7 @@ def _load(uc, data, cmdline):
                 alloc_paras = dmaxp
         alloc_paras = max(alloc_paras, img_paras)
         data_len = alloc_paras * 16              # LD = data_len - 1
+    group_seg[G_DATA] = data_seg
 
     # Build the base page from the command line and write it into the data
     # segment (which equals the code segment in the 8080 model).
@@ -195,8 +288,20 @@ def _load(uc, data, cmdline):
             continue
         want = maxp if (maxp and maxp >= length) else max(minp, length)
         want = max(want, 1)
+        # Clamp to the RAM actually available above this group -- a real CP/M-86
+        # loader grants only as much of the type-3 Extra reservation as physically
+        # fits in the TPA, then the program uses what it got. Without this a large
+        # FARHEAP=<size> (e.g. ~1 MB) would zero-fill past MEM_SIZE and trap
+        # UC_ERR_WRITE_UNMAPPED. Example: free_seg=0x1A00, maxp=0xF000 -> want
+        # clamped to 0x10000-0x1A00 = 0xE600 paras (~920 KB granted of 960 asked).
+        avail = (MEM_SIZE >> 4) - free_seg
+        if avail < 1:
+            avail = 1
+        if want > avail:
+            want = avail
         seg = free_seg
         free_seg += want
+        group_seg[gtype] = seg
         uc.mem_write(seg << 4, b"\x00" * (want * 16))   # zero-fill (BSS)
         if img:
             uc.mem_write(seg << 4, img)                 # initialised part
@@ -207,6 +312,17 @@ def _load(uc, data, cmdline):
         bp[off + 3] = seg & 0xFF
         bp[off + 4] = (seg >> 8) & 0xFF
         bp[off + 5] = 0                                  # model flag (0 = 8086)
+
+    # Apply load-time relocation (byte-127 bit7 + ch_fixrec) now that every
+    # group is in memory and we know each group's actual load segment -- exactly
+    # where the genuine loader does it (load.sup: fixups, THEN base-page init).
+    # For DR C .CMDs this makes CLEARL's guard immediate nonzero so its crt0
+    # self-relocation is skipped (loader relocated instead); for pure-P_LOAD
+    # wlink medium-model output (no crt0 walker) this is the ONLY relocation.
+    n_fixups = _apply_fixups(uc, data, group_seg)
+    if n_fixups and os.environ.get("CPM86_DEBUG"):
+        print(f"[cpm86run] applied {n_fixups} load-time fixup(s)",
+              file=sys.stderr)
 
     uc.mem_write(data_seg << 4, bytes(bp))
 
@@ -263,7 +379,7 @@ def _write_tod(uc, seg, off, base_dt, elapsed_seconds):
 
 
 def run(path, cmdline=None, stdin_bytes=b"", count_insns=False,
-        count_cycles=False):
+        count_cycles=False, dump_path=None):
     """Load and run a .CMD file. Returns the captured console output (str).
 
     cmdline is the command line as an operator would type it, e.g.
@@ -383,6 +499,12 @@ def run(path, cmdline=None, stdin_bytes=b"", count_insns=False,
             # real Concurrent CP/M-86 supports this call; the deprecated XIOS
             # Int 28h fn 19 "16 ms counter" it does NOT (that XIOS never
             # maintains the counter), so self-timing programs must use T_SECONDS.
+            #
+            # IMPORTANT: the elapsed seconds come from state["ticks"], the code-
+            # byte virtual clock, which advances ONLY when the block hook is
+            # installed -- i.e. in a --count/--ticks run (see the FULL-SPEED RULE
+            # below).  A plain run() has ticks==0, so a self-timing benchmark
+            # would see NO elapsed time.  Run such programs with --count.
             elapsed = state["ticks"] // CLOCK_HZ if CLOCK_HZ else 0
             al = _write_tod(uc, ds, dx, state["base_dt"], elapsed)
             uc.mem_write((ds << 4) + ((dx + 4) & 0xFFFF), bytes([al]))
@@ -396,9 +518,16 @@ def run(path, cmdline=None, stdin_bytes=b"", count_insns=False,
     # Deterministic virtual clock: count code bytes executed (per basic block,
     # so the overhead is far lower than a per-instruction hook).  T_GET and the
     # XIOS 16 ms tick (Int 28h fn 19) turn this into emulated time via CLOCK_HZ.
-    def hook_block(uc, address, size, user_data):
-        state["ticks"] += size
-    uc.hook_add(UC_HOOK_BLOCK, hook_block)
+    #
+    # FULL-SPEED RULE (2026-08-19, @ravn): a plain output run() must execute at
+    # native Unicorn speed with NO per-block Python callback.  The virtual clock
+    # is only meaningful when we are already paying per-instruction decode cost
+    # to count insns/cycles, so we install the block hook ONLY in a counting run.
+    # A plain run() therefore has just the (infrequent) INT hook for BDOS.
+    if count_insns or count_cycles:
+        def hook_block(uc, address, size, user_data):
+            state["ticks"] += size
+        uc.hook_add(UC_HOOK_BLOCK, hook_block)
 
     insns = {"n": 0}
     if count_insns and not count_cycles:
@@ -454,6 +583,14 @@ def run(path, cmdline=None, stdin_bytes=b"", count_insns=False,
         cyc["n"] += model.clocks(pend["insn"], taken=True)
     if state.get("error"):
         raise state["error"]
+    if dump_path:
+        # Full physical-RAM snapshot AFTER the guest finished, for an oracle
+        # INDEPENDENT of the guest's own self-check: the host reads back the
+        # far-heap bytes straight out of RAM (see verify_farheap_dump.py) rather
+        # than trusting the program's printed PASS. 1 MB raw little-endian image,
+        # physical address == file offset.
+        with open(dump_path, "wb") as fh:
+            fh.write(bytes(uc.mem_read(MEM_BASE, MEM_SIZE)))
     if os.environ.get("CPM86_DEBUG_CLOCK"):
         secs = state["ticks"] / CLOCK_HZ if CLOCK_HZ else 0
         ticks16 = int(secs * 1000 // TICK_MS)
@@ -472,14 +609,20 @@ def run(path, cmdline=None, stdin_bytes=b"", count_insns=False,
 def main(argv=None):
     argv = argv or sys.argv[1:]
     count_insns = count_cycles = False
-    while argv and argv[0] in ("--count", "-c", "--ticks", "-t"):
+    dump_path = None
+    while argv and argv[0] in ("--count", "-c", "--ticks", "-t", "--dump"):
         if argv[0] in ("--count", "-c"):
             count_insns = True
+            argv = argv[1:]
+        elif argv[0] == "--dump":
+            dump_path = argv[1]
+            argv = argv[2:]
         else:
             count_cycles = True
-        argv = argv[1:]
+            argv = argv[1:]
     if not argv:
-        print("usage: cpm86run_unicorn.py [--count] [--ticks] FILE.CMD [ARG ...]",
+        print("usage: cpm86run_unicorn.py [--count] [--ticks] [--dump FILE] "
+              "FILE.CMD [ARG ...]",
               file=sys.stderr)
         return 2
     path = argv[0]
@@ -493,7 +636,8 @@ def main(argv=None):
         except Exception:
             stdin_bytes = b""
         result = run(path, cmdline=cmdline, stdin_bytes=stdin_bytes,
-                     count_insns=count_insns, count_cycles=count_cycles)
+                     count_insns=count_insns, count_cycles=count_cycles,
+                     dump_path=dump_path)
         if count_cycles:
             text, n, ticks = result
             sys.stdout.write(text)

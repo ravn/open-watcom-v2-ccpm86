@@ -42,6 +42,13 @@ set PROJDIR=<CWD>
     <CCCMD> startup/library/msdos.086/ms/commode.obj        "<OWRELROOT>/lib286/dos/"
     <CCCMD> startup/library/msdos.086/ms/cstrtiny.obj       "<OWRELROOT>/lib286/dos/cstart_t.obj"
 
+    # CP/M-86 (small model): the merged C library + its own C startup object.
+    # Built by the standard wmake leaves _cpm/library/cpm86.086/ms (component +
+    # cstartcpm.obj) and library/cpm86.086/ms (merge). wlink's `system cpm86`
+    # block links cstartcpm.obj explicitly, so it stays a standalone object.
+    <CCCMD> library/cpm86.086/ms/clibs.lib                  "<OWRELROOT>/lib286/cpm86/"
+    <CCCMD> _cpm/library/cpm86.086/ms/cstartcpm.obj         "<OWRELROOT>/lib286/cpm86/"
+
     <CCCMD> library/msdos.386/ms_r/clib3r.lib               "<OWRELROOT>/lib386/dos/"
     <CCCMD> library/msdos.386/ms_s/clib3s.lib               "<OWRELROOT>/lib386/dos/"
     <CCCMD> doslfn/library/msdos.386/ms_r/doslfn3r.lib      "<OWRELROOT>/lib386/dos/"

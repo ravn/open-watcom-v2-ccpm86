@@ -33,4 +33,12 @@
 
 extern void FiniCPM86LoadFile( void );
 
+/* Stage B (medium/big model) load-time relocation support.
+ * The generic relocation walk calls these while patching cross-group far
+ * segment references so wlink emits genuine CP/M-86 P_LOAD fixup records
+ * instead of baking in a link-time-zeroed segment (see loadcpm86.c). */
+extern void     ResetCPM86Fixups( void );
+extern void     AddCPM86Fixup( segment loc_seg, offset loc_off, segment tgt_seg );
+extern segment  CPM86GroupRelPara( segment seg );
+
 #endif

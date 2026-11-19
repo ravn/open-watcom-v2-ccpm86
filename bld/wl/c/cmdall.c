@@ -1996,9 +1996,9 @@ static parse_entry  MainOptions[] = {
     "HLLPack",      ProcHLLPack,        MK_ALL, 0,
     "INCremental",  ProcIncremental,    MK_ALL, 0,
     "FILLchar",     ProcFillchar,       MK_ALL, 0,
-#if defined( _OS2 ) || defined( _EXE ) || defined( _DOS16M ) || defined( _QNX )
-    "PACKCode",     ProcPackcode,       (MK_NE | MK_DOS | MK_QNX | MK_DOS16M), 0,
-    "PACKData",     ProcPackdata,       (MK_NE | MK_DOS | MK_QNX | MK_DOS16M), 0,
+#if defined( _OS2 ) || defined( _EXE ) || defined( _DOS16M ) || defined( _QNX ) || defined( _CPM86 )
+    "PACKCode",     ProcPackcode,       (MK_NE | MK_DOS | MK_QNX | MK_DOS16M | MK_CPM86), 0,
+    "PACKData",     ProcPackdata,       (MK_NE | MK_DOS | MK_QNX | MK_DOS16M | MK_CPM86), 0,
 #endif
 #if defined( _OS2 ) || defined( _ELF )
     "Alignment",    ProcAlignment,      (MK_NE | MK_OS2_LX | MK_PE | MK_ELF), 0,
@@ -2024,6 +2024,9 @@ static parse_entry  MainOptions[] = {
     "NORelocs",     ProcNoRelocs,       (MK_QNX | MK_DOS16M  | MK_PE | MK_ELF), 0,
 #endif
     "HSHIFT",       ProcHshift,         (MK_DOS | MK_ALLOW_16),  0,
+#ifdef _CPM86
+    "FARheap",      ProcCPM86FarHeap,   MK_CPM86, 0,
+#endif
     NULL
 };
 

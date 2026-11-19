@@ -30,21 +30,53 @@
    from crt0 before the first allocation. */
 unsigned _curbrk = 0;
 
-/* The near-heap arena: a plain uninitialised static array, so it lands in _BSS
-   (reserved at load, NOT stored in the .CMD image -- no file bloat) inside
-   DGROUP. Watcom links heap blocks by DGROUP-near pointers, so an in-DGROUP
-   array is exactly the right backing store. 20 KB is well above stdcbench's
-   ~1.5 KB measured high-water mark, with margin for the c90lib hash tables. */
-#define WC_ARENA_BYTES  20480u
-static char wc_arena[WC_ARENA_BYTES];
+/* The near-heap arena: a static array that MUST live in DGROUP so that
+   `_curbrk = &wc_arena[0]` is a valid DS-relative near offset and the near
+   heap hands out DGROUP addresses. Watcom links heap blocks by DGROUP-near
+   pointers, so an in-DGROUP array is exactly the right backing store.
+
+   CRITICAL -- the `__near` qualifier is load-bearing in COMPACT model (-mc):
+   there module-level data defaults to FAR, so a plain `static char[]` would
+   land in a FAR_DATA/AUTO segment OUTSIDE DGROUP. Then `&wc_arena[0]` taken as
+   a near offset is 0, `_curbrk` becomes 0, and the near heap hands out
+   DS:0x0000.. -- writing straight over the CP/M-86 base page (DS:0x00..0xFF),
+   destroying the EXTRA group descriptor at DS:0x0C/0x0F that port/farheap.c
+   reads to locate the far heap (bug found 2026-08-19; regression guard
+   test/compact_farheap_test.c + build-compact-farheap.sh). `__near` pins it in
+   DGROUP in every model, matching this comment's original intent.
+
+   Size is model-aware: in compact/large/huge (far-data models) plain malloc() routes to the
+   FAR heap (_fmalloc, port/farheap.c), so the near arena is only a small
+   fallback for any explicit _nmalloc -- keep it tiny to leave DGROUP headroom
+   (the whole point of compact model). In small/medium it is the ONE heap, so
+   size it up to the 64K DGROUP ceiling. */
+#ifndef WC_ARENA_BYTES
+#if defined(__COMPACT__) || defined(__LARGE__) || defined(__HUGE__)
+#define WC_ARENA_BYTES  4096u    /* compact/large/huge: near heap is a fallback; malloc -> far */
+#else
+#define WC_ARENA_BYTES  36352u   /* 0x8E00: maxed against 64K DGROUP ceiling (leaves ~70B headroom) */
+#endif
+#endif
+static char __near wc_arena[WC_ARENA_BYTES];
+
 
 /* Seed _curbrk to the arena base. MUST run before the first malloc, because
    grownear.c reads _curbrk (new_brk = amount + _curbrk) BEFORE it calls
    __brk(); a zero _curbrk would make new_brk a raw size, not an address.
-   Called from crt0sm.asm (wc_heap_init_) ahead of main. */
+   Called from crt0sm.asm (wc_heap_init_) ahead of main.
+
+   Also shrink _amblksiz (Watcom's heap-grab granularity, default 4-8 KB) to
+   one paragraph. grownear.c rounds every miniheap grab UP to _amblksiz; with
+   the default 8 KB, UnZip's single 32 KB request (the zcalloc(8192,4) inflate
+   window / STORED copy buffer) rounds to 40 KB and overruns our ~35 KB arena,
+   so the alloc fails. A 16-byte granularity keeps the roundup waste negligible
+   so the 32 KB window fits alongside the I/O and CRC buffers in the arena. */
+extern unsigned _amblksiz;   /* Watcom clib heap-grab granularity (amblksiz.c) */
+
 void wc_heap_init( void )
 {
     _curbrk = (unsigned)&wc_arena[0];
+    _amblksiz = 16u;
 }
 
 /* __brk -- set the heap top to brk_value and return the PREVIOUS top (the base

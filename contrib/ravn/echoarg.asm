@@ -14,8 +14,8 @@
 ;   CP/M-86 8080 model: base page occupies 0..0FFH, entry at CS:0100H.
 ;
 ;   Build:  wasm echoarg.asm
-;           wl format raw bin option start=start_ name echoarg.bin file echoarg.obj
-;           python3 bin2cmd.py echoarg.bin ECHOARG.CMD
+;           wl format cpm86 name ECHOARG.CMD file echoarg.obj
+;           (native CP/M-86 .CMD; the former raw+bin2cmd.py wrap was retired)
 ;
 ;****************************************************************************
         .8086

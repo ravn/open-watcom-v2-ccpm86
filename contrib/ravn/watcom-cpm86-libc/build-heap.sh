@@ -9,7 +9,7 @@
 # equivalent while every heap manager above it stays Watcom's unmodified clib.
 set -e
 cd "$(dirname "$0")"
-OW="${OW:-/Users/ravn/z80/scratch/open-watcom-v2}"; B="$OW/bld"
+OW="${OW:-$(cd "$(dirname "$0")/../../.." && pwd)}"; B="$OW/bld"
 WCC="$B/cc/i86/osxa64/binbuild/wcc.exe"
 WASM="$B/wasm/osxa64/wasm.exe"
 WLINK="$B/wl/osxa64/wlink.exe"
@@ -91,7 +91,7 @@ assert bdos>0, "FAIL: no BDOS call in image!"
 PY
 
 # --- run under emu2 + hand-computed oracle gate ---
-OUT="$("$EMU2" heaptest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
+OUT="$("$EMU2" -P 255 heaptest.cmd | tr -d '\r')"; echo "--- output ---"; echo "$OUT"
 EXP=$'sorted : 0 1 2 3 4 5 6 7 8 9\ncalloc : 0\nrealloc: 0 40\nreuse  : ok'
 if [ "$OUT" = "$EXP" ]; then
   echo "PASS: Watcom near-heap (malloc/free/calloc/realloc) + qsort on CP/M-86"

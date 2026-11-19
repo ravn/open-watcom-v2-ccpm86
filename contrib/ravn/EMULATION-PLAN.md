@@ -181,8 +181,9 @@ Note: the Guide's fn-19 text says "periods of *next* second" — a typo for the
 - Build a correct **base page** (group length/base fields, M80 byte at 05H, DMA
   default, parsed FCBs at 005CH/006CH, command tail at 0080H) — implemented in
   `ccp.py` and populated at load time from the command line. *(done)*
-- **Build side reconciled:** `bin2cmd.py` reserves the 100H-byte base page
-  (`--no-basepage` opts out); `hello.asm`/`echoarg.asm` assemble at `org 100h`;
+- **Build side reconciled:** the 100H-byte base page is reserved by the loader
+  (`bin2cmd.py` did this before it was retired 2026-08-19 in favour of native
+  `wl format cpm86`); `hello.asm`/`echoarg.asm` assemble at `org 100h`;
   `HELLO.CMD`/`ECHOARG.CMD` regenerated and verified.
 - README corrected: the earlier "entry at CS:0000 for all models" note was
   wrong; only Small/Compact enter at 0000H.
@@ -215,8 +216,8 @@ Note: the Guide's fn-19 text says "periods of *next* second" — a typo for the
 ### Phase 5 — Harness, regression, and OW integration
 - Golden-output regression tests for every sample `.CMD`; run both
   `cpm86run.py` and `cpm86run_unicorn.py` and diff their output.
-- Once the OW toolchain is built, run `build-cpm86.sh` end-to-end (wcc/wl →
-  `bin2cmd`) and feed real compiler output through the emulator.
+- Once the OW toolchain is built, link real compiler output natively
+  (`owcc -bcpm86` / `wl format cpm86`) and feed it through the emulator.
 - Optionally cross-check against a full-machine emulator (86Box / PCem) for a
   handful of programs to validate loader fidelity.
 
@@ -231,5 +232,5 @@ Note: the Guide's fn-19 text says "periods of *next* second" — a typo for the
 
 ## Immediate next actions
 1. Implement Phase 0 loader + model detection in `cpm86run_unicorn.py`.
-2. Fix `bin2cmd.py`/`hello.asm` to match, regenerate `HELLO.CMD`.
+2. Emit `.CMD` natively with `wl format cpm86`, regenerate `HELLO.CMD`.
 3. Correct the entry-point description in `README-cpm86.md`.

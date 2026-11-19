@@ -3,7 +3,7 @@
 This directory demonstrates — with reproducible, verified test cases — that
 **Open Watcom can generate object code that links against an existing CP/M-86
 runtime, using that runtime's own (OMF) linker**, with *no* object-format
-conversion and *no* `bin2cmd.py` post-processing.
+conversion and *no* header post-processing tool.
 
 It is the "linkable against an existing runtime" counterpart to the freestanding
 pipeline in `../build-cpm86.sh` (which links to a flat raw binary with `wl` and

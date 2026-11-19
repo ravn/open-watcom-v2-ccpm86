@@ -1,46 +1,47 @@
 #!/usr/bin/env bash
 #
-# bench.sh -- build the Dhrystone 2.1 benchmark several ways with Open Watcom C
-# (against the Digital Research C run-time) and compare each against the genuine
-# DR C build, which is the correctness ORACLE and the size/speed BASELINE.
+# bench.sh -- build the Dhrystone 2.1 benchmark with Open Watcom's native
+# one-step `owcc -bcpm86` driver and compare each variant against the genuine
+# Digital Research C build, which stays the correctness ORACLE and the
+# size/speed BASELINE.
+#
+# owcc-only, NO SEAMS (standing decision @ravn 2026-08-19, see
+# tasks/memory/reference_owcc_cpm86_no_seams_softfloat_lib.md): every variant
+# builds against owcc's STANDARD CP/M-86 runtime (cstartcpm.obj + clibs.lib) with
+# no hand-written port objects and no DR LINK-86 hybrid step.  Dhrystone's self-
+# timing block prints "%6.1f", so it references the float runtime even though
+# drcify makes that branch dead code (fixed run count, timing disabled); we
+# therefore link the one reusable soft-float closure `cpm-soft-float.lib`
+# (auto-built by mk-cpm-soft-float-lib.sh) with `-msoft-float` (= wcc -fpc, pure
+# software float: the RC759 has no 8087, so never -fpi/-fpi87).
 #
 # The comparison is apples-to-apples: every variant is built from the SAME
 # drcified, deterministic Dhrystone source (fixed run count, timing disabled ->
-# identical program output), in the SAME small/8080 memory model DR C uses.
-# The only thing that changes is the Open Watcom code generator settings:
+# identical program output), in the SAME small/8080 memory model DR C uses.  The
+# only thing that changes is the Open Watcom optimiser level:
 #
-#   O0     -ecc -od     cdecl (stack) calls, optimiser disabled   (~ -O0)
-#   O3     -ecc -ox     cdecl (stack) calls, full optimisation    (~ -O2/-O3)
-#   mixed       -ox     register calls user<->user, cdecl to libc (llvm-z80
-#                       trick: -fi=compat-mixed.h, NO -ecc), full optimisation
+#   O0     -O0    optimiser disabled
+#   O2     -O2    full optimisation
 #
 # Speed is reported as INSTRUCTIONS and as estimated 80186 CLOCK CYCLES (the
-# "ticks" metric, contrib/ravn/cycles186.py) and, at --mhz (default 6, the
-# RC759 Piccoline), as an estimated wall-clock time.  The clock figure is an
-# estimate: Unicorn is a functional emulator with no timing, so cycles186.py
-# layers an iAPX 186 clock table on top of a capstone decode.  It does NOT
-# model the prefetch queue or memory wait-states; treat it as "cirka-ish".
-# For true cycle-accurate timing use MAME or PCE against the real RC759 XIOS.
+# "ticks" metric, contrib/ravn/cycles186.py) and, at --mhz (default 6, the RC759
+# Piccoline), as an estimated wall-clock time.  The clock figure is an estimate:
+# Unicorn is a functional emulator with no timing, so cycles186.py layers an
+# iAPX 186 clock table on top of a capstone decode.  It does NOT model the
+# prefetch queue or memory wait-states; treat it as "cirka-ish".  For true
+# cycle-accurate timing use MAME or PCE against the real RC759 XIOS.
 #
-# The DR C oracle (pure-drc/dhry.cmd) needs the DRI copyright toolchain, so it
-# is not committed.  If it is present this script compares against it directly;
-# otherwise it falls back to the persisted numbers in baseline.json.
+# The DR C oracle (pure-drc/dhry.cmd) needs the DRI copyright toolchain, so it is
+# not committed.  If present this script compares against it directly; otherwise
+# it falls back to the persisted numbers in baseline.json.
 #
 # Usage:  ./bench.sh [--mhz N]
 #
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
-XDEV="$HERE/cpm86-crossdev"
-BIN="$REPO/build/binbuild"
-# CANONICAL TOOLCHAIN (see wlink-cpm86-plan.md): authentic DR LINK-86 v1.4
-# (19 March 1984), the same native CP/M-86 linker DR C 1.11 uses, run under the
-# emu2-cpm86 fork (executes a CP/M-86 .CMD natively).  NOT linkcmd.exe (LINK-86
-# v2.02, 1987).  Both overridable.
-WS="$(cd "$HERE/../../.." && pwd)"        # workspace root (/Users/ravn/z80)
-EMU2="${EMU2:-$WS/scratch/cpm86-tools/emu2-cpm86/emu2}"
-LINK86="${LINK86:-$WS/scratch/rc759-cmd-toolchain/drc86111/LINK86.CMD}"
-OWC="$HERE/owc-drc"
+. "$HERE/cpm86-clib/env.sh"               # owcc/wcc/wasm/wlib on PATH, $WATCOM set
+SRC="$HERE/owc-drc/dhry21"                # unmodified Dhrystone 2.1 source
+LIB="$HERE/cpm-soft-float.lib"            # reusable soft-float closure
 RUNS=200
 MHZ=6
 
@@ -52,58 +53,48 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-for t in "$BIN/bwcc" "$BIN/bwasm" "$EMU2" "$LINK86"; do
-    [ -e "$t" ] || { echo "error: missing prerequisite: $t" >&2; exit 1; }
-done
-[ -f "$OWC/drc/clears.l86" ] || { echo "error: owc-drc/drc/clears.l86 missing; run owc-drc/fetch-drc.sh first" >&2; exit 1; }
-[ -f "$OWC/dhry21/dhry_1.c" ] || { echo "error: owc-drc/dhry21 missing; run ./build-owc-drc.sh dhry once to fetch it" >&2; exit 1; }
+[ -f "$SRC/dhry_1.c" ] || { echo "error: $SRC/dhry_1.c missing" >&2; exit 1; }
+# Dhrystone's timing block prints "%6.1f", so it references the float runtime;
+# build (once) the reusable soft-float closure if it is not present yet.
+[ -f "$LIB" ] || { echo "==> building $(basename "$LIB")"; "$HERE/mk-cpm-soft-float-lib.sh"; }
 
-# build_variant <label> <cflags...>  -> writes owc-drc/DHRY-<label>.CMD
+# build_variant <label> <optflag>  -> writes owc-drc/DHRY-<label>.CMD
 build_variant() {
-    local label="$1"; shift
-    local cflags="$*"
+    local label="$1" opt="$2"
     local W; W="$(mktemp -d /tmp/bench.XXXXXX)"
     # Deterministic, drcified Dhrystone (watcom dialect: no NOENUM/NOSTRUCTASSIGN).
-    python3 "$HERE/pure-drc/drcify.py" "$OWC/dhry21" "$W" "$RUNS" watcom >/dev/null
-    cp "$OWC"/compat.h "$OWC"/compat-mixed.h "$OWC"/owcrt.asm "$OWC"/drc/clears.l86 "$W/"
-    cp "$OWC"/drc/*.h "$W/" 2>/dev/null || true
-    cp "$LINK86" "$W/LINK86.CMD"
-    cp "$OWC"/drc/clears.l86 "$W/CLEARS.L86"
+    python3 "$HERE/pure-drc/drcify.py" "$SRC" "$W" "$RUNS" watcom >/dev/null
     (
         cd "$W"
-        "$BIN/bwasm" -0 -ms owcrt.asm -fo=OWCRT.OBJ >/dev/null
-        for u in DHRY_1 DHRY_2; do
-            "$BIN/bwcc" $cflags -Dmain=cmain -i. "$u.C" -fo="$u.OBJ" >/dev/null 2>&1 \
-                || { echo "error: compile $u failed for '$label'" >&2; exit 1; }
-        done
-        EMU2_DRIVE_A=. EMU2_DEFAULT_DRIVE=A \
-            "$EMU2" LINK86.CMD "DHRY=OWCRT,DHRY_1,DHRY_2,CLEARS.L86[S]" >link.log 2>&1 || true
-        [ -f DHRY.CMD ] || { echo "error: link produced no DHRY.CMD for '$label'" >&2; cat link.log >&2; exit 1; }
-        cp DHRY.CMD "$OWC/DHRY-$label.CMD"
+        owcc -bcpm86 -march=i186 -mcmodel=s -msoft-float "$opt" \
+            -DREG=register \
+            dhry_1.c dhry_2.c "$LIB" -o "DHRY.CMD" >build.log 2>&1 \
+            || { echo "error: owcc build failed for '$label'" >&2; cat build.log >&2; exit 1; }
+        [ -f DHRY.CMD ] || { echo "error: no DHRY.CMD for '$label'" >&2; exit 1; }
+        cp DHRY.CMD "$SRC/../DHRY-$label.CMD"
     )
     rm -rf "$W"
 }
 
-echo "Building Watcom variants from identical drcified Dhrystone ($RUNS runs)..."
-build_variant O0    -0 -ms -s -zl -ecc -fpi87 -nt=CODE -fi=compat.h       -od
-build_variant O3    -0 -ms -s -zl -ecc -fpi87 -nt=CODE -fi=compat.h       -ox
-build_variant mixed -0 -ms -s -zl      -fpi87 -nt=CODE -fi=compat-mixed.h -ox
+echo "Building owcc variants from identical drcified Dhrystone ($RUNS runs)..."
+build_variant O0 -O0
+build_variant O2 -O2
 echo
 
 ORACLE="$HERE/pure-drc/dhry.cmd"
 if [ -f "$ORACLE" ]; then
-    for v in O0 O3 mixed; do
-        echo "### DR C (oracle) vs Watcom $v ###"
-        python3 "$HERE/bench.py" compare "$ORACLE" "$OWC/DHRY-$v.CMD" \
-            --mhz "$MHZ" --label-candidate "Watcom $v"
+    for v in O0 O2; do
+        echo "### DR C (oracle) vs owcc $v ###"
+        python3 "$HERE/bench.py" compare "$ORACLE" "$HERE/owc-drc/DHRY-$v.CMD" \
+            --mhz "$MHZ" --label-candidate "owcc $v"
         echo
     done
 else
     echo "(DR C oracle pure-drc/dhry.cmd not present -- checking against baseline.json)"
     echo
-    for v in O0 O3 mixed; do
-        echo "### baseline dhry (DR C) vs Watcom $v ###"
-        python3 "$HERE/bench.py" baseline check dhry "$OWC/DHRY-$v.CMD" --mhz "$MHZ" \
+    for v in O0 O2; do
+        echo "### baseline dhry (DR C) vs owcc $v ###"
+        python3 "$HERE/bench.py" baseline check dhry "$HERE/owc-drc/DHRY-$v.CMD" --mhz "$MHZ" \
             || true
         echo
     done
