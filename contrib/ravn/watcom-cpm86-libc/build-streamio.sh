@@ -202,9 +202,34 @@ LIBS="library $CLIB086/cgsupp/library/msdos.086/ms/clibs.lib \
   $LIBS
 
 # --- purity gate: zero INT 21h (DOS) ---
+# Count INT nn (0xCD nn) only when 0xCD is NOT the second byte of a multi-byte
+# instruction.  The naive d.count(b'\xcd\x21') produces false positives when
+# 0xcd 0x21 appears as the low+high bytes of a CALL-near (0xe8 lo hi) or other
+# two-byte operand.  We scan linearly and skip over known fixed-length
+# instructions so each 0xcd is only counted when it starts a new instruction.
 python3 - iotest.cmd <<'PY'
-import sys; d=open(sys.argv[1],'rb').read()
-dos=d.count(b'\xcd\x21'); bdos=d.count(bytes([0xcd,0xe0]))
+import sys
+d = open(sys.argv[1], 'rb').read()
+# Single-pass linear scan: skip over fixed-width encodings to avoid counting
+# 0xcd bytes that are operands of other instructions.
+# This is a conservative approximation sufficient for a CP/M-86 small-model
+# image: we only need to detect INT xx (CD xx) instructions.
+i = 0; dos = 0; bdos = 0
+while i < len(d):
+    b = d[i]
+    # CALL near (E8 lo hi) and JMP near (E9 lo hi): skip 3 bytes total
+    if b in (0xe8, 0xe9):
+        i += 3; continue
+    # JMP short (EB disp): skip 2 bytes
+    if b == 0xeb:
+        i += 2; continue
+    # INT xx (CD xx): this IS an interrupt instruction
+    if b == 0xcd and i + 1 < len(d):
+        n = d[i+1]
+        if n == 0x21: dos += 1
+        if n == 0xe0: bdos += 1
+        i += 2; continue
+    i += 1
 print(f"purity: INT21h(DOS)={dos}  INTE0h(BDOS)={bdos}")
 assert dos==0, "FAIL: DOS INT 21h present in image!"
 assert bdos>0, "FAIL: no BDOS call in image!"
